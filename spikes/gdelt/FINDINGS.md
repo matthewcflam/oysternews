@@ -531,6 +531,27 @@ whole map.
 This is the third feature this spike has killed or sent back, and the second killed
 by a measurement that took under twenty minutes.
 
+**Postscript, 2026-08-09 — the same numbers were later read the other way.** The
+measurement above kills *the blindspot flag* and nothing else. `HANDOFF.md` §2.5 now
+uses this outlet list to grant ranking **priority**: a tier-1-covered story outranks
+everything else in its tile or country and holds that slot for 48 hours. The numbers
+here are what makes that affordable rather than what makes it unwise — 71 of 5,252
+title-groups, ~570/day, ~1,100 in a 48-hour pool against ~42,000 groups/day, so the
+privileged class is far smaller than the per-tile budget almost everywhere.
+
+Two derivations from the table above that the new rule depends on:
+
+| | |
+|---|---|
+| Title-groups **with** tier-1 coverage | 71 of 5,252 = **1.4%** |
+| Tier-1 records from US or UK outlets | 67 of 74 = **90.5%** (`scmp` 4 and `dw` 3 are the only others) |
+| `newsweek.com` + `latimes.com` share of tier-1 records present | 19 of 74 = **25.7%** |
+
+The second line is why the rule is well-targeted: tier-1 coverage concentrates in
+the same handful of countries where §12 shows the density budget actually binding.
+The third is its main risk — a quarter of the privileged population comes from the
+two least wire-like names on the list. `HANDOFF.md` §6 decision 9.
+
 ## 12. Per-country pin density
 
 Placed stories over the three-hour window, extrapolated to 24 hours (rule S; rule H

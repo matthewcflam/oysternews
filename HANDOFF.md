@@ -4,7 +4,8 @@
 doc, or a previous conversation contradicts it, this file wins.
 
 **Status:** pre-build. **Phase 1 complete** (bar one deferred re-pull). Phase 2 next.
-**Last updated:** 2026-08-09, after the Phase 1 geotag audit.
+**Last updated:** 2026-08-09, after the Phase 1 geotag audit and the tier-1
+ranking reversal (§2.5).
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -22,9 +23,12 @@ the wrong rule — and the replacement clears the same thresholds. §2.1 has bee
 rewritten accordingly. Do not implement the old specificity-first rule; it is
 recorded only as the thing that failed.
 
-**Phase 5 (blindspot) is cut.** Tier-1 outlets are 1.05% of GDELT's stream and the
-wires are absent entirely, so the flag fired on 98.6% of stories. §5, `FINDINGS.md`
-§11.
+**Phase 5 (blindspot) is cut, but tier-1 is not.** The *flag* died on measurement —
+tier-1 outlets are 1.05% of GDELT's stream and the wires are absent entirely, so it
+fired on 98.6% of stories (§5, `FINDINGS.md` §11). The same 1% is now used the
+other way round: **tier-1 stories outrank everything else in their area and stay on
+the map for 48 hours.** §2.5 is the rule; do not implement tier-1 as a filter, a
+badge, or a toggle.
 
 **Do not start Phase 3** before Phase 2 and 2.5. It is the largest phase and the
 point of 2.5 is to have something real on screen before disappearing into it.
@@ -165,12 +169,19 @@ location.
 - The polygon is never a fill. It is a click-reveal only.
 - One container feature per region per window, carrying `{region_id, count,
   top_title, top_url}` — not one per story.
+- `top_title` / `top_url` are picked by the §2.5 comparator, so a region's
+  container shows its tier-1 story when it has one. `count` is the count over the
+  general 24-hour window and is not inflated by the 48-hour tier-1 carry-over.
 
 ### 2.3 UI states
 
-**There is one content model.** Per-tile top-K by salience, everywhere, at every
-zoom. The states below are camera positions and a highlight — not different
-editorial tiers, not different ranking, not topic classification.
+**There is one content model.** Per-tile top-K by the §2.5 comparator, everywhere,
+at every zoom. The states below are camera positions and a highlight — not
+different editorial tiers, not different ranking, not topic classification.
+
+Tier-1 priority (§2.5) is part of that single comparator, not a fourth state and
+not a filter. There is no tier-1 toggle and no tier-1 badge; the preference is
+invisible except in *which* stories are on screen.
 
 | State | Camera | Red outline | Content |
 |---|---|---|---|
@@ -200,8 +211,9 @@ Clicking any container story outlines its container in red, in any state.
 
 ### 2.4 Density
 
-**Per-tile top-K budget.** For each tile at each zoom, keep the top K stories by
-salience inside it; the rest get `minzoom = z+1` and reappear on zoom-in.
+**Per-tile top-K budget.** For each tile at each zoom, keep the top K stories
+inside it by the §2.5 comparator — tier-1-fresh first, then salience; the rest get
+`minzoom = z+1` and reappear on zoom-in.
 
 This is the cap *and* the floor. A sparse tile keeps everything it has, so the map
 is never empty. A crowded tile defers its weakest, so it never turns to mush. And
@@ -225,9 +237,13 @@ world view populated regardless of salience.
 Two layers, one ranking function:
 
 ```
-  stories layer      per-tile top-K by salience      minzoom from the budget
-  country-top layer  top 1 per country, always       minzoom 0, no budget
+  stories layer      per-tile top-K by the §2.5 comparator     minzoom from the budget
+  country-top layer  top 1 per country, same comparator        minzoom 0, no budget
 ```
+
+Both layers rank on `(tier-1-fresh, salience)` — §2.5. So a country whose only
+tier-1 story of the last 48 hours is low-salience still shows *that* story as its
+representative pin. That is the intended effect, not a side effect.
 
 ### 2.5 Ranking
 
@@ -254,6 +270,60 @@ dedup on top, to collapse exact syndication.
 
 Source country is inferred from ccTLD plus an override map for major `.com`
 outlets (top 50 domains are 32% of volume, so ~200 entries covers most).
+
+**Tier-1 priority — two classes, one comparator.**
+
+A story is **tier-1-fresh** if any article in its group comes from a tier-1 outlet
+(`data/tier1-domains`, 28 entries) published within the last **48 hours**.
+Selection sorts lexicographically on:
+
+```
+  (tier1_fresh DESC, salience DESC, newest_tier1_article DESC)
+```
+
+Every tier-1-fresh story in a selection unit outranks every non-tier-1 story in
+it, whatever their salience. Inside each class, the salience ranking above is
+untouched.
+
+That one comparator produces all three behaviours the rule asks for, with **no
+timers and no per-area state**:
+
+- **A tier-1 story keeps its slot.** It stays tier-1-fresh for 48 hours after its
+  newest tier-1 article, so every run re-selects it ahead of the ordinary feed.
+- **Only another tier-1 story can take it.** Displacement needs a higher-salience
+  tier-1 story in the same area. The non-tier-1 population cannot reach it at all.
+- **After 48 quiet hours the ordinary rule returns.** The class empties by itself
+  and top-K fills from salience alone. An area that *never* had tier-1 coverage
+  starts with an empty class — so "fall back after 48 hours" and "there was never
+  any tier-1 here" are the same code path, and neither is special-cased.
+
+**"Geographic area" is the selection unit, which already exists**: the tile for
+the stories layer, the country for the country-top floor layer (§2.4). Priority is
+therefore per-tile-per-zoom for free — a tier-1 story sticks in every tile that
+contains it, and a US tier-1 story never crowds out a Kenyan one, because they
+were never in the same competition.
+
+**Eligibility window: 24 hours, extended to 48 for tier-1 groups** (§3.5). A
+carried-over group's salience is computed over its eligible articles — the full 48
+hours. The asymmetry distorts nothing, because the two classes never compete on
+salience; cross-class order is settled by the first key.
+
+> **Measured: this bites in the US and UK and is a no-op nearly everywhere else.**
+> 71 of 5,252 title-groups in the three-hour sample carried tier-1 coverage — 1.4%,
+> so ~570 groups/day and ~1,100 in a 48-hour pool, against ~42,000 groups/day. And
+> **91% of tier-1 records are US or UK outlets**: cnn 21, bbc 15, newsweek 11,
+> latimes 8, cbsnews 5, nbcnews 3, theguardian 3, independent 1 — with scmp 4 and
+> dw 3 the only others in three hours. Those are the same few countries where the
+> top-K budget actually binds (§2.4), so the rule changes the map exactly where
+> crowding happens and does nothing in the ninety countries the floor already
+> carries. `FINDINGS.md` §11.
+
+> **What it costs, stated plainly.** In a crowded US or UK tile a Newsweek or LA
+> Times story now outranks a genuinely bigger story from a lower-tier domain. That
+> is the trade being bought on purpose — 1% of the feed carries most of the
+> editorial signal in this data — but it makes **tier-1 list membership
+> load-bearing rather than descriptive.** The list was built to *measure* coverage
+> and now *grants* precedence. §6 decision 9.
 
 ### 2.6 Constraints
 
@@ -310,8 +380,14 @@ outlets (top 50 domains are 32% of volume, so ~200 entries covers most).
         |
         +--> filter.ts   English stream, has usable location
         +--> place.ts    -> Pin | Container | Drop      (section 2.1)
+        |
+        +--> state.ts    read shards, assemble the candidate pool:
+        |                  run-<ts>.jsonl  all stories, expire at 24h
+        |                  t1-<ts>.jsonl   tier-1 groups only, expire at 48h
+        |                dedupe by (domain, url); append this run's shards
+        |
         +--> group.ts    themes + Jaccard + 0.5 cell     (section 2.5)
-        +--> rank.ts     salience                        (section 2.5)
+        +--> rank.ts     tier-1-fresh, then salience     (section 2.5)
         +--> budget.ts   per-tile top-K -> minzoom       (section 2.4)
         |
         +--> tiles.ts    tippecanoe -> stories.pmtiles
@@ -344,6 +420,7 @@ worker/
   fetch.ts      I/O
   tiles.ts      I/O   tippecanoe subprocess
   publish.ts    I/O   Blob write, manifest, retention
+  state.ts      I/O   per-run shards: read pool, append, expire by filename
   parse.ts      PURE
   filter.ts     PURE
   place.ts      PURE
@@ -385,13 +462,35 @@ Coverage after overrides: **~99.95% of volume.**
 
 ### 3.5 Cadence
 
-**Every 4 hours, over a rolling 24-hour window.**
+**Every 4 hours, over a rolling 24-hour window — 48 hours for tier-1 stories.**
 
 Fetch every 15-minute bundle since the last successful watermark, capped at 12
 bundles. A failed run self-heals on the next one.
 
 The 24-hour window is not optional: a 12-hour window leaves most cities empty,
 which removes the payoff from zooming in.
+
+**The window is two windows.** §2.5 requires a tier-1 story to stay on the map for
+48 hours, which is longer than the general window, so the candidate pool is:
+
+```
+  every story with an article in the last 24h
+    UNION
+  every group with a tier-1 article in the last 48h
+```
+
+Implemented as **two shard families**, both expired by filename per §6 decision 4:
+`run-<ts>.jsonl` holds everything and expires at 24h; `t1-<ts>.jsonl` holds only
+tier-1-touched groups and expires at 48h. Tier-1 is 1.05% of the feed, so the
+second family costs almost nothing — writing 48h of *all* shards would have
+doubled state storage against the Blob free tier for no benefit. Groups appear in
+both families during their first 24 hours, so `state.ts` **dedupes by
+`(domain, url)`** on load; without that, a carried-over group double-counts its own
+domains and inflates its salience.
+
+Consequence for the UI: **a pin can be up to 48 hours old.** The relative
+freshness stamp is per story and already handles this. The stale notice at 2× the
+cadence is about *run* age, not story age, and is unchanged.
 
 ---
 
@@ -572,6 +671,14 @@ Critical details, each of which is a real bug avoided:
   features)
 - Wire the blocklist. `iheart.com` is 11.2% of the feed and nothing consumes it
   yet
+- **Two shard families, two expiries** (§3.5). The 48-hour tier-1 pool is what
+  makes §2.5's stickiness work; with a single 24-hour pool the priority comparator
+  still runs but tier-1 stories silently drop off the map after one day
+- **Dedupe the candidate pool by `(domain, url)`.** A group present in both shard
+  families otherwise counts its domains twice and out-ranks its own peers
+- **Blocklist runs before the tier-1 check**, so a blocklisted domain can never
+  make a group tier-1-fresh. No overlap today; it is a one-line ordering guarantee
+  against a future list edit
 
 ### Phase 4 — The map · 5-7 evenings
 2D Mercator. Two tile layers (stories + country-top) over the MapTiler basemap,
@@ -619,8 +726,11 @@ the builder's own measurements. That reads better than most portfolio maps.
 Must state: the English-only mechanism and its residue, **geotag accuracy as
 69.7% with a [52.7, 82.6] interval and the method behind it**, how containers
 work and where admin-1 coverage has gaps, the 24-hour window and cadence,
-**that the blindspot feature was cut and why**, and that raw GKG is a single point
-of failure with no fallback. **Credit GDELT and MapTiler.**
+**that tier-1 outlets get ranking priority and a 48-hour window while everything
+else gets 24** (§2.5 — this is an editorial choice made by the builder, not
+something the data implied, and hiding it would be the dishonest option), **that
+the blindspot feature was cut and why**, and that raw GKG is a single point of
+failure with no fallback. **Credit GDELT and MapTiler.**
 
 ### Timeline
 
@@ -654,17 +764,31 @@ content model. No topic classification is needed anywhere in this project.
 | 6 | Country auto-zoom level | fit the country's bounding box with padding | A fixed zoom is wrong for both Monaco and Russia |
 | 7 | Blob transfer allowance | unverified | Ten minutes. The one free-tier limit that could actually bind |
 | 8 | Local tile toolchain on Windows | **open — needs a call before Phase 2** | tippecanoe has no native Windows build. Either stand up WSL/Docker once, or generate Phase 2's fake archive with `geojson-vt` + `vt-pbf` and leave tippecanoe to CI. See the gotchas list above |
+| 9 | Tier-1 list membership | keep all **28** domains as-is; review once real data flows in Phase 3 | The list now *grants* precedence instead of measuring coverage (§2.5), so membership is load-bearing. `newsweek.com` and `latimes.com` are 26% of the tier-1 records actually present, and both are more arguable as papers of record than the wires that returned zero. Trimming them would shrink an already 1%-thin signal, so the provisional call is to keep them and look at real placements before editing. Absent domains cost nothing — if GDELT starts crawling Reuters, it just works |
+| 10 | Tier-1 freshness clock | **newest** tier-1 article in the group | "Published in the last 48 hours" against the *oldest* would expire a story that a tier-1 outlet is still actively covering. Newest means a follow-up piece renews the 48 hours, which reads as the same story continuing — matching "unless it is replaced by another tier-1 story" |
 
 ---
 
 ## 7. Tests
 
-**Vitest** for units, **Playwright** for E2E. **48 paths identified, 3 critical.**
+**Vitest** for units, **Playwright** for E2E. **53 paths identified, 3 critical.**
 
 Fixtures: one real 5 MB GKG bundle (entity-escaped titles, 6+ locations per
 record, demonyms, FIPS `RS`/`CH`/`IS`/`AS`, iheart syndication) plus small
 synthetic files for schema drift, missing title, unknown FIPS, ocean-only, and
 single-location.
+
+**Tier-1 priority (§2.5) needs five of those paths, all pure and all cheap:**
+1. A low-salience tier-1 story beats a high-salience non-tier-1 story in the same
+   tile — the whole point of the rule
+2. It **survives across runs**: the same story is still selected from a pool where
+   its own articles are 30 hours old and the general window has moved past them
+3. At **49 hours** with no new tier-1 article it drops out, and the top-K is filled
+   by salience alone
+4. A tile that never had tier-1 coverage ranks **identically** to the pre-change
+   comparator — the fallback path is the original path
+5. A group appearing in both shard families is **counted once**; its salience must
+   equal the same group assembled from one family
 
 **Three critical gaps — no test, no error handling, silent if they break:**
 1. **`publish.ts` failure path.** A partial publish points the manifest at a
@@ -686,6 +810,7 @@ single-location.
 | Data is stale | Relative freshness stamp, explicit notice past 2× cadence |
 | GDELT schema drift | Schema canary on column count |
 | New FIPS code | Loud log + degraded pin, counted in the run summary |
+| **Tier-1 priority quietly stops working** | **Tier-1 group count in the run summary.** If GDELT stops crawling CNN and the BBC the way it already fails to crawl the wires, the count goes to zero, §2.5 degrades to plain salience, and *nothing else fails* — the graceful degradation is exactly what hides it |
 
 The dead-man switch matters because the likeliest long-run failure is silent: if
 the trigger dies, no run happens, so no run fails, so no email is sent.
@@ -702,6 +827,8 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 - Zooming into a country **surfaces stories that were not visible at world zoom**,
   and no zoom level between 0 and the ceiling is empty
 - Every country with news in the window has at least one pin at world zoom
+- **A tier-1 story stays on the map across every run inside its 48 hours** and
+  leaves only to another tier-1 story or to the clock — never to the ordinary feed
 - Headlines readable, labels do not flicker
 
 ---
@@ -716,7 +843,7 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | Full 100-article audit | 50 with a published confidence interval instead. n=100 cuts the interval by a third, not half; n=200 would halve it |
 | Globe projection, replay animation, idle rotation | Killed by the 2D spec |
 | Governance / capital pinning | Killed by measurement — fired on 47.7% of records and would have pinned a dog attack at a state capital |
-| **Blindspot / under-covered flag** | **Killed by measurement** — tier-1 outlets are 1.05% of GDELT's stream and the wires are absent entirely, so the flag fired on 98.6% of stories. `FINDINGS.md` §11 |
+| **Blindspot / under-covered flag** | **Killed by measurement** — tier-1 outlets are 1.05% of GDELT's stream and the wires are absent entirely, so the flag fired on 98.6% of stories. `FINDINGS.md` §11. The *flag* is dead; the **tier-1 domain list survives and is now load-bearing in §2.5**, where the same 1% is used to grant ranking priority rather than to accuse the other 99% of a blindspot |
 | Self-hosted basemap | 120 GB planet file; MapTiler's free tier is not a constraint at this traffic |
 
 ---
@@ -735,6 +862,7 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | 2026-08-08 | This file becomes the single source of truth |
 | 2026-08-08 | Views reframed as camera states over one content model. Topic classification removed from the project entirely; the last blocking decision dissolved |
 | **2026-08-09** | **Phase 1 closed. Abort criterion written, then fired: the specified placement rule scored 54.1% on pins and 37.5% on containers. Rule replaced with "specificity unless dominated" — 69.7% / 80.8% out-of-sample — and §2.1 rewritten. Blindspot cut: tier-1 outlets are 1.05% of the feed** |
+| **2026-08-09** | **Tier-1 reversed from a cut flag into a ranking preference.** Builder's call: the 1% is the signal, not the accusation. §2.5 gains a two-class comparator — tier-1-fresh outranks everything, salience orders within each class — and §3.5 gains a second 48-hour window and a second shard family to make it stick. No timers, no per-area state, and an area with no tier-1 coverage ranks exactly as it did before. Decisions 9 and 10 added |
 
 Superseded, retained as archaeology only:
 `~/.gstack/projects/matthewcflam-sonder/matth-main-design-20260807-154947.md`
