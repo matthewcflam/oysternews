@@ -5,7 +5,8 @@ by how many independent news organizations covered them, and they densify as you
 zoom in.
 
 **Status: pre-build.** No application code yet. The plan and the data research are
-done.
+done — including a hand-judged accuracy audit that **failed its own pre-registered
+abort criterion**, and what was changed in response.
 
 ---
 
@@ -23,7 +24,8 @@ rests on — a real measurement pass over GDELT's data before any code was writt
 ## Why the research came first
 
 The whole product depends on GDELT, a public firehose of global news metadata.
-Before building anything, one hour of live GDELT data was pulled and measured. It
+Before building anything, live GDELT data was pulled and measured — first one
+hour, then twelve bundles spread across three separate hours of the clock. It
 changed the design substantially:
 
 - **Two of GDELT's three documented access paths are unusable.** The GEO 2.0 API
@@ -40,9 +42,38 @@ changed the design substantially:
   time.** That single choice moves nearly half of all pins.
 - **69.4% of the data volume is one field the project never reads.**
 
-A planned feature — pinning policy stories at capital cities — was **cut by this
-research**. Its detection rule fired on 47.7% of all articles and would have
-confidently placed a dog attack at a state capital.
+- **Tier-1 outlets are 1.05% of GDELT's stream**, and Reuters, AP, the New York
+  Times, the Washington Post and the WSJ returned **zero records across three
+  hours**.
+
+### The audit that nearly ended the project
+
+An abort criterion was written down **before** the accuracy audit ran — what
+number kills the container feature, what number kills the project — so the result
+could not be rationalised after the fact.
+
+It fired. Hand-judging 110 placements put the specified rule at **54.1%** on pins
+and **37.5%** on containers, and the criterion's own tie-break said stop.
+
+Before accepting that, one diagnostic: for the mis-placed pins, was the correct
+location in the record at all? **In 10 of 19, it was.** The rule preferred the most
+*specific* location, so a city mentioned once beat a state mentioned four times —
+a Minnesota Twins story pinned to Chicago, a UK-wide Met Office story pinned to
+London. The data was fine; the rule was wrong.
+
+The replacement — specificity wins *unless* it is dominated — scores **69.7%** on
+pins and **80.8%** on containers on a fresh out-of-sample draw, against the same
+unchanged thresholds. Measured accuracy and its confidence interval will be
+published in the app, not just in the repo.
+
+### Two features cut by measurement
+
+- **Pinning policy stories at capital cities.** Its detection rule fired on 47.7%
+  of all articles and would have confidently placed a dog attack at a state
+  capital.
+- **Flagging stories no major outlet covered.** The flag fired on **98.6%** of
+  stories, because GDELT barely crawls the wires. A signal that fires on almost
+  everything is not a signal.
 
 ---
 
@@ -69,11 +100,14 @@ migration path if that stops being true.
 HANDOFF.md               the plan — read this
 README.md                you are here
 spikes/gdelt/
-  FINDINGS.md            measured GDELT research
+  FINDINGS.md            measured GDELT research — part 1 and part 2
   gkg_probe.py           volume, titles, locations, sources, themes
   quality_probe.py       geotag quality, syndication, API probes
   probe3.py              theme frequency, dedup math
   retry_all3.py          all three GDELT access paths
+  phase1_probe.py        placement rules, geotag audit, tier-1, density
+  demonyms.txt           the demonym blocklist the audit made necessary
+  audit_judged*.jsonl    the hand-judged samples, verdict by verdict
 ```
 
 The spike scripts are Python and throwaway by design; the production pipeline is
