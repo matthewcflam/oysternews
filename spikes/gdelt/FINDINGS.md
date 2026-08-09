@@ -379,3 +379,222 @@ Consider tightening the ceiling to 15%, which would exclude a few more.
    failure mode is demonyms in prose, not newsroom datelines.
 7. **Record the 48.5% heuristic disagreement rate** as the justification for
    running Task 5 properly rather than picking a default.
+
+---
+
+# Part 2 — Phase 1 completion
+
+**Run:** 2026-08-08/09. Twelve GKG bundles over **three separate hours of the
+clock** — 14:00-14:45Z, 18:00-18:45Z, 02:00-02:45Z — 7,050 records, 27.9 MB
+zipped. Three windows rather than one because Part 1 measured a ~2x volume swing
+by time of day and a single evening hour is not a fair sample.
+**Script:** `phase1_probe.py`. **Judged samples:** `audit_judged.jsonl` (rule S,
+n=110), `audit_judged_ruleh.jsonl` (rule H, n=60).
+
+## Verdict
+
+**Go — but the placement rule in the spec is the wrong rule, and the blindspot
+feature is dead.**
+
+The abort criterion written in `HANDOFF.md` section 5.1 *before* the audit ran
+fires against the specified rule. It does not fire against a rule the audit itself
+identified. Two features changed status: containers were saved by the rule change,
+blindspot was killed by an unrelated measurement.
+
+## 9. The geotag audit — the abort criterion fired
+
+Judged by hand against the criterion fixed in advance in `HANDOFF.md` section 5.1.
+`CORRECT` = the placement is the region the story is actually about;
+`WRONG` = a different region, **or** the story has no real place at all;
+`UNJUDGEABLE` = the headline does not say enough. Wrong is broken out by cause, so
+a reader who disagrees with counting "no real place" as wrong can re-derive.
+
+### Rule S — the rule as specified (highest specificity, then most repeated)
+
+| Stratum | n | Correct | 95% Wilson CI | wrong: region | wrong: no-place |
+|---|---|---|---|---|---|
+| **PIN** | 61 | **54.1%** | **[41.7, 66.0]** | 19 | 9 |
+| **CONTAINER** | 40 | **37.5%** | **[24.2, 53.0]** | 12 | 13 |
+| all | 101 | 47.5% | [38.1, 57.2] | 31 | 22 |
+
+Against section 5.1: containers fail outright — the **upper** bound, 53.0%, is
+below the 60% container threshold, so no reading of the interval saves them. Pins
+land in the 50-70% "ship with a caveat" band on the point estimate, but the
+interval straddles 50%, and section 5.1's tie-break rule follows the lower bound.
+**As specified, the criterion says stop.**
+
+### The diagnostic that changed the answer
+
+Before reporting a dead project, one question: for the 19 pins placed in the wrong
+region, was the correct location present in the record at all?
+
+> **In 10 of 19, it was.** The record contained the right location and the rule
+> picked a different one.
+
+The pattern is not subtle. Rule S takes the most *specific* location, so a city
+mentioned once beats a state mentioned four times:
+
+| Story | Rule S picked | Also in the record |
+|---|---|---|
+| Twins' 2027 plans | Chicago **x1** | Minnesota **x4** |
+| 250 dogs found on Kentucky property | Dogwood, TN **x1** | Kentucky **x4** |
+| Met Office UK eclipse map | London **x4** | United Kingdom **x14** |
+| Trump's pick in Graham race | Washington DC **x1** | South Carolina **x2** |
+| Most-booked Herefordshire restaurants | Upper Sapey **x1** | Herefordshire **x3** |
+
+**Specificity-first is the defect.** Part 1 established that the choice of
+primary-location rule moves 48.5% of placements; this is the first time that
+choice has been scored against ground truth, and the specified rule loses.
+
+### Rule D — dominance only — is worse
+
+Taking the most-mentioned location regardless of type fixes those cases and
+destroys the product: **83 of 110 records collapse to containers**, most of them
+country-level, because a domestic article names its own country constantly
+(`Canada x19` against `Ottawa x4`). A map of 200 country pins is not a news map.
+
+### Rule H — specificity unless dominated
+
+```
+  city, adm1, country := most-mentioned location of each level
+  if a city exists:
+      adm1    >= 2x the city  -> CONTAINER at the adm1     (story is regional)
+      country >= 3x the city  -> CONTAINER at the country  (story is national)
+      otherwise               -> PIN at the city
+  else fall back adm1 -> country -> DROP
+```
+
+The asymmetric margins are not arbitrary: countries are structurally
+over-mentioned relative to states, so the same threshold at both levels would send
+every domestic story to a country pin.
+
+**Scored on a fresh, disjoint 60-record draw** — not the records the rule was
+designed against — against the same thresholds, unchanged:
+
+| Stratum | n | Correct | 95% Wilson CI | wrong: region | wrong: no-place |
+|---|---|---|---|---|---|
+| **PIN** | 33 | **69.7%** | **[52.7, 82.6]** | 5 | 5 |
+| **CONTAINER** | 26 | **80.8%** | **[62.1, 91.5]** | 4 | 1 |
+| all | 59 | **74.6%** | [62.2, 83.9] | 9 | 6 |
+
+Against section 5.1: **containers clear the 60% bar on both bounds. Pins clear the
+50% kill line on the lower bound and sit at the 70% line on the point estimate** —
+the "ship, and state the measured accuracy" outcome.
+
+Rule H also rebalances the map: **PIN 2,915 / CONTAINER 2,562 / DROP 1,572** across
+the window, against 3,075 / 826 under rule S. Containers go from a fifth of the map
+to a little under half, which is what the accuracy gain is bought with.
+
+**Three caveats, stated because they are real:**
+
+1. The two constants (2x, 3x) were fitted on the 110 rule-S records, so they are
+   in-sample; only the 60-record evaluation is out-of-sample.
+2. n=33 judged pins is a wide interval. It decides the go/no-go and nothing finer.
+3. The same party designed the rule and judged the sample. An independent judge on
+   a fresh draw would be worth an evening before Phase 4 ships.
+
+## 10. The demonym filter has a trap in it
+
+Part 1 made demonym filtering a required step. Implementing it the obvious way —
+compare the location's `FullName` to a demonym list — **silently misses every
+US-state demonym**, because GDELT writes country demonyms bare (`Americans`) but
+state demonyms with a suffix (`Texans, United States`, `Minnesotans, United
+States`). Match the **first comma segment**, not the whole string.
+
+**11.9% of all 71,731 location mentions in the window are demonyms.** The fix
+itself is worth only 0.2pp of mentions, but it moved 5 of 80 sampled placements —
+a per-mention statistic hides a per-story effect.
+
+## 11. Tier-1 crawl coverage — this kills the blindspot feature
+
+`HANDOFF.md` Phase 5 compares each story group against tier-1 outlet coverage.
+Measured over 28 wire services and papers of record, across all three windows:
+
+| | |
+|---|---|
+| Tier-1 records | **74 of 7,050 = 1.05% of the feed** |
+| **Reuters, AP, NYT, Washington Post, WSJ, NPR, Bloomberg, Al Jazeera, FT, Politico, USA Today, Time, Telegraph, France24, Economist, AFP, ABC News** | **zero records. Not one, in three hours spread across the clock** |
+| Present at all | cnn.com 21, bbc.co.uk 11, newsweek.com 11, latimes.com 8, cbsnews.com 5, bbc.com 4, scmp.com 4, dw.com 3, nbcnews.com 3, theguardian.com 3, independent.co.uk 1 |
+| **Title-groups with zero tier-1 coverage** | **5,181 of 5,252 = 98.6%** |
+
+Checked for the obvious explanation first: these are not domain-string mismatches.
+A substring sweep for `reuters`, `nytimes`, `apnews`, `washingtonpost`, `wsj`,
+`guardian` finds nothing but unrelated local papers (`warringtonguardian.co.uk`).
+GDELT is not crawling the wires at meaningful volume in this stream.
+
+**A flag that fires on 98.6% of stories is not a signal.** Phase 5 as specified
+would ship a toggle that filters almost nothing out. The acceptance bar in
+`HANDOFF.md` Phase 5 — "at least 10 flagged dots, and you judge at least 6 of 10
+genuinely underreported" — cannot be met by a rule whose flagged population is the
+whole map.
+
+This is the third feature this spike has killed or sent back, and the second killed
+by a measurement that took under twenty minutes.
+
+## 12. Per-country pin density
+
+Placed stories over the three-hour window, extrapolated to 24 hours (rule S; rule H
+gives 126 countries on the same data):
+
+| | |
+|---|---|
+| Placed stories per 24h | **~31,200** |
+| Distinct countries with any news | **124** |
+| US share | **37.7%** |
+
+| Daily story count | Countries |
+|---|---|
+| 1000+/day | **4** (US 11,800 · India 4,900 · UK 2,700 · Canada 1,750) |
+| 100-999/day | 25 |
+| 10-99/day | **67** |
+| 1-9/day | **28** |
+
+**Half the countries on the map get fewer than 100 stories a day and a quarter get
+fewer than ten.** Two consequences for section 2.4: the per-tile top-K budget will
+almost never bind outside the top 30 countries, so K is a cap on four countries and
+a no-op on ninety; and the country-floor layer is not a nicety — for 28 countries
+it is the only thing that puts them on the map at all.
+
+## 13. Blocklist — the zero-tier-1 population is mostly not news
+
+Top domains, in order: `indiatimes.com` 173, `yahoo.com` 123,
+**`themarketsdaily.com` 106**, **`dailypolitical.com` 93**, `thehindu.com` 82,
+**`iheart.com` 77**, `el-balad.com` 49, `hindustantimes.com` 48,
+`bignewsnetwork.com` 43, `indiagazette.com` 41.
+
+Two distinct populations are mixed together here, and only one is a blocklist:
+
+- **Algorithmic finance spam** — `themarketsdaily.com`, `dailypolitical.com`,
+  `tickerreport.com`. Generated stock-move copy. Geocodes to whatever city the
+  company's HQ is in and produces a pin about nothing.
+- **Entertainment listicles** — `boredpanda.com`, `gamerant.com`, `collider.com`,
+  `slashgear.com`, `movieweb.com`.
+- **Legitimate high-volume outlets** — `indiatimes.com`, `thehindu.com`,
+  `hindustantimes.com`. These are *not* blocklist candidates; they are simply where
+  the news is. Blocking by volume would delete India from the map.
+
+The audit gives this an independent number: **15 of 101 rule-S placements (14.9%)
+were "no real place" stories**, and they concentrate in exactly these domains. Rule
+H cuts it to **6 of 59 (10.2%)** without a blocklist, because spam articles have
+few location mentions and rule H's margins push them to containers.
+
+**First blocklist entries:** `themarketsdaily.com`, `dailypolitical.com`,
+`tickerreport.com`, `iheart.com` (11.2% of feed, syndication only).
+
+## 14. Maturity delay — snapshot taken, comparison pending
+
+`maturity_t0.json` records 5,252 title-groups at 2026-08-09T02:47Z, 5,181 of them
+with zero tier-1 coverage. Run `phase1_probe.py maturity compare` at least six
+hours later to close this out.
+
+Note the measurement is weaker than it looks and the script says so: only groups
+that are *republished* in the later window are observable, so a group that matured
+but stopped being republished is invisible. Given section 11, this measurement is
+now mostly moot — the blindspot feature it was meant to size is dead.
+
+## Still open after Part 2
+
+- Maturity-delay comparison (needs the second pull, at least 6h after the snapshot)
+- Independent judge on a fresh rule-H draw, before Phase 4 ships
+- Natural Earth capitals join coverage
+- Blob transfer allowance (`HANDOFF.md` section 6, decision 7)

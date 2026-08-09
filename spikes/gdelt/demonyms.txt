@@ -1,0 +1,208 @@
+# Demonym blocklist for GDELT location names.
+# GDELT geocodes nationality adjectives as places: "British" -> United Kingdom.
+# Any V2EnhancedLocations FullName matching an entry here (case-insensitive,
+# exact match on the full name) is dropped before primary-location selection.
+# Measured justification: spikes/gdelt/FINDINGS.md section 5.
+# Spike-local for now; moves to data/demonyms.txt in Phase 3.
+
+# --- country / region demonyms, singular adjective + plural noun ------------
+afghan, afghans
+african, africans
+albanian, albanians
+algerian, algerians
+american, americans
+angolan, angolans
+arab, arabs
+argentine, argentines, argentinian, argentinians
+armenian, armenians
+asian, asians
+australian, australians
+austrian, austrians
+azerbaijani, azerbaijanis
+bahraini, bahrainis
+bangladeshi, bangladeshis
+belarusian, belarusians
+belgian, belgians
+bolivian, bolivians
+bosnian, bosnians
+brazilian, brazilians
+brit, brits, british, briton, britons
+bulgarian, bulgarians
+burmese
+cambodian, cambodians
+cameroonian, cameroonians
+canadian, canadians
+caribbean
+catalan, catalans
+chadian, chadians
+chilean, chileans
+chinese
+colombian, colombians
+congolese
+croat, croats, croatian, croatians
+cuban, cubans
+cypriot, cypriots
+czech, czechs
+dane, danes, danish
+dominican, dominicans
+dutch, dutchman, dutchmen
+ecuadorian, ecuadorians
+egyptian, egyptians
+emirati, emiratis
+english, englishman, englishmen
+eritrean, eritreans
+estonian, estonians
+ethiopian, ethiopians
+european, europeans
+filipino, filipinos, filipina, filipinas
+finn, finns, finnish
+french, frenchman, frenchmen
+georgian, georgians
+german, germans
+ghanaian, ghanaians
+greek, greeks
+guatemalan, guatemalans
+haitian, haitians
+honduran, hondurans
+hungarian, hungarians
+icelandic, icelander, icelanders
+indian, indians
+indonesian, indonesians
+iranian, iranians
+iraqi, iraqis
+irish, irishman, irishmen
+israeli, israelis
+italian, italians
+ivorian, ivorians
+jamaican, jamaicans
+japanese
+jordanian, jordanians
+kazakh, kazakhs
+kenyan, kenyans
+korean, koreans
+kurd, kurds, kurdish
+kuwaiti, kuwaitis
+kyrgyz
+laotian, laotians
+latin american, latin americans
+latvian, latvians
+lebanese
+liberian, liberians
+libyan, libyans
+lithuanian, lithuanians
+malaysian, malaysians
+malian, malians
+maltese
+mexican, mexicans
+moldovan, moldovans
+mongolian, mongolians
+moroccan, moroccans
+mozambican, mozambicans
+nepali, nepalis, nepalese
+new zealander, new zealanders
+nicaraguan, nicaraguans
+nigerian, nigerians
+nigerien, nigeriens
+north korean, north koreans
+norwegian, norwegians
+pakistani, pakistanis
+palestinian, palestinians
+panamanian, panamanians
+paraguayan, paraguayans
+peruvian, peruvians
+polish, pole, poles
+portuguese
+puerto rican, puerto ricans
+qatari, qataris
+romanian, romanians
+russian, russians
+rwandan, rwandans
+salvadoran, salvadorans
+saudi, saudis
+scandinavian, scandinavians
+scot, scots, scottish, scotsman, scotsmen
+senegalese
+serb, serbs, serbian, serbians
+singaporean, singaporeans
+slovak, slovaks
+slovene, slovenes, slovenian, slovenians
+somali, somalis
+south african, south africans
+south korean, south koreans
+soviet, soviets
+spaniard, spaniards, spanish
+sri lankan, sri lankans
+sudanese
+swede, swedes, swedish
+swiss
+syrian, syrians
+taiwanese
+tajik, tajiks
+tanzanian, tanzanians
+thai, thais
+tibetan, tibetans
+tunisian, tunisians
+turk, turks, turkish
+turkmen
+ugandan, ugandans
+ukrainian, ukrainians
+uruguayan, uruguayans
+uzbek, uzbeks
+venezuelan, venezuelans
+vietnamese
+welsh, welshman, welshmen
+yemeni, yemenis
+zambian, zambians
+zimbabwean, zimbabweans
+
+# --- US state resident demonyms --------------------------------------------
+alabamian, alabamians, alabaman, alabamans
+alaskan, alaskans
+arizonan, arizonans
+arkansan, arkansans
+californian, californians
+coloradan, coloradans
+connecticuter, connecticuters
+delawarean, delawareans
+floridian, floridians
+georgian, georgians
+hawaiian, hawaiians
+idahoan, idahoans
+illinoisan, illinoisans
+indianan, indianans, hoosier, hoosiers
+iowan, iowans
+kansan, kansans
+kentuckian, kentuckians
+louisianan, louisianans, louisianian, louisianians
+mainer, mainers
+marylander, marylanders
+bay stater, bay staters
+michigander, michiganders, michiganian, michiganians
+minnesotan, minnesotans
+mississippian, mississippians
+missourian, missourians
+montanan, montanans
+nebraskan, nebraskans
+nevadan, nevadans
+new hampshirite, new hampshirites
+new jerseyan, new jerseyans, new jerseyite, new jerseyites
+new mexican, new mexicans
+new yorker, new yorkers
+north carolinian, north carolinians
+north dakotan, north dakotans
+ohioan, ohioans
+oklahoman, oklahomans
+oregonian, oregonians
+pennsylvanian, pennsylvanians
+rhode islander, rhode islanders
+south carolinian, south carolinians
+south dakotan, south dakotans
+tennessean, tennesseans
+texan, texans
+utahn, utahns, utahan, utahans
+vermonter, vermonters
+virginian, virginians
+washingtonian, washingtonians
+west virginian, west virginians
+wisconsinite, wisconsinites
+wyomingite, wyomingites
