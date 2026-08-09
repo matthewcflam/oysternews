@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+.vercel/
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Phase 2's fake archive is a build artifact — regenerate with `npm run tiles:fake`.
+# Phase 3 publishes the real one to Vercel Blob and never commits it either.
+public/stories.pmtiles

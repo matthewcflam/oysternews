@@ -1,0 +1,25 @@
+{
+  "name": "sonder",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "tiles:fake": "bash scripts/build-fake-tiles.sh"
+  },
+  "dependencies": {
+    "maplibre-gl": "^6.2.0",
+    "next": "^16.3.0",
+    "pmtiles": "^4.4.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "typescript": "^7.0.2"
+  }
+}

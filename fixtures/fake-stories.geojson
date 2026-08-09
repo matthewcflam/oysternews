@@ -1,0 +1,85 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-118.2437, 34.0522] },
+      "properties": {
+        "title": "Fake: wildfire burns through the San Gabriel Valley",
+        "source": "example.com",
+        "url": "https://example.com/1",
+        "salience": 3.1
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-0.1276, 51.5072] },
+      "properties": {
+        "title": "Fake: Met Office issues a UK-wide amber warning",
+        "source": "example.co.uk",
+        "url": "https://example.co.uk/2",
+        "salience": 2.7
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [56.2588, 26.5667] },
+      "properties": {
+        "title": "Fake: shipping traffic slows in the Strait of Hormuz",
+        "source": "example.org",
+        "url": "https://example.org/3",
+        "salience": 2.9
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [37.6173, 55.7558] },
+      "properties": {
+        "title": "Fake: a story pinned in Russia, to exercise the FIPS RS trap",
+        "source": "example.ru",
+        "url": "https://example.ru/4",
+        "salience": 1.8
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [36.8219, -1.2921] },
+      "properties": {
+        "title": "Fake: Nairobi story, the country-floor case",
+        "source": "example.ke",
+        "url": "https://example.ke/5",
+        "salience": 0.7
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [151.2093, -33.8688] },
+      "properties": {
+        "title": "Fake: Sydney story, exercising FIPS AS",
+        "source": "example.au",
+        "url": "https://example.au/6",
+        "salience": 1.2
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-46.6333, -23.5505] },
+      "properties": {
+        "title": "Fake: São Paulo story, non-ASCII title check",
+        "source": "example.br",
+        "url": "https://example.br/7",
+        "salience": 1.5
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [139.6917, 35.6895] },
+      "properties": {
+        "title": "Fake: Tokyo story, antimeridian-adjacent sanity check",
+        "source": "example.jp",
+        "url": "https://example.jp/8",
+        "salience": 2.2
+      }
+    }
+  ]
+}

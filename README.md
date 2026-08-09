@@ -4,9 +4,22 @@ A 2D web map of current world news. Stories are plotted where they happen, ranke
 by how many independent news organizations covered them — with wire services and
 papers of record given precedence over the rest — and they densify as you zoom in.
 
-**Status: pre-build.** No application code yet. The plan and the data research are
-done — including a hand-judged accuracy audit that **failed its own pre-registered
-abort criterion**, and what was changed in response.
+**Status: Phase 2.** The data research is complete — including a hand-judged accuracy
+audit that **failed its own pre-registered abort criterion**, and what was changed in
+response — and the app skeleton now builds. There is no live URL yet.
+
+## Local development
+
+```bash
+npm install
+npm run tiles:fake     # tippecanoe -> public/stories.pmtiles (needs WSL on Windows)
+npm run dev
+```
+
+`npm run tiles:fake` needs tippecanoe. On Windows that means WSL:
+`wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Without a
+`NEXT_PUBLIC_MAPTILER_KEY` the app renders on a keyless OpenFreeMap basemap and says
+so on screen.
 
 ---
 
