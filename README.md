@@ -1,8 +1,8 @@
 # Sonder
 
 A 2D web map of current world news. Stories are plotted where they happen, ranked
-by how many independent news organizations covered them, and they densify as you
-zoom in.
+by how many independent news organizations covered them — with wire services and
+papers of record given precedence over the rest — and they densify as you zoom in.
 
 **Status: pre-build.** No application code yet. The plan and the data research are
 done — including a hand-judged accuracy audit that **failed its own pre-registered
@@ -44,7 +44,10 @@ changed the design substantially:
 
 - **Tier-1 outlets are 1.05% of GDELT's stream**, and Reuters, AP, the New York
   Times, the Washington Post and the WSJ returned **zero records across three
-  hours**.
+  hours**. That killed one feature and created another: a signal that thin cannot
+  accuse the other 99% of a blindspot, but it is precisely why those stories need
+  protecting from the ranking. They now take precedence in their own area and hold
+  it for 48 hours.
 
 ### The audit that nearly ended the project
 
@@ -73,7 +76,8 @@ published in the app, not just in the repo.
   capital.
 - **Flagging stories no major outlet covered.** The flag fired on **98.6%** of
   stories, because GDELT barely crawls the wires. A signal that fires on almost
-  everything is not a signal.
+  everything is not a signal. The outlet list it was built on was kept and
+  inverted — it now grants ranking priority instead of withholding it.
 
 ---
 
