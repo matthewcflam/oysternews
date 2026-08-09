@@ -78,6 +78,14 @@ application code. No `package.json`.
 - **§7 requires a committed test fixture that does not exist yet.** One real GKG
   bundle must be committed under `fixtures/` during Phase 3. Until then, the test
   plan in §7 is a specification, not something you can run.
+- **tippecanoe does not run natively on Windows, and this machine is Windows.**
+  Production is unaffected — `tiles.ts` runs in GitHub Actions on Linux — but
+  local tile builds need WSL or Docker. This first bites in **Phase 2**, which
+  calls for a hand-made PMTiles archive. Two ways out, and the choice is open
+  (§6, decision 8): stand up WSL/Docker once and use the real toolchain locally,
+  or hand-write the handful of Phase 2 fake points with `geojson-vt` + `vt-pbf`
+  in Node and defer tippecanoe entirely to CI. The second is faster now and leaves
+  the Phase 3 tile step unexercised on the dev machine.
 
 ---
 
@@ -645,6 +653,7 @@ content model. No topic classification is needed anywhere in this project.
 | 5 | Red-outline precedence in country state | selected country stays outlined; a container click inside it renders **brighter and thicker**, not a second colour | Two red outlines can be on screen at once; they need to be distinguishable without introducing a second colour |
 | 6 | Country auto-zoom level | fit the country's bounding box with padding | A fixed zoom is wrong for both Monaco and Russia |
 | 7 | Blob transfer allowance | unverified | Ten minutes. The one free-tier limit that could actually bind |
+| 8 | Local tile toolchain on Windows | **open — needs a call before Phase 2** | tippecanoe has no native Windows build. Either stand up WSL/Docker once, or generate Phase 2's fake archive with `geojson-vt` + `vt-pbf` and leave tippecanoe to CI. See the gotchas list above |
 
 ---
 
