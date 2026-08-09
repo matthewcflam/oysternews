@@ -3,7 +3,8 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** pre-build. **Phase 1 complete.** Phase 2 next.
+**Status:** **Phase 1 complete. Phase 2 in progress** — skeleton built and building
+clean; the tile archive, the MapTiler key and the deploy are human-gated.
 **Last updated:** 2026-08-09, after the Phase 1 geotag audit and the tier-1
 ranking reversal (§2.5).
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
@@ -13,9 +14,17 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: Phase 2 (§5) — public Next.js repo, MapLibre + MapTiler, a
-hand-made PMTiles archive with a few fake points, deployed to Vercel. The live URL
-exists at the end of it.**
+**Next action: three human-gated steps to finish Phase 2 (§5).** The app skeleton is
+built and its build is clean; what is left needs credentials or a password:
+
+```
+  1.  wsl -d Ubuntu -- sudo apt-get install -y tippecanoe   (then: npm run tiles:fake)
+  2.  MapTiler account -> domain-restricted key -> NEXT_PUBLIC_MAPTILER_KEY
+  3.  Vercel project -> deploy  ->  the live URL exists
+```
+
+Nothing about the story layer has been seen in a browser yet, because step 1 is what
+produces the archive it draws from.
 
 **Read §5.2 first.** Phase 1 ran the abort criterion and **it fired**. The project
 survived because the audit found the cause — the placement rule in the spec was
@@ -34,8 +43,9 @@ badge, or a toggle.
 point of 2.5 is to have something real on screen before disappearing into it.
 
 **What already exists:** this file, `spikes/gdelt/FINDINGS.md` (two parts),
-five Python probe scripts, a demonym list, and the judged audit samples. No
-application code. No `package.json`.
+five Python probe scripts, a demonym list, the judged audit samples, and — as of
+2026-08-09 — the Phase 2 Next.js skeleton (`app/`, `components/MapView.tsx`,
+`lib/basemap.ts`, `scripts/build-fake-tiles.sh`, `fixtures/fake-stories.geojson`).
 
 ---
 
@@ -80,8 +90,10 @@ application code. No `package.json`.
 - **`spikes/gdelt/samples/` is gitignored.** The raw GKG bundles are 4-6 MB each
   and are not committed. Re-running any probe script re-downloads them.
 - **§7 requires a committed test fixture that does not exist yet.** One real GKG
-  bundle must be committed under `fixtures/` during Phase 3. Until then, the test
-  plan in §7 is a specification, not something you can run.
+  bundle must be committed under `fixtures/` during Phase 3. `fixtures/` now exists
+  but holds only Phase 2's eight fake points. Until the real bundle lands, the test
+  plan in §7 is a specification, not something you can run — there is no test runner
+  installed yet either.
 - **tippecanoe does not run natively on Windows, and this machine is Windows.**
   Production is unaffected — `tiles.ts` runs in GitHub Actions on Linux — but
   local tile builds need WSL or Docker. This first bites in **Phase 2**, which
@@ -89,10 +101,11 @@ application code. No `package.json`.
   (§6, decision 8): stand up WSL/Docker once and use the real toolchain locally,
   or hand-write the handful of Phase 2 fake points with `geojson-vt` + `vt-pbf`
   in Node and defer tippecanoe entirely to CI. The second is faster now and leaves
-  the Phase 3 tile step unexercised on the dev machine. **Both WSL2 and Docker turn
-  out to already be installed** — but WSL's Ubuntu has no compiler and `sudo` wants
-  a password, and the Docker daemon is stopped, so route A still needs one action
-  from the human. Decision 8 has the survey.
+  the Phase 3 tile step unexercised on the dev machine. **Resolved 2026-08-09 in
+  favour of route A** — Ubuntu 24.04 has tippecanoe in apt, so it is one command
+  rather than a source build, and `scripts/build-fake-tiles.sh` handles the
+  Windows→WSL path translation. Decision 8 has the detail. The install itself still
+  waits on a `sudo` password.
 
 ---
 
@@ -646,11 +659,36 @@ thresholds**, both clear.
 **Thresholds were not moved at any point.** Only the sample size grew, when the
 unstratified 50 turned out to yield 32 judgeable pins rather than 50.
 
-### Phase 2 — Skeleton and first deploy · 1-2 evenings
+### Phase 2 — Skeleton and first deploy · 1-2 evenings · *in progress*
 Public Next.js repo. MapLibre ≥5.0 + MapTiler rendering a hand-made PMTiles
 archive with a few fake points. Push to Vercel.
 
 **The live URL exists at the end of this phase.**
+
+Built 2026-08-09: Next 16 App Router + React 19 + **MapLibre 6.2** + `pmtiles` 4.4,
+`lib/basemap.ts`, `components/MapView.tsx`, eight fake points in
+`fixtures/fake-stories.geojson`, and `scripts/build-fake-tiles.sh` running the
+production tippecanoe flags from §3.1. `npm run build` and `tsc --noEmit` are clean
+and the built server returns 200.
+
+Three notes for whoever picks this up:
+- **MapLibre 6 has no default export**, and it aliases its `Map` class to avoid
+  shadowing the global. Import `{ MapLibreMap, Popup, addProtocol, ... }` by name.
+  The plan says "≥5.0"; 6.2 is what npm resolves to and it works.
+- **Never route a Windows path through `wslpath` via `wsl.exe`** — the backslashes
+  are stripped before `wslpath` sees them and you get `C:Usersmatth...`. Convert
+  `/c/…` to `/mnt/c/…` in the shell instead. Cost twenty minutes; the fix is in
+  `scripts/build-fake-tiles.sh`.
+- **The keyless basemap is visible, not silent.** With no `NEXT_PUBLIC_MAPTILER_KEY`
+  the app falls back to the §3.1 OpenFreeMap escape hatch *and says so on screen*,
+  so a keyless deploy cannot be mistaken for a configured one.
+
+Remaining, all gated on the human:
+- [ ] `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`, then `npm run tiles:fake`
+- [ ] MapTiler account + **domain-restricted** key (§2.6) → `NEXT_PUBLIC_MAPTILER_KEY`
+- [ ] Vercel project + deploy → the live URL
+- [ ] Client-side render is **unverified**: the archive does not exist yet, so the
+      story layer has never drawn. Confirm in a browser after `tiles:fake`
 
 ### Phase 2.5 — Ship something real · 1 evening
 One GKG bundle. City pins only. No grouping, no containers, no budget. Dumb
@@ -772,7 +810,7 @@ content model. No topic classification is needed anywhere in this project.
 | 5 | Red-outline precedence in country state | selected country stays outlined; a container click inside it renders **brighter and thicker**, not a second colour | Two red outlines can be on screen at once; they need to be distinguishable without introducing a second colour |
 | 6 | Country auto-zoom level | fit the country's bounding box with padding | A fixed zoom is wrong for both Monaco and Russia |
 | 7 | Blob transfer allowance | unverified | Ten minutes. The one free-tier limit that could actually bind |
-| 8 | Local tile toolchain on Windows | **open — needs a call before Phase 2, and the machine has been surveyed** | tippecanoe has no native Windows build. Measured 2026-08-09: **WSL2 with Ubuntu 24.04.3 is installed but bare** — no `gcc`, `g++`, `make`, `libsqlite3-dev` or `zlib1g-dev`, and `sudo` prompts for a password, so neither `apt install` nor a source build can be automated. **Docker 29.0.1 is installed but the daemon is not running.** So route A (real tippecanoe locally) is one human action away — a password or a Docker Desktop launch — and route B (`geojson-vt` + `vt-pbf` + `pmtiles` from npm, no admin) needs nothing. See the gotchas list above |
+| 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Still pending the one `sudo` password.** Docker 29.0.1 is installed with its daemon stopped and is the unused fallback |
 | 9 | Tier-1 list membership | keep all **28** domains as-is; review once real data flows in Phase 3 | The list now *grants* precedence instead of measuring coverage (§2.5), so membership is load-bearing. `newsweek.com` and `latimes.com` are 26% of the tier-1 records actually present, and both are more arguable as papers of record than the wires that returned zero. Trimming them would shrink an already 1%-thin signal, so the provisional call is to keep them and look at real placements before editing. Absent domains cost nothing — if GDELT starts crawling Reuters, it just works |
 | 10 | Tier-1 freshness clock | **newest** tier-1 article in the group | "Published in the last 48 hours" against the *oldest* would expire a story that a tier-1 outlet is still actively covering. Newest means a follow-up piece renews the 48 hours, which reads as the same story continuing — matching "unless it is replaced by another tier-1 story" |
 
@@ -871,6 +909,7 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | 2026-08-08 | This file becomes the single source of truth |
 | 2026-08-08 | Views reframed as camera states over one content model. Topic classification removed from the project entirely; the last blocking decision dissolved |
 | **2026-08-09** | **Phase 1 closed. Abort criterion written, then fired: the specified placement rule scored 54.1% on pins and 37.5% on containers. Rule replaced with "specificity unless dominated" — 69.7% / 80.8% out-of-sample — and §2.1 rewritten. Blindspot cut: tier-1 outlets are 1.05% of the feed** |
+| **2026-08-09** | **Phase 2 skeleton built.** Next 16 + React 19 + MapLibre 6.2 + pmtiles 4.4, clean `build` and `typecheck`, server returns 200. Decision 8 resolved to route A (real tippecanoe via WSL; Ubuntu 24.04 has it in apt). Two gotchas recorded: MapLibre 6 has no default export, and `wslpath` via `wsl.exe` silently eats backslashes. Tile archive, MapTiler key and deploy remain human-gated |
 | **2026-08-09** | **Phase 1 fully closed.** Maturity comparison run 19h after its snapshot. The maturation question came back uninformative (0 of 15, [0%, 20.4%]) but the denominator did not: **only 0.29% of story groups are still in the feed 19 hours later**, which makes §3.5's persisted 48-hour shard family the only possible mechanism for §2.5's stickiness. `FINDINGS.md` §14 |
 | **2026-08-09** | **Tier-1 reversed from a cut flag into a ranking preference.** Builder's call: the 1% is the signal, not the accusation. §2.5 gains a two-class comparator — tier-1-fresh outranks everything, salience orders within each class — and §3.5 gains a second 48-hour window and a second shard family to make it stick. No timers, no per-area state, and an area with no tier-1 coverage ranks exactly as it did before. Decisions 9 and 10 added |
 

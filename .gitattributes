@@ -1,0 +1,9 @@
+# The dev machine is Windows with core.autocrlf on, but scripts/*.sh run under WSL
+# and in GitHub Actions. A CRLF shebang line fails there with "bad interpreter",
+# which is why this file exists rather than being tidiness.
+* text=auto eol=lf
+*.sh text eol=lf
+
+*.png binary
+*.zip binary
+*.pmtiles binary
