@@ -3,7 +3,7 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** pre-build. **Phase 1 complete** (bar one deferred re-pull). Phase 2 next.
+**Status:** pre-build. **Phase 1 complete.** Phase 2 next.
 **Last updated:** 2026-08-09, after the Phase 1 geotag audit and the tier-1
 ranking reversal (§2.5).
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
@@ -89,7 +89,10 @@ application code. No `package.json`.
   (§6, decision 8): stand up WSL/Docker once and use the real toolchain locally,
   or hand-write the handful of Phase 2 fake points with `geojson-vt` + `vt-pbf`
   in Node and defer tippecanoe entirely to CI. The second is faster now and leaves
-  the Phase 3 tile step unexercised on the dev machine.
+  the Phase 3 tile step unexercised on the dev machine. **Both WSL2 and Docker turn
+  out to already be installed** — but WSL's Ubuntu has no compiler and `sudo` wants
+  a password, and the Docker daemon is stopped, so route A still needs one action
+  from the human. Decision 8 has the survey.
 
 ---
 
@@ -541,8 +544,8 @@ Done when this file replaces the old one and nothing else claims to be the plan.
 Already measured: access paths, volume, titles, location quality, source
 concentration, theme distribution, FIPS coverage.
 
-**Phase 1 is complete except the maturity comparison.** Results in
-`FINDINGS.md` Part 2. What each one changed is in §5.2.
+**Phase 1 is complete.** Results in `FINDINGS.md` Part 2. What each one changed is
+in §5.2.
 
 - [x] **Abort criterion written down before measuring** — §5.1
 - [x] Hand-judged geotag audit with confidence intervals — n=110 on the specified
@@ -552,9 +555,15 @@ concentration, theme distribution, FIPS coverage.
 - [x] Per-country pin density — 124 countries, 28 of them under 10 stories/day
 - [x] Blocklist — first entries identified; the population is finance spam and
       listicles, not under-covered news
-- [ ] Maturity delay — `maturity_t0.json` snapshot taken 2026-08-09T02:47Z. Run
-      `python spikes/gdelt/phase1_probe.py maturity compare` any time after
-      08:47Z. Largely moot now that blindspot is dead; close it for completeness
+- [x] Maturity delay — **run 19h after the snapshot. 0 of 15 observable groups
+      matured, a [0%, 20.4%] interval that proves nothing** — but the denominator
+      does: **only 0.29% of story groups are still in the feed 19 hours later.**
+      GDELT turns over almost completely inside a day. `FINDINGS.md` §14
+
+**Phase 1 is now closed.** The turnover number above is the one to carry forward:
+it means §3.5's 48-hour tier-1 shard family is the *only* mechanism that can make
+§2.5's stickiness work. A re-fetch strategy would lose essentially every tier-1
+story long before its 48 hours were up.
 
 ### 5.1 Abort criterion — written 2026-08-08, before the audit ran
 
@@ -763,7 +772,7 @@ content model. No topic classification is needed anywhere in this project.
 | 5 | Red-outline precedence in country state | selected country stays outlined; a container click inside it renders **brighter and thicker**, not a second colour | Two red outlines can be on screen at once; they need to be distinguishable without introducing a second colour |
 | 6 | Country auto-zoom level | fit the country's bounding box with padding | A fixed zoom is wrong for both Monaco and Russia |
 | 7 | Blob transfer allowance | unverified | Ten minutes. The one free-tier limit that could actually bind |
-| 8 | Local tile toolchain on Windows | **open — needs a call before Phase 2** | tippecanoe has no native Windows build. Either stand up WSL/Docker once, or generate Phase 2's fake archive with `geojson-vt` + `vt-pbf` and leave tippecanoe to CI. See the gotchas list above |
+| 8 | Local tile toolchain on Windows | **open — needs a call before Phase 2, and the machine has been surveyed** | tippecanoe has no native Windows build. Measured 2026-08-09: **WSL2 with Ubuntu 24.04.3 is installed but bare** — no `gcc`, `g++`, `make`, `libsqlite3-dev` or `zlib1g-dev`, and `sudo` prompts for a password, so neither `apt install` nor a source build can be automated. **Docker 29.0.1 is installed but the daemon is not running.** So route A (real tippecanoe locally) is one human action away — a password or a Docker Desktop launch — and route B (`geojson-vt` + `vt-pbf` + `pmtiles` from npm, no admin) needs nothing. See the gotchas list above |
 | 9 | Tier-1 list membership | keep all **28** domains as-is; review once real data flows in Phase 3 | The list now *grants* precedence instead of measuring coverage (§2.5), so membership is load-bearing. `newsweek.com` and `latimes.com` are 26% of the tier-1 records actually present, and both are more arguable as papers of record than the wires that returned zero. Trimming them would shrink an already 1%-thin signal, so the provisional call is to keep them and look at real placements before editing. Absent domains cost nothing — if GDELT starts crawling Reuters, it just works |
 | 10 | Tier-1 freshness clock | **newest** tier-1 article in the group | "Published in the last 48 hours" against the *oldest* would expire a story that a tier-1 outlet is still actively covering. Newest means a follow-up piece renews the 48 hours, which reads as the same story continuing — matching "unless it is replaced by another tier-1 story" |
 
@@ -862,6 +871,7 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | 2026-08-08 | This file becomes the single source of truth |
 | 2026-08-08 | Views reframed as camera states over one content model. Topic classification removed from the project entirely; the last blocking decision dissolved |
 | **2026-08-09** | **Phase 1 closed. Abort criterion written, then fired: the specified placement rule scored 54.1% on pins and 37.5% on containers. Rule replaced with "specificity unless dominated" — 69.7% / 80.8% out-of-sample — and §2.1 rewritten. Blindspot cut: tier-1 outlets are 1.05% of the feed** |
+| **2026-08-09** | **Phase 1 fully closed.** Maturity comparison run 19h after its snapshot. The maturation question came back uninformative (0 of 15, [0%, 20.4%]) but the denominator did not: **only 0.29% of story groups are still in the feed 19 hours later**, which makes §3.5's persisted 48-hour shard family the only possible mechanism for §2.5's stickiness. `FINDINGS.md` §14 |
 | **2026-08-09** | **Tier-1 reversed from a cut flag into a ranking preference.** Builder's call: the 1% is the signal, not the accusation. §2.5 gains a two-class comparator — tier-1-fresh outranks everything, salience orders within each class — and §3.5 gains a second 48-hour window and a second shard family to make it stick. No timers, no per-area state, and an area with no tier-1 coverage ranks exactly as it did before. Decisions 9 and 10 added |
 
 Superseded, retained as archaeology only:

@@ -3,10 +3,14 @@
 **Run:** 2026-08-07, four consecutive GKG 2.0 bundles covering one hour
 (`20260807224500` through `20260807233000`), 4,688 records, 20.1 MB zipped.
 **Scripts:** `gkg_probe.py`, `quality_probe.py`, `probe3.py` in this directory.
-**Status:** partial. This covers access paths, volume, titles, location quality,
-source concentration, and theme distribution. It does **not** yet cover the
-50-article hand-judged geotag audit, the tier-1 crawl check, or the maturity-delay
-measurement. Those remain open.
+**Status:** **complete.** Part 1 below covers access paths, volume, titles, location
+quality, source concentration and theme distribution. Part 2 (§9-14) adds the
+hand-judged geotag audit, the tier-1 crawl check, per-country density, the blocklist
+and the maturity-delay comparison. Part 1's own "still open" list is kept as written
+at the time: four of its seven items were closed in Part 2, and three went moot with
+the features they were sizing (the governance re-score, blindspot signal-to-noise,
+and the Natural Earth capitals join — all three existed to serve capital-pinning or
+the blindspot flag, and both are dead).
 
 ---
 
@@ -602,20 +606,50 @@ few location mentions and rule H's margins push them to containers.
 **First blocklist entries:** `themarketsdaily.com`, `dailypolitical.com`,
 `tickerreport.com`, `iheart.com` (11.2% of feed, syndication only).
 
-## 14. Maturity delay — snapshot taken, comparison pending
+## 14. Maturity delay — run, and it found something better than it was looking for
 
-`maturity_t0.json` records 5,252 title-groups at 2026-08-09T02:47Z, 5,181 of them
-with zero tier-1 coverage. Run `phase1_probe.py maturity compare` at least six
-hours later to close this out.
+Snapshot 2026-08-09T02:47Z, comparison 2026-08-09T21:48Z, **19 hours apart** against
+a fresh 1-hour pull:
 
-Note the measurement is weaker than it looks and the script says so: only groups
-that are *republished* in the later window are observable, so a group that matured
-but stopped being republished is invisible. Given section 11, this measurement is
-now mostly moot — the blindspot feature it was meant to size is dead.
+| | |
+|---|---|
+| Title-groups at t0 | 5,252 |
+| Zero-tier-1 at t0 | 5,181 |
+| **Of those, still being republished 19h later** | **15 = 0.29%** |
+| Picked up a tier-1 outlet since | **0 of 15** |
+
+**The maturation question came back uninformative, and the turnover number came back
+load-bearing.**
+
+On maturation: 0 of 15 is a 95% Wilson interval of **[0%, 20.4%]**. That rules out
+almost nothing, and the script's own caveat applies — only groups *republished* in
+the later window are observable, so a group that matured and then stopped being
+republished is invisible. Read it as consistent with section 11 rather than as
+independent confirmation of it. Either way the feature it was sized for is dead.
+
+The unlooked-for result is the denominator. **Only 0.29% of story groups are still
+in the feed 19 hours after first appearing.** GDELT's stream turns over almost
+completely inside a day; groups do not linger and get re-fetched. That is a fact
+about the source, not about the blindspot feature, and it directly validates a
+design decision made independently of it:
+
+> **`HANDOFF.md` §3.5's second shard family is not an optimisation, it is the only
+> mechanism.** §2.5 requires a tier-1 story to stay on the map for 48 hours. If
+> that were left to the live feed, the story would be gone within hours — a 0.29%
+> republication rate at 19h means a re-fetch strategy would lose essentially every
+> tier-1 story long before its 48 hours elapsed. Persisted state is load-bearing
+> for the tier-1 rule, and the 24h/48h split is what makes it cheap.
+
+Second, smaller consequence for §2.5: since nothing observed here matured, the
+48-hour clock in practice starts when a story first appears and is rarely renewed.
+`HANDOFF.md` §6 decision 10 (newest tier-1 article renews the window) is therefore a
+correct but rarely-exercised path — worth keeping, not worth optimising, and not
+worth trusting this measurement to have proven either way.
 
 ## Still open after Part 2
 
-- Maturity-delay comparison (needs the second pull, at least 6h after the snapshot)
 - Independent judge on a fresh rule-H draw, before Phase 4 ships
-- Natural Earth capitals join coverage
 - Blob transfer allowance (`HANDOFF.md` section 6, decision 7)
+
+*Dropped rather than answered:* Natural Earth capitals join coverage. It existed only
+to serve capital-pinning, which section 6 killed.
