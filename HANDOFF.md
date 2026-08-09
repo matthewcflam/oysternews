@@ -3,8 +3,8 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** pre-build. Phase 1 partly complete.
-**Last updated:** 2026-08-08, after `/plan-eng-review`.
+**Status:** pre-build. **Phase 1 complete** (bar one deferred re-pull). Phase 2 next.
+**Last updated:** 2026-08-09, after the Phase 1 geotag audit.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -12,21 +12,26 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: finish Phase 1 (§5). Start with the abort criterion.**
+**Next action: Phase 2 (§5) — public Next.js repo, MapLibre + MapTiler, a
+hand-made PMTiles archive with a few fake points, deployed to Vercel. The live URL
+exists at the end of it.**
 
-Before running the 50-article geotag audit, write down what number kills the
-container feature and what number kills the project. Deciding that *after* seeing
-the result is how you talk yourself into a bad number. The old spec's rule was
-"under 50% accuracy, stop and reconsider" — it got lost across five revisions, so
-restore it or replace it deliberately.
+**Read §5.2 first.** Phase 1 ran the abort criterion and **it fired**. The project
+survived because the audit found the cause — the placement rule in the spec was
+the wrong rule — and the replacement clears the same thresholds. §2.1 has been
+rewritten accordingly. Do not implement the old specificity-first rule; it is
+recorded only as the thing that failed.
 
-Then the rest of Phase 1's checklist, then Phase 2.
+**Phase 5 (blindspot) is cut.** Tier-1 outlets are 1.05% of GDELT's stream and the
+wires are absent entirely, so the flag fired on 98.6% of stories. §5, `FINDINGS.md`
+§11.
 
-**Do not start Phase 3.** It is the largest phase and several of its inputs
-(maturity delay, blocklist, per-country density) come out of Phase 1.
+**Do not start Phase 3** before Phase 2 and 2.5. It is the largest phase and the
+point of 2.5 is to have something real on screen before disappearing into it.
 
-**What already exists:** this file, `spikes/gdelt/FINDINGS.md`, and four Python
-probe scripts. No application code. No `package.json`.
+**What already exists:** this file, `spikes/gdelt/FINDINGS.md` (two parts),
+five Python probe scripts, a demonym list, and the judged audit samples. No
+application code. No `package.json`.
 
 ---
 
@@ -98,14 +103,24 @@ of evenings, not full-time days.
 
 ### 2.1 Placement — one rule
 
-Every story gets a position from a single function, `placeStory()`:
+Every story gets a position from a single function, `placeStory()`. Demonyms are
+stripped first; then **specificity wins unless it is dominated**:
+
+```
+  drop every location whose name is a demonym          (see the trap below)
+  city, adm1, country := most-mentioned location of each level
+  if a city exists:
+      adm1    >= 2x the city  ->  CONTAINER at the adm1      story is regional
+      country >= 3x the city  ->  CONTAINER at the country   story is national
+      otherwise               ->  PIN at the city
+  else  adm1 -> CONTAINER,  else country -> CONTAINER,  else DROP
+```
 
 | Input | Output |
 |---|---|
-| Specific feature (city, park, landmark, valley, sea) | **PIN at its exact coordinates** |
-| County / parish / borough | **CONTAINER** |
-| Admin-1 (state/province) only | **CONTAINER** |
-| Country only | **CONTAINER** |
+| Specific feature (city, park, landmark, valley, sea), not dominated | **PIN at its exact coordinates** |
+| Specific feature dominated by its region or country | **CONTAINER at that region** |
+| Admin-1 / county / country only | **CONTAINER** |
 | Demonym only ("British", "Danish") | **DROP** |
 | No usable location | **DROP** |
 
@@ -113,6 +128,24 @@ Every story gets a position from a single function, `placeStory()`:
 city. GDELT's location type 3/4 is not "cities" — measured at 70.7% cities,
 12.1% natural features, 10.7% counties, 6.5% landmarks — and each carries its own
 coordinates.
+
+> **Why the margins, and why they differ.** The first version of this rule was
+> plain specificity-first. Hand-judged, it placed **54.1%** of pins correctly
+> [41.7, 66.0] and **37.5%** of containers [24.2, 53.0] — it failed §5.1's abort
+> criterion outright. The audit found the cause: a city mentioned **once** was
+> beating a state mentioned **four** times (Chicago x1 over Minnesota x4 for a
+> Minnesota Twins story; London x4 over United Kingdom x14 for a UK-wide Met
+> Office story). Pure dominance overcorrects — it sends 75% of stories to country
+> containers, because a domestic article names its own country constantly. Hence
+> two different margins: countries are structurally over-mentioned, states are not.
+> Rule H scores **69.7%** of pins [52.7, 82.6] and **80.8%** of containers
+> [62.1, 91.5] on a fresh out-of-sample draw. `FINDINGS.md` §9.
+
+> **The demonym trap.** GDELT writes country demonyms bare (`Americans`) but state
+> demonyms with a suffix (`Texans, United States`). Matching the whole `FullName`
+> against a demonym list — the obvious implementation — **silently misses every US
+> state**. Match the **first comma segment**. 11.9% of all location mentions are
+> demonyms. `FINDINGS.md` §10.
 
 ### 2.2 Containers
 
@@ -168,6 +201,12 @@ because selection is local, US stories compete only with other US stories — th
 Strait of Hormuz is never buried by an American election.
 
 `K ≈ 12-20`, tuned on real data. A phone shows 2-4 tiles, so roughly 30-60 pins.
+
+> **Measured: the budget binds in four countries and is a no-op in ninety.** Of
+> 124 countries with news in a 24-hour window, four clear 1,000 stories/day (US
+> 11,800, India 4,900, UK 2,700, Canada 1,750), 67 sit between 10 and 99, and 28
+> get fewer than ten. Tune K against the US and India; everywhere else the floor is
+> what does the work. `FINDINGS.md` §12.
 
 **Plus a guaranteed floor.** At z0 the whole planet is one tile, so the budget
 alone would put 12-20 stories on the entire world map. A separate
@@ -395,20 +434,101 @@ Done when this file replaces the old one and nothing else claims to be the plan.
 Already measured: access paths, volume, titles, location quality, source
 concentration, theme distribution, FIPS coverage.
 
-Still open, and all of it gates later phases:
-- [ ] 50-article hand-judged geotag audit, reported **with a confidence interval**
-- [ ] **Write down the abort criterion before starting.** `HANDOFF` §4.6's old
-      rule: under 50% accuracy means stop and reconsider. Decide now what number
-      kills containers and what number kills the project.
-- [ ] Tier-1 crawl check (~20 min) — do NYT/BBC/Reuters appear at expected
-      volume? If GDELT under-crawls them, *everything* looks like a blindspot and
-      Phase 6 produces noise.
-- [ ] Per-country pin density (~10 min) — US is 36.9% of location mentions vs
-      17.5% for all world cities combined. Most countries will have single-digit
-      daily stories. The zoom curve should be designed knowing that.
-- [ ] Maturity delay: two pulls 6h apart. Report the **count** of zero-tier-1
-      groups in the eligible band, not just their quality.
-- [ ] Blocklist: top domains in the zero-tier-1 population.
+**Phase 1 is complete except the maturity comparison.** Results in
+`FINDINGS.md` Part 2. What each one changed is in §5.2.
+
+- [x] **Abort criterion written down before measuring** — §5.1
+- [x] Hand-judged geotag audit with confidence intervals — n=110 on the specified
+      rule, n=60 on its replacement. **The criterion fired.** §5.2
+- [x] Tier-1 crawl check — **1.05% of the feed; zero Reuters/AP/NYT/WaPo/WSJ in
+      three hours.** Kills Phase 5 as specified
+- [x] Per-country pin density — 124 countries, 28 of them under 10 stories/day
+- [x] Blocklist — first entries identified; the population is finance spam and
+      listicles, not under-covered news
+- [ ] Maturity delay — `maturity_t0.json` snapshot taken 2026-08-09T02:47Z. Run
+      `python spikes/gdelt/phase1_probe.py maturity compare` any time after
+      08:47Z. Largely moot now that blindspot is dead; close it for completeness
+
+### 5.1 Abort criterion — written 2026-08-08, before the audit ran
+
+**Restores the old §4.6 rule and makes it specific.** Fixed in advance so the
+result cannot be rationalised after the fact.
+
+**What is measured.** 50 records sampled at random from the population the
+pipeline would actually publish — post-language-filter, post-demonym-filter,
+after `placeStory()` returns PIN or CONTAINER. Each is judged by reading the
+headline against the placement:
+
+| Verdict | Meaning |
+|---|---|
+| **CORRECT** | the placement is where a reader would expect the story to sit |
+| **WRONG** | the placement is somewhere else, or the story has no real place |
+| **UNJUDGEABLE** | the headline does not say enough to tell — excluded from the denominator, and reported |
+
+Accuracy is scored **separately for PINs and for CONTAINERs**, because they fail
+differently and only one of them is load-bearing for the project. Both are
+reported as a proportion with a **95% Wilson interval**.
+
+Containers are only ~28% of that population, so a 50-record draw yields n≈14 for
+them — an interval too wide to decide anything. A **supplementary random sample of
+30 container placements** is therefore drawn and scored identically. The headline
+50 stays unstratified so the PIN number is an honest population estimate; the
+container number comes from the stratified draw and is labelled as such.
+
+**Thresholds.**
+
+| Outcome | PIN accuracy (point estimate) |
+|---|---|
+| Proceed as planned | **≥ 70%** |
+| Proceed, but the About page and the UI state the measured accuracy and its interval | **50-70%** |
+| **Kill the project** — reconsider the data source before writing pipeline code | **< 50%** |
+
+| Outcome | CONTAINER accuracy (point estimate) |
+|---|---|
+| Containers ship as specified (§2.2) | **≥ 60%** |
+| **Kill containers** — drop country-and-ADM1-only records entirely, per `FINDINGS.md` §6 path 1 | **< 60%** |
+
+**If containers are killed**, the country-floor layer of §2.4 does not die with
+them: it is rebuilt from the *countries of city-pinned stories*, so every country
+with news still gets its pin. Only the "story whose only location is a country"
+population is dropped — 27.6% of geo records, and the least trustworthy 27.6%.
+
+**Small-n honesty.** At n=50 the 95% interval is roughly ±13 points. A point
+estimate of 55% therefore does not distinguish "ship with a caveat" from "kill".
+Where the interval straddles a threshold, **the decision follows the lower bound,
+not the point estimate** — that is the conservative direction and it is chosen
+here, before the number is known.
+
+### 5.2 Abort criterion — result
+
+**It fired against the rule in the spec, and it does not fire against the rule
+that replaced it.** Full evidence in `FINDINGS.md` §9.
+
+| | PIN | CONTAINER |
+|---|---|---|
+| **Rule S**, specificity-first, as originally specified | 54.1% [41.7, 66.0] | 37.5% [24.2, 53.0] |
+| **Rule H**, specificity unless dominated — now §2.1 | **69.7% [52.7, 82.6]** | **80.8% [62.1, 91.5]** |
+
+Under rule S: containers fail on the *upper* bound (53.0% < 60%), and pins straddle
+the 50% kill line, which §5.1's lower-bound tie-break resolves as **stop the
+project**. Under rule H, evaluated on a fresh disjoint draw against the **same
+thresholds**, both clear.
+
+**Decisions this forces:**
+
+1. **§2.1 is rewritten to rule H.** The rule change is what saves the project, and
+   it came out of the audit rather than from reasoning ahead of it.
+2. **Containers ship** (§2.2 unchanged), but only because of the rule change. Under
+   the spec's own rule they were dead.
+3. **Pins ship in the "state the measured accuracy" band.** The lower bound is
+   52.7%, not 70%. **Phase 6 must publish 69.7% [52.7, 82.6] and the method**, and
+   Phase 4's geotag-confidence treatment is not optional garnish.
+4. **Before Phase 4 ships, get an independent judge on a fresh rule-H draw.** The
+   same party designed rule H and scored it. That is the weakest link in the
+   evidence and it costs one evening.
+
+**Thresholds were not moved at any point.** Only the sample size grew, when the
+unstratified 50 turned out to yield 32 judgeable pins rather than 50.
 
 ### Phase 2 — Skeleton and first deploy · 1-2 evenings
 Public Next.js repo. MapLibre ≥5.0 + MapTiler rendering a hand-made PMTiles
@@ -460,25 +580,39 @@ notice past 2× the cadence. Geotag confidence treatment lands here.
 **Profile against the performance targets on a real mid-tier phone**, not a
 desktop throttle.
 
-### Phase 5 — Blindspot · 2-3 evenings
-Grouping already exists from Phase 3, so this is only the tier-1 comparison and
-the maturity delay.
+### Phase 5 — Blindspot · **CUT** · killed 2026-08-09 by measurement
 
-**Acceptance bar:** ≥10 flagged dots at any moment, the toggle filters to them,
-and you have read 10 and judged ≥6 to be genuinely underreported. Evaluated after
-≥24 hours of continuous ingestion. If it fails, it ships behind an honest label or
-not at all.
+The feature flagged stories that no tier-1 outlet had covered. Measured across
+three separate hours of the clock, 7,050 records:
 
-### Phase 6 — About / methodology · 1-2 evenings
-Consider pulling this earlier. `FINDINGS.md` — GEO 2.0 dead with structural proof,
-48.5% heuristic disagreement, the demonym discovery, killing your own feature with
-measurements — may be a stronger artifact for a hiring manager than the map is,
-and it is currently the first thing that gets cut if evenings run out.
+- Tier-1 outlets are **1.05% of the entire GDELT stream**
+- **Reuters, AP, NYT, Washington Post, WSJ, NPR, Bloomberg, Al Jazeera and FT
+  returned zero records** — not one, in three hours
+- **98.6% of story groups have zero tier-1 coverage**
 
-Must state: the English-only mechanism and its residue, geotag accuracy with its
-interval, how containers work and where admin-1 coverage has gaps, the 24-hour
-window and cadence, what blindspot does *not* claim, and that raw GKG is a single
-point of failure. **Credit GDELT and MapTiler.**
+A flag that fires on 98.6% of the map is not a signal, and the acceptance bar
+below could never have been met by it. Not a tuning problem: GDELT does not crawl
+the wires at meaningful volume in this stream. `FINDINGS.md` §11.
+
+*Original acceptance bar, kept as the record of what was being tested:* ≥10
+flagged dots at any moment, the toggle filters to them, and you have read 10 and
+judged ≥6 to be genuinely underreported.
+
+**The 2-3 evenings go to Phase 6**, which was already the phase most likely to be
+cut for time and is probably the stronger portfolio artifact anyway.
+
+### Phase 6 — About / methodology · 3-5 evenings · *now a headline deliverable*
+**Promoted, and given Phase 5's budget.** `FINDINGS.md` is the artifact with the
+strongest claim on a hiring manager's attention: GEO 2.0 dead with structural
+proof, 48.5% heuristic disagreement, the demonym discovery, an abort criterion
+written before the data and honoured when it fired, and three features killed by
+the builder's own measurements. That reads better than most portfolio maps.
+
+Must state: the English-only mechanism and its residue, **geotag accuracy as
+69.7% with a [52.7, 82.6] interval and the method behind it**, how containers
+work and where admin-1 coverage has gaps, the 24-hour window and cadence,
+**that the blindspot feature was cut and why**, and that raw GKG is a single point
+of failure with no fallback. **Credit GDELT and MapTiler.**
 
 ### Timeline
 
@@ -487,8 +621,7 @@ point of failure. **Credit GDELT and MapTiler.**
   wk 2   Phase 2.5            -> real data on a real map
   wk 3-6 Phase 3              -> the pipeline
   wk 7-9 Phase 4              -> the product
-  wk 10  Phase 5              -> the differentiator
-  wk 11  Phase 6              -> the story
+  wk 10-11  Phase 6           -> the story  (absorbs the cut Phase 5)
   wk 12-13  slack
 ```
 
@@ -574,6 +707,7 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | Full 100-article audit | 50 with a published confidence interval instead. n=100 cuts the interval by a third, not half; n=200 would halve it |
 | Globe projection, replay animation, idle rotation | Killed by the 2D spec |
 | Governance / capital pinning | Killed by measurement — fired on 47.7% of records and would have pinned a dog attack at a state capital |
+| **Blindspot / under-covered flag** | **Killed by measurement** — tier-1 outlets are 1.05% of GDELT's stream and the wires are absent entirely, so the flag fired on 98.6% of stories. `FINDINGS.md` §11 |
 | Self-hosted basemap | 120 GB planet file; MapTiler's free tier is not a constraint at this traffic |
 
 ---
@@ -590,7 +724,8 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | 2026-08-08 | `/plan-eng-review` — 12 findings resolved, 8 corrections accepted |
 | 2026-08-08 | Outside voice, 6/10, 20 findings. Ranking inversion caught |
 | 2026-08-08 | This file becomes the single source of truth |
-| **2026-08-08** | **Views reframed as camera states over one content model. Topic classification removed from the project entirely; the last blocking decision dissolved** |
+| 2026-08-08 | Views reframed as camera states over one content model. Topic classification removed from the project entirely; the last blocking decision dissolved |
+| **2026-08-09** | **Phase 1 closed. Abort criterion written, then fired: the specified placement rule scored 54.1% on pins and 37.5% on containers. Rule replaced with "specificity unless dominated" — 69.7% / 80.8% out-of-sample — and §2.1 rewritten. Blindspot cut: tier-1 outlets are 1.05% of the feed** |
 
 Superseded, retained as archaeology only:
 `~/.gstack/projects/matthewcflam-sonder/matth-main-design-20260807-154947.md`
