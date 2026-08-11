@@ -132,6 +132,29 @@ export default function MapView() {
   return (
     <>
       <div ref={container} className="map" />
+      {/*
+        §2.6: "MapTiler attribution and logo stay visible." MapTiler's Free plan
+        requires the logo, not just the text credit, and MapLibre's
+        AttributionControl only renders text — the MapTiler SDK is what would
+        normally add this. Rendered only for the MapTiler provider: showing their
+        logo over an OpenFreeMap basemap would credit the wrong source.
+      */}
+      {provider === "maptiler" && (
+        <a
+          className="maptiler-logo"
+          href="https://www.maptiler.com"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="https://api.maptiler.com/resources/logo.svg"
+            alt="MapTiler"
+            width={110}
+            height={30}
+          />
+        </a>
+      )}
       {provider === "openfreemap" && (
         <div className="notice notice--info">
           Keyless basemap (OpenFreeMap escape hatch). Set{" "}
