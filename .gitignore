@@ -7,9 +7,13 @@ out/
 *.tsbuildinfo
 next-env.d.ts
 
-# Phase 2's fake archive is a build artifact — regenerate with `npm run tiles:fake`.
-# Phase 3 publishes the real one to Vercel Blob and never commits it either.
-public/stories.pmtiles
+# Phase 2's fake archive IS committed, deliberately and temporarily. It is a build
+# artifact (`npm run tiles:fake`), but Vercel has no tippecanoe and cannot generate
+# it, so leaving it ignored ships a live map with zero pins — which is the whole
+# point of the phase. 21 KB, and `.gitattributes` marks *.pmtiles binary so the
+# Windows CRLF filter cannot corrupt it.
+# Phase 3 deletes it from the repo: publish.ts writes the real archive to Vercel
+# Blob, and that one is never committed.
 
 # Copied out of node_modules by predev/prebuild so MapLibre's worker is a real
 # static asset (scripts/copy-maplibre-worker.mjs). Versioned with the package,
