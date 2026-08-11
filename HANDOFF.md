@@ -3,10 +3,11 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** **Phase 1 complete. Phase 2 in progress** — skeleton built and building
-clean; the tile archive, the MapTiler key and the deploy are human-gated.
-**Last updated:** 2026-08-09, after the Phase 1 geotag audit and the tier-1
-ranking reversal (§2.5).
+**Status:** **Phase 1 and Phase 2 complete. The live URL exists:**
+https://sonder-drab-eta.vercel.app/ — MapTiler basemap, eight fake pins from a
+real PMTiles archive, popups working. **Next: Phase 2.5** (§5).
+**Last updated:** 2026-08-10, after closing Phase 2 and the basemap case study
+(§6 decision 11).
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -14,17 +15,26 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: three human-gated steps to finish Phase 2 (§5).** The app skeleton is
-built and its build is clean; what is left needs credentials or a password:
+**Next action: Phase 2.5 (§5)** — one real GKG bundle, city pins only, straight to
+tiles. Phase 2 is done and **the live URL exists**:
+https://sonder-drab-eta.vercel.app/
+
+One item is still outstanding and only the human can do it:
 
 ```
-  1.  wsl -d Ubuntu -- sudo apt-get install -y tippecanoe   (then: npm run tiles:fake)
-  2.  MapTiler account -> domain-restricted key -> NEXT_PUBLIC_MAPTILER_KEY
-  3.  Vercel project -> deploy  ->  the live URL exists
+  MapTiler console -> restrict the key to the Vercel domain + localhost   (§2.6)
 ```
 
-Nothing about the story layer has been seen in a browser yet, because step 1 is what
-produces the archive it draws from.
+The key is `NEXT_PUBLIC_`, so it ships inside the browser bundle where anyone can
+read it. Domain restriction is the only thing protecting the quota, and the quota
+is thinner than it looks — see the §3.1 warning.
+
+> **Two traps, both paid for in this project already.** *Never trust a clean
+> `npm run build` as evidence that the map works* — Phase 2 was committed green
+> and rendered nothing, twice over (§11, 2026-08-10). And **`NEXT_PUBLIC_*` is
+> inlined at build time**, so adding an env var in Vercel does nothing until the
+> next build; a deploy that predates the variable must be rebuilt without the
+> cache.
 
 **Read §5.2 first.** Phase 1 ran the abort criterion and **it fired**. The project
 survived because the audit found the cause — the placement rule in the spec was
@@ -104,8 +114,14 @@ five Python probe scripts, a demonym list, the judged audit samples, and — as 
   the Phase 3 tile step unexercised on the dev machine. **Resolved 2026-08-09 in
   favour of route A** — Ubuntu 24.04 has tippecanoe in apt, so it is one command
   rather than a source build, and `scripts/build-fake-tiles.sh` handles the
-  Windows→WSL path translation. Decision 8 has the detail. The install itself still
-  waits on a `sudo` password.
+  Windows→WSL path translation. Decision 8 has the detail. **Installed and used
+  2026-08-10**; the Phase 2 archive was built with it and is committed.
+- **A green `npm run build` says nothing about whether the map renders.** Phase 2
+  passed `build` and `tsc --noEmit` while drawing a completely blank map, for two
+  independent reasons (§11, 2026-08-10). Both were invisible to every check that
+  does not open a browser, and one of them — MapLibre's worker failing to load —
+  produces **no error event and no console warning**. Verify map changes in a
+  browser, not in the type checker.
 
 ---
 
@@ -366,7 +382,7 @@ salience; cross-class order is settled by the first key.
 | Repo | Single Next.js app, **not** a monorepo | Extract to `apps/web` when a worker package earns its own boundary |
 | Frontend | Next.js App Router + React | Vercel-native |
 | Map | MapLibre GL JS, **2D Mercator** | No globe projection |
-| Basemap | **MapTiler** hosted style, 100k loads/mo free | Escape hatch: OpenFreeMap, a one-line style swap |
+| Basemap | **MapTiler** hosted style, **100k API requests/mo free — not "loads"** | Escape hatch: OpenFreeMap, a one-line style swap. See the warning below |
 | Story data | **PMTiles** on Vercel Blob | Verified: 206 range requests, `Accept-Ranges`, CORS `*` |
 | Boundaries | Static `boundaries.pmtiles`, built once from Natural Earth | Needed only for the red click-outline |
 | Database | **None** | Deferred; `lib/types.ts` keeps the migration cheap |
@@ -377,6 +393,17 @@ salience; cross-class order is settled by the first key.
 > account and no service. Using it does not mean using the Protomaps basemap.
 > MapTiler draws the world; PMTiles carries your stories. They are separate
 > layers in one map.
+
+> **The basemap free tier is ~330-520 visits/month, not 100,000.** This row said
+> "100k loads/mo free" until 2026-08-10 and that was wrong by roughly 200×.
+> MapTiler bills **per session** only for apps built on MapTiler SDK JS, and
+> **per request** for "3rd party clients and libraries" — which is what raw
+> `maplibre-gl` is. Every tile is one request, and MapTiler documents that
+> switching to sessions "is not technically possible in this case." **Measured**:
+> one 2-3 minute visit costs 193 requests on a phone and 304 on desktop, so
+> 100,000 buys a few hundred visits. On the free plan the map **pauses until the
+> next month** rather than billing. Sufficient at portfolio traffic; revisit above
+> ~200 visits/month (§6 decision 11). `spikes/basemap/CASE-STUDY.md`.
 
 ### 3.2 Data flow
 
@@ -683,12 +710,28 @@ Three notes for whoever picks this up:
   the app falls back to the §3.1 OpenFreeMap escape hatch *and says so on screen*,
   so a keyless deploy cannot be mistaken for a configured one.
 
-Remaining, all gated on the human:
-- [ ] `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`, then `npm run tiles:fake`
-- [ ] MapTiler account + **domain-restricted** key (§2.6) → `NEXT_PUBLIC_MAPTILER_KEY`
-- [ ] Vercel project + deploy → the live URL
-- [ ] Client-side render is **unverified**: the archive does not exist yet, so the
-      story layer has never drawn. Confirm in a browser after `tiles:fake`
+**Closed 2026-08-10. The live URL is https://sonder-drab-eta.vercel.app/** —
+verified in a browser: MapTiler streets-v2, worker and shared chunk served, six
+basemap tiles, five PMTiles range requests answered `206 Partial Content`, all
+eight pins drawn, popup returning title + source + link only, no HTTP or console
+errors.
+
+- [x] tippecanoe via WSL, then `npm run tiles:fake`
+- [x] MapTiler key → `NEXT_PUBLIC_MAPTILER_KEY`
+- [x] Vercel project + deploy → the live URL
+- [x] Client-side render **verified** — and it was broken. Two bugs, neither
+      catchable by `build` or `tsc`; see §11, 2026-08-10
+- [x] MapTiler logo rendered (§2.6 required it; MapLibre draws text credits only)
+- [ ] **Domain-restrict the key** (§2.6) — the one item still open
+
+Two things Phase 2 changed structurally:
+
+- **`public/stories.pmtiles` is committed**, deliberately and temporarily. Vercel
+  has no tippecanoe and cannot generate it, so an ignored archive ships a live map
+  with zero pins. Phase 3 reverses this when `publish.ts` writes to Blob.
+- **`predev`/`prebuild` copy MapLibre's worker into `public/`**
+  (`scripts/copy-maplibre-worker.mjs`). Do not remove this: without it the map
+  silently never loads a tile.
 
 ### Phase 2.5 — Ship something real · 1 evening
 One GKG bundle. City pins only. No grouping, no containers, no budget. Dumb
@@ -813,6 +856,7 @@ content model. No topic classification is needed anywhere in this project.
 | 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Still pending the one `sudo` password.** Docker 29.0.1 is installed with its daemon stopped and is the unused fallback |
 | 9 | Tier-1 list membership | keep all **28** domains as-is; review once real data flows in Phase 3 | The list now *grants* precedence instead of measuring coverage (§2.5), so membership is load-bearing. `newsweek.com` and `latimes.com` are 26% of the tier-1 records actually present, and both are more arguable as papers of record than the wires that returned zero. Trimming them would shrink an already 1%-thin signal, so the provisional call is to keep them and look at real placements before editing. Absent domains cost nothing — if GDELT starts crawling Reuters, it just works |
 | 10 | Tier-1 freshness clock | **newest** tier-1 article in the group | "Published in the last 48 hours" against the *oldest* would expire a story that a tier-1 outlet is still actively covering. Newest means a follow-up piece renews the 48 hours, which reads as the same story continuing — matching "unless it is replaced by another tier-1 story" |
+| 11 | Basemap provider and billing unit | **RESOLVED 2026-08-10 — MapLibre GL JS + MapTiler, per-request billing.** Google Maps was investigated and rejected | **Google would work**: the Map Tiles API serves 2D tiles over a `{z}/{x}/{y}` template that drops into a MapLibre `raster` source, third-party renderers are explicitly contemplated in its policies, roadmap tiles are custom-stylable, and it is 100k tiles/mo free then $0.60/1k with *graceful* overflow instead of a pause. Rejected anyway: the tiles are **raster**, which fights §9's <2.5s-on-4G target and needs `scaleFactor2x` for retina (halving the free tier), it requires a **credit card** against §2.6's "free tier everywhere," its logo rules cost real phone screen, and `createSession` turns `basemap()` from a pure function into an async stateful one — losing §3.1's one-line escape hatch. **MapTiler SDK** (per-session, 5,000/mo, ~10-15× the headroom) is the stronger economic option and was also declined: the headroom is theoretical at portfolio traffic, and the SDK is MapTiler-specific, which kills the OpenFreeMap swap that made this whole investigation possible without a key. Deferring is cheap — the SDK wraps MapLibre, so switching stays small. **Revisit above ~200 visits/month.** Evidence and measurements: `spikes/basemap/CASE-STUDY.md` |
 
 ---
 
@@ -871,6 +915,10 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 - Pan/zoom **≥30 fps mobile, ≥55 fps desktop**
 - Published archive within the Blob free tier after retention
 - **Screen density stays ~30-60 pins at every zoom** — not more, not empty
+- **Basemap tile count is a cost budget, not only a latency one.** Billing is per
+  request (§3.1), and a measured 2-3 minute visit spends 193 requests on a phone
+  and 304 on desktop against 100,000/month. Anything that increases tiles fetched
+  per visit shortens the runway before the map pauses. `spikes/basemap/CASE-STUDY.md`
 - Zooming into a country **surfaces stories that were not visible at world zoom**,
   and no zoom level between 0 and the ceiling is empty
 - Every country with news in the window has at least one pin at world zoom
@@ -912,6 +960,9 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | **2026-08-09** | **Phase 2 skeleton built.** Next 16 + React 19 + MapLibre 6.2 + pmtiles 4.4, clean `build` and `typecheck`, server returns 200. Decision 8 resolved to route A (real tippecanoe via WSL; Ubuntu 24.04 has it in apt). Two gotchas recorded: MapLibre 6 has no default export, and `wslpath` via `wsl.exe` silently eats backslashes. Tile archive, MapTiler key and deploy remain human-gated |
 | **2026-08-09** | **Phase 1 fully closed.** Maturity comparison run 19h after its snapshot. The maturation question came back uninformative (0 of 15, [0%, 20.4%]) but the denominator did not: **only 0.29% of story groups are still in the feed 19 hours later**, which makes §3.5's persisted 48-hour shard family the only possible mechanism for §2.5's stickiness. `FINDINGS.md` §14 |
 | **2026-08-09** | **Tier-1 reversed from a cut flag into a ranking preference.** Builder's call: the 1% is the signal, not the accusation. §2.5 gains a two-class comparator — tier-1-fresh outranks everything, salience orders within each class — and §3.5 gains a second 48-hour window and a second shard family to make it stick. No timers, no per-area state, and an area with no tier-1 coverage ranks exactly as it did before. Decisions 9 and 10 added |
+
+| **2026-08-10** | **Phase 2 closed — the live URL exists**: https://sonder-drab-eta.vercel.app/ . Getting there required fixing two render bugs that the build could never have caught, because *nothing had ever been checked in a browser*. (1) MapLibre stamps `maplibregl-map` onto the story container, and `maplibre-gl.css` is bundled after `globals.css`, so `.maplibregl-map { position: relative }` beat `.map { position: absolute }` at equal specificity and collapsed the container to height 0. (2) The far worse one: **MapLibre 6 builds its worker from a Blob containing `import "<url computed at runtime>"`, which Turbopack cannot resolve**, so the worker 404'd, the map painted the basemap background and then never loaded a source, requested a tile, or fired `load` — **with no error event and no console warning**. `transpilePackages` only converts the silence into a hard build error. Fixed with `setWorkerUrl()` plus `scripts/copy-maplibre-worker.mjs` on `predev`/`prebuild`. Phase 2's fake archive is now committed, because Vercel has no tippecanoe and an ignored archive means a live map with zero pins |
+| **2026-08-10** | **Basemap decision re-examined and §3.1's free-tier number corrected.** Google Maps was investigated properly — it *would* work with MapLibre — and rejected on raster-vs-vector, a required credit card, and the loss of the one-line escape hatch. The larger finding: **§3.1 said "100k loads/mo free" and the real figure is ~330-520 visits**, because raw `maplibre-gl` is billed per *request*, not per session, and MapTiler documents that switching to sessions is impossible for third-party clients. Measured: 193 requests per phone visit, 304 per desktop visit. Decision 11 added. Also closed a compliance gap — §2.6 requires the MapTiler logo and only the text credit was rendered. `spikes/basemap/CASE-STUDY.md` |
 
 Superseded, retained as archaeology only:
 `~/.gstack/projects/matthewcflam-sonder/matth-main-design-20260807-154947.md`
