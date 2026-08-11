@@ -7,6 +7,7 @@ import {
   Popup,
   addProtocol,
   removeProtocol,
+  setWorkerUrl,
   type ErrorEvent,
   type MapLayerMouseEvent,
 } from "maplibre-gl";
@@ -26,6 +27,15 @@ import { basemap } from "@/lib/basemap";
 const STORIES_ARCHIVE = "/stories.pmtiles";
 const STORIES_SOURCE_LAYER = "stories";
 
+/**
+ * MapLibre 6 builds its worker from a Blob that does `import "<runtime url>"`,
+ * which Turbopack cannot resolve. Left alone the worker silently 404s and the map
+ * paints the basemap background but never loads a source or requests a tile — no
+ * error event, no console warning. Pointing at the copy that `predev`/`prebuild`
+ * place in public/ (scripts/copy-maplibre-worker.mjs) is the supported fix.
+ */
+const WORKER_URL = "/maplibre-gl-worker.mjs";
+
 const escapeHtml = (value: unknown) =>
   String(value ?? "").replace(
     /[&<>"]/g,
@@ -40,6 +50,8 @@ export default function MapView() {
 
   useEffect(() => {
     if (!container.current) return;
+
+    setWorkerUrl(WORKER_URL);
 
     // PMTiles serves itself over HTTP range requests; registering the protocol
     // lets MapLibre address an archive with a pmtiles:// URL.

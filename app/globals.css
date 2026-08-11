@@ -19,7 +19,12 @@ main {
   height: 100dvh;
 }
 
-.map {
+/* Scoped to `main` on purpose: MapLibre stamps `maplibregl-map` onto this same
+   element, and maplibre-gl.css (imported in MapView) is bundled after this file,
+   so a bare `.map` loses `position` to `.maplibregl-map { position: relative }`
+   at equal specificity. The container then collapses to height 0 and the map
+   never requests a tile. */
+main .map {
   position: absolute;
   inset: 0;
 }
