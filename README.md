@@ -4,9 +4,11 @@ A 2D web map of current world news. Stories are plotted where they happen, ranke
 by how many independent news organizations covered them — with wire services and
 papers of record given precedence over the rest — and they densify as you zoom in.
 
-**Status: Phase 2.** The data research is complete — including a hand-judged accuracy
-audit that **failed its own pre-registered abort criterion**, and what was changed in
-response — and the app skeleton now builds. There is no live URL yet.
+**Status: Phase 2 complete — [live here](https://sonder-drab-eta.vercel.app/).** The
+data research is done, including a hand-judged accuracy audit that **failed its own
+pre-registered abort criterion**, and what was changed in response. What is on screen
+today is the skeleton: eight fake points on a real PMTiles archive. Real GDELT data
+lands in Phase 2.5.
 
 ## Local development
 
@@ -16,10 +18,17 @@ npm run tiles:fake     # tippecanoe -> public/stories.pmtiles (needs WSL on Wind
 npm run dev
 ```
 
-`npm run tiles:fake` needs tippecanoe. On Windows that means WSL:
-`wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Without a
-`NEXT_PUBLIC_MAPTILER_KEY` the app renders on a keyless OpenFreeMap basemap and says
-so on screen.
+The committed archive means `tiles:fake` is optional — run it only to regenerate.
+It needs tippecanoe, which on Windows means WSL:
+`wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`.
+
+Without a `NEXT_PUBLIC_MAPTILER_KEY` the app renders on a keyless OpenFreeMap
+basemap and says so on screen, so it runs with no account at all.
+
+`predev` and `prebuild` copy MapLibre's worker into `public/`. Do not remove that
+step — MapLibre 6 builds its worker from a runtime-computed URL that Turbopack
+cannot resolve, and without a real worker asset the map silently never loads a
+tile: no error, no console warning, just an empty map.
 
 ---
 
