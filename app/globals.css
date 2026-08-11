@@ -50,6 +50,33 @@ main .map {
   opacity: 0.7;
 }
 
+/* §2.6 / MapTiler Free plan: the logo sits bottom-left, opposite MapLibre's own
+   text attribution bottom-right, so the two credits do not crowd each other on a
+   phone. Above the map, below the notices.
+
+   The backdrop is not decoration. MapTiler's logo.svg has a `fill="white"`
+   wordmark — it is drawn for dark backgrounds, and they publish no dark-text
+   variant — so on the light streets-v2 basemap it washes out and stops meeting
+   the "attribution stays visible" requirement. The plate gives it the ground it
+   was designed for without altering the mark. */
+.maptiler-logo {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: block;
+  line-height: 0;
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: rgba(13, 15, 18, 0.55);
+}
+
+.maptiler-logo img {
+  display: block;
+  width: 110px;
+  height: auto;
+}
+
 .notice {
   position: absolute;
   bottom: 28px;
