@@ -27,7 +27,7 @@ export function basemap(): Basemap {
 
   if (key) {
     return {
-      styleUrl: `https://api.maptiler.com/maps/${MAPTILER_STYLE}/style.json?key=${key}`,
+      styleUrl: `https://api.maptiler.com/maps/019fef1b-6271-7b5d-bc0d-bc743ed95216/style.json?key=${key}`,
       provider: "maptiler",
       attribution:
         '© <a href="https://www.maptiler.com/copyright/">MapTiler</a> ' +
