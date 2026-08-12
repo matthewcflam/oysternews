@@ -16,9 +16,12 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { basemap } from "@/lib/basemap";
 
 /**
- * Phase 2 skeleton (HANDOFF.md §5). One PMTiles archive of fake points over the
- * basemap, 2D Mercator, no globe. Grouping, containers, the top-K budget and the
- * country-floor layer are all Phase 3/4 — deliberately absent here.
+ * Phase 2.5 (HANDOFF.md §5). One PMTiles archive over the basemap, 2D Mercator,
+ * no globe. The archive now holds real city pins from one GKG bundle
+ * (scripts/build-real-geojson.ts) rather than Phase 2's eight fake points, which
+ * changed nothing in here — the story data was always just a vector source.
+ * Grouping, containers, the top-K budget and the country-floor layer are all
+ * Phase 3/4 — deliberately absent here.
  *
  * MapLibre 6 has no default export and aliases its Map class to avoid shadowing
  * the global `Map`, hence the named `MapLibreMap` import.

@@ -1,9 +1,13 @@
 # Demonym blocklist for GDELT location names.
 # GDELT geocodes nationality adjectives as places: "British" -> United Kingdom.
-# Any V2EnhancedLocations FullName matching an entry here (case-insensitive,
-# exact match on the full name) is dropped before primary-location selection.
+# A V2EnhancedLocations location is dropped before primary-location selection
+# when the FIRST COMMA SEGMENT of its FullName matches an entry here,
+# case-insensitively. Not the whole FullName: GDELT writes country demonyms bare
+# ("Americans") but state demonyms with a suffix ("Texans, United States"), so
+# whole-string matching silently misses every US state (HANDOFF.md §2.1).
 # Measured justification: spikes/gdelt/FINDINGS.md section 5.
-# Spike-local for now; moves to data/demonyms.txt in Phase 3.
+# Moved here from spikes/gdelt/ in Phase 2.5, the first non-spike consumer.
+# Read by scripts/build-real-geojson.ts and by spikes/gdelt/phase1_probe.py.
 
 # --- country / region demonyms, singular adjective + plural noun ------------
 afghan, afghans

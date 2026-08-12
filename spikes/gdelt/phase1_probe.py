@@ -54,7 +54,10 @@ TIER1 = {
 
 def load_demonyms():
     out = set()
-    with open(os.path.join(HERE, "demonyms.txt"), encoding="utf-8") as fh:
+    # Moved to data/ in Phase 2.5, which is the first thing to consume it outside
+    # the spike. One copy, two readers.
+    path = os.path.join(HERE, "..", "..", "data", "demonyms.txt")
+    with open(path, encoding="utf-8") as fh:
         for line in fh:
             line = line.split("#")[0].strip()
             if not line:

@@ -3,11 +3,10 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** **Phase 1 and Phase 2 complete. The live URL exists:**
-https://sonder-drab-eta.vercel.app/ — MapTiler basemap, eight fake pins from a
-real PMTiles archive, popups working. **Next: Phase 2.5** (§5).
-**Last updated:** 2026-08-10, after closing Phase 2 and the basemap case study
-(§6 decision 11).
+**Status:** **Phases 1, 2 and 2.5 complete. The live URL shows real news:**
+https://sonder-drab-eta.vercel.app/ — MapTiler basemap, 261 real city pins from
+one GDELT bundle, popups working. **Next: Phase 3** (§5) — the big one.
+**Last updated:** 2026-08-11, after closing Phase 2.5.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -15,9 +14,16 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: Phase 2.5 (§5)** — one real GKG bundle, city pins only, straight to
-tiles. Phase 2 is done and **the live URL exists**:
-https://sonder-drab-eta.vercel.app/
+**Next action: Phase 3 (§5)** — ingestion and grouping, 7-9 evenings, the largest
+phase in the project. Read its bullet list before starting; every line in it is a
+bug that has already been paid for once. Phase 2.5 is done and **the live URL
+shows real news**: https://sonder-drab-eta.vercel.app/
+
+Phase 2.5 left three things Phase 3 inherits rather than reinvents:
+`scripts/build-real-geojson.ts` (fetch, parse, placement — all four steps are
+Phase 3's `fetch.ts`/`parse.ts`/`place.ts` in miniature and can be lifted),
+`data/demonyms.txt` in its permanent home, and a `stories.pmtiles` built from
+real data by the production tippecanoe flags.
 
 One item is still outstanding and only the human can do it:
 
@@ -53,9 +59,12 @@ badge, or a toggle.
 point of 2.5 is to have something real on screen before disappearing into it.
 
 **What already exists:** this file, `spikes/gdelt/FINDINGS.md` (two parts),
-five Python probe scripts, a demonym list, the judged audit samples, and — as of
-2026-08-09 — the Phase 2 Next.js skeleton (`app/`, `components/MapView.tsx`,
-`lib/basemap.ts`, `scripts/build-fake-tiles.sh`, `fixtures/fake-stories.geojson`).
+five Python probe scripts, the judged audit samples, the Next.js app (`app/`,
+`components/MapView.tsx`, `lib/basemap.ts`), `data/demonyms.txt`, and the Phase
+2.5 pipeline (`scripts/build-real-geojson.ts`, `scripts/build-tiles.sh`).
+`fixtures/fake-stories.geojson` and `npm run tiles:fake` still work and are worth
+keeping: they rebuild the map from eight known points with no network, which is
+how you tell a rendering bug from a data bug.
 
 ---
 
@@ -733,13 +742,58 @@ Two things Phase 2 changed structurally:
   (`scripts/copy-maplibre-worker.mjs`). Do not remove this: without it the map
   silently never loads a tile.
 
-### Phase 2.5 — Ship something real · 1 evening
+### Phase 2.5 — Ship something real · 1 evening · *closed 2026-08-11*
 One GKG bundle. City pins only. No grouping, no containers, no budget. Dumb
 GeoJSON straight to tiles.
 
 Phase 3 is the longest stretch in the project with nothing visible at the end of
 it. This buys a live, real map for one evening, and every later phase then
 improves something that already exists.
+
+Built as `scripts/build-real-geojson.ts` — `npm run gkg && npm run tiles:real`.
+One file, no `worker/`, no state, no publish gate. It shares with Phase 3 only
+the parts that are a bug when they are wrong: the `>= 27` schema canary, a
+tab-offset scan that never materializes `V2GCAM`, the demonym filter running
+before placement, and Rule H with its 2×/3× margins.
+
+- [x] `data/demonyms.txt` moved out of `spikes/` — its §3.3 home, and the first
+      non-spike consumer needed it
+- [x] fetch + parse + place one bundle, in TypeScript, no new dependencies
+- [x] `npm run tiles:real` — same tippecanoe flags, real input
+- [x] Verified in a browser: pins drawn, `stories.pmtiles` answering `206`,
+      popup showing a real title/source/link, no console errors
+- [x] Masthead no longer claims fake points, and says the map is frozen
+
+**Measured, on two consecutive bundles.** The placement mix is stable:
+
+| | bundle 04:45 | bundle 05:00 |
+|---|---|---|
+| Rows | 744 | 887 |
+| Below the 27-column canary | 0 | 0 |
+| No title | 1.9% | 1.9% |
+| **PIN** | **33.5%** | **33.5%** |
+| CONTAINER (held for Phase 3) | 40.6% | 40.1% |
+| DROP | 24.1% | 24.5% |
+| Pins after title dedupe | 219 | 261 |
+
+Four things worth carrying into Phase 3:
+
+- **Row count is roughly two-thirds of §4's 1,172/bundle.** Both bundles were
+  drawn near 05:00 UTC, and §4 already records that volume swings ~2× by time of
+  day. Nothing is wrong; the number in §4 is a daytime sample.
+- **Rule H sends 40% of stories to containers**, so a city-pins-only map shows
+  about a third of the feed. This is the first confirmation on live data that the
+  rule behaves as §2.1's audit predicted rather than collapsing to countries.
+- **The archive is 626 KB for 261 features** against 21 KB for Phase 2's eight,
+  and it is committed. Fine at this size, and Phase 3 deletes it from the repo
+  when `publish.ts` writes to Blob — but a full 24-hour window is ~40,700 pins,
+  so the committed-archive arrangement expires with this phase, not later.
+- **`iheart.com` is still in the feed** at ~2% of these two bundles, well under
+  §4's 11.2%. The blocklist is deliberately *not* wired here — Phase 3 owns it —
+  and it is worth seeing what an unfiltered map looks like before filtering it.
+
+Not done, on purpose: no dedupe beyond normalized title, no ranking, no budget,
+no freshness stamp, and the map does not update itself. The masthead says so.
 
 ### Phase 3 — Ingestion + grouping · 7-9 evenings · *the big one*
 Build `worker/` per §3.3. Everything in the §3.2 data flow.
@@ -963,6 +1017,8 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 
 | **2026-08-10** | **Phase 2 closed — the live URL exists**: https://sonder-drab-eta.vercel.app/ . Getting there required fixing two render bugs that the build could never have caught, because *nothing had ever been checked in a browser*. (1) MapLibre stamps `maplibregl-map` onto the story container, and `maplibre-gl.css` is bundled after `globals.css`, so `.maplibregl-map { position: relative }` beat `.map { position: absolute }` at equal specificity and collapsed the container to height 0. (2) The far worse one: **MapLibre 6 builds its worker from a Blob containing `import "<url computed at runtime>"`, which Turbopack cannot resolve**, so the worker 404'd, the map painted the basemap background and then never loaded a source, requested a tile, or fired `load` — **with no error event and no console warning**. `transpilePackages` only converts the silence into a hard build error. Fixed with `setWorkerUrl()` plus `scripts/copy-maplibre-worker.mjs` on `predev`/`prebuild`. Phase 2's fake archive is now committed, because Vercel has no tippecanoe and an ignored archive means a live map with zero pins |
 | **2026-08-10** | **Basemap decision re-examined and §3.1's free-tier number corrected.** Google Maps was investigated properly — it *would* work with MapLibre — and rejected on raster-vs-vector, a required credit card, and the loss of the one-line escape hatch. The larger finding: **§3.1 said "100k loads/mo free" and the real figure is ~330-520 visits**, because raw `maplibre-gl` is billed per *request*, not per session, and MapTiler documents that switching to sessions is impossible for third-party clients. Measured: 193 requests per phone visit, 304 per desktop visit. Decision 11 added. Also closed a compliance gap — §2.6 requires the MapTiler logo and only the text credit was rendered. `spikes/basemap/CASE-STUDY.md` |
+
+| **2026-08-11** | **Phase 2.5 closed — the live map shows real news.** One GKG bundle through `scripts/build-real-geojson.ts` (fetch, parse, demonym filter, Rule H, city pins only) into the same tippecanoe flags. **Rule H on live data sends 33.5% of rows to pins and 40% to containers, identical across two consecutive bundles**, which is the first out-of-audit confirmation that it neither collapses to countries nor reverts to specificity-first. `data/demonyms.txt` moved to its §3.3 home. No new dependencies: the ZIP reader is thirty lines of `inflateRawSync` and Node runs the TypeScript directly. Two smaller things: the masthead was still advertising fake points, and its longer replacement ran underneath the zoom control at 390px |
 
 Superseded, retained as archaeology only:
 `~/.gstack/projects/matthewcflam-sonder/matth-main-design-20260807-154947.md`
