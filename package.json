@@ -13,6 +13,7 @@
     "test": "vitest run",
     "crosswalk": "node scripts/build-crosswalk.ts",
     "gkg": "node scripts/build-real-geojson.ts",
+    "worker": "node worker/run.ts",
     "tiles:fake": "bash scripts/build-tiles.sh fixtures/fake-stories.geojson sonder-stories-fake",
     "tiles:real": "bash scripts/build-tiles.sh build/stories.geojson sonder-stories",
     "boundaries": "node scripts/build-boundaries.ts"

@@ -109,11 +109,15 @@ real data by the production tippecanoe flags. **That committed archive is gone a
 of 3G** — the map now serves the worker's published archive, and the commit that
 deleted it is the same one that verified the replacement in a browser first.
 
-One item is still outstanding and only the human can do it:
+**The MapTiler key now appears to be domain-restricted** (§2.6), which was the
+long-standing open item. Evidence, 2026-08-12: fetching the style URL with `curl`
+— no `Origin`, no `Referer` — is refused with *"Key usage restricted"*, while the
+same URL loads normally from the browser at `localhost:3000`. That is the
+signature of a referer allowlist that includes localhost.
 
-```
-  MapTiler console -> restrict the key to the Vercel domain + localhost   (§2.6)
-```
+**Not yet confirmed from here: that the allowlist also contains the Vercel
+domain.** Nothing in this repo can check it, and getting it wrong breaks the
+basemap in production only. Load the deployed site and confirm the basemap draws.
 
 **Done 2026-08-12:** the Blob store exists and is **public** (`BLOB_READ_WRITE_TOKEN`
 in `.env.local` and in the Action secrets), and the dead-man switch is a
@@ -852,13 +856,15 @@ errors.
 - [x] Client-side render **verified** — and it was broken. Two bugs, neither
       catchable by `build` or `tsc`; see §11, 2026-08-10
 - [x] MapTiler logo rendered (§2.6 required it; MapLibre draws text credits only)
-- [ ] **Domain-restrict the key** (§2.6) — the one item still open
+- [x] **Domain-restrict the key** (§2.6) — see START HERE: refused to `curl`, works in the browser. Confirm the Vercel domain is on the allowlist by loading the deployed site
 
 Two things Phase 2 changed structurally:
 
-- **`public/stories.pmtiles` is committed**, deliberately and temporarily. Vercel
+- **`public/stories.pmtiles` was committed**, deliberately and temporarily. Vercel
   has no tippecanoe and cannot generate it, so an ignored archive ships a live map
-  with zero pins. Phase 3 reverses this when `publish.ts` writes to Blob.
+  with zero pins. **Phase 3G reversed this**, as planned: the file is deleted and
+  `*.pmtiles` is ignored. `public/boundaries.pmtiles` is the one committed archive
+  now, and for the same Vercel-has-no-tippecanoe reason.
 - **`predev`/`prebuild` copy MapLibre's worker into `public/`**
   (`scripts/copy-maplibre-worker.mjs`). Do not remove this: without it the map
   silently never loads a tile.

@@ -4,28 +4,40 @@ A 2D web map of current world news. Stories are plotted where they happen, ranke
 by how many independent news organizations covered them — with wire services and
 papers of record given precedence over the rest — and they densify as you zoom in.
 
-**Status: Phase 2.5 complete — [live here](https://sonder-drab-eta.vercel.app/).**
+**Status: Phase 3 complete, Phase 4 in progress — [live here](https://sonder-drab-eta.vercel.app/).**
 The data research is done, including a hand-judged accuracy audit that **failed its
-own pre-registered abort criterion**, and what was changed in response. On screen
-today: real GDELT stories, city pins only, from a single 15-minute bundle baked
-into the archive at build time. The map does not update itself yet — the rolling
-24-hour window, grouping and ranking are Phase 3.
+own pre-registered abort criterion**, and what was changed in response. The map
+now updates itself: a GitHub Action runs the pipeline every four hours over a
+rolling 24-hour window, publishes a content-hashed archive to Vercel Blob, and the
+browser follows `manifest.json` to find it. No deploy is involved. Phase 4 is the
+map's own presentation — the three camera states and the confidence treatment.
 
 ## Local development
 
 ```bash
 npm install
-npm run gkg            # fetch one GKG bundle -> build/stories.geojson
-npm run tiles:real     # tippecanoe -> public/stories.pmtiles (needs WSL on Windows)
 npm run dev
 ```
 
-The archive is committed, so both build steps are optional — run them to pull a
-fresher bundle. `npm run tiles:fake` rebuilds from eight known fake points
-instead, with no network, which is how you tell a rendering bug from a data bug.
+That is the whole loop. **The map reads published data straight from Blob**, so
+there is no build step between a clone and a working map, and nothing to keep in
+sync locally.
+
+The rest are for working on the pipeline rather than the map:
+
+```bash
+npm run gkg            # fetch one GKG bundle -> build/stories.geojson
+npm run worker         # the full 4-hourly pipeline, once, locally
+npm run boundaries     # rebuild public/boundaries.pmtiles from Natural Earth
+```
 
 Tiling needs tippecanoe, which on Windows means WSL:
 `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`.
+
+`npm run tiles:fake` and `tiles:real` still build a one-layer archive into
+`public/`, but **nothing reads it any more** — they are a tippecanoe smoke test
+now, not a way to see the map render. To check rendering against known data,
+point `NEXT_PUBLIC_MANIFEST_URL` at a scratch store instead.
 
 Without a `NEXT_PUBLIC_MAPTILER_KEY` the app renders on a keyless OpenFreeMap
 basemap and says so on screen, so it runs with no account at all.
@@ -131,10 +143,19 @@ migration path if that stops being true.
 HANDOFF.md               the plan — read this
 README.md                you are here
 app/, components/        the map
-lib/basemap.ts           MapTiler style, with a one-line OpenFreeMap escape hatch
-data/demonyms.txt        the demonym blocklist the audit made necessary
+lib/
+  basemap.ts             MapTiler style, with a one-line OpenFreeMap escape hatch
+  manifest.ts            how the browser finds the published archive
+  layers.ts              the layer specs — product rules, hence layers.test.ts
+worker/                  the 4-hourly pipeline: fetch, place, group, budget,
+                         tile, publish. run.ts is the entry point
+data/
+  demonyms.txt           the demonym blocklist the audit made necessary
+  crosswalk.json         FIPS 10-4 -> ISO, generated; fips-overrides.json on top
 scripts/
   build-real-geojson.ts  one GKG bundle -> placed city pins (Phase 2.5)
+  build-boundaries.ts    Natural Earth -> public/boundaries.pmtiles (read its
+                         header before touching the FIPS join)
   build-tiles.sh         tippecanoe, via WSL on Windows
 spikes/gdelt/
   FINDINGS.md            measured GDELT research — part 1 and part 2
