@@ -15,11 +15,42 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: Phase 4.** The pipeline is closed end to end. `worker/run.ts` runs
-the §3.2 flow 4-hourly under `.github/workflows/worker.yml` and publishes a
+**Next action: finish Phase 4.** The pipeline is closed end to end — `worker/run.ts`
+runs the §3.2 flow 4-hourly under `.github/workflows/worker.yml` and publishes a
 content-hashed archive to Blob; `components/MapView.tsx` reads `manifest.json` to
-find it. **Nothing in the repo pins the data any more** — `public/stories.pmtiles`
-is deleted and `*.pmtiles` is ignored, so the map moves without a deploy.
+find it. **Nothing in the repo pins the story data any more** —
+`public/stories.pmtiles` is deleted and `*.pmtiles` is ignored, so the map moves
+without a deploy.
+
+**Phase 4, done so far:**
+
+- **Both layers styled** (`lib/layers.ts`). Radius reads salience; the stops are
+  where the measured distribution actually varies (p50 0.693, max 4.357 — half
+  of all stories sit at exactly one domain), not evenly spaced. Containers draw
+  as hollow rings, pins solid. Headlines are a symbol layer from z4 with
+  `text-allow-overlap: false` and `symbol-sort-key` from salience.
+- **The §2.2 red click-outline**, with `scripts/build-boundaries.ts` and a
+  committed `public/boundaries.pmtiles`. Read that script's header before
+  touching it: the FIPS join is the only hard part and it is §3.4 all over again.
+- **A dev-only `window.__sonderMap` seam**, stripped from production builds
+  (verified: 0 occurrences in `.next/static`).
+
+**Phase 4, remaining:**
+
+1. **The three §2.3 UI states.** Country lock-on with auto-zoom and a corner
+   button that resets to whole-planet. Same content in all three — camera and
+   highlight only. `prefers-reduced-motion: reduce` must be honored (§2.6), which
+   is a real constraint the moment a `flyTo` is involved.
+2. **The geotag-confidence treatment** (§5.2 decision 3, *not* optional garnish —
+   pins measured 69.7% [52.7, 82.6]). The container ring is the container half of
+   it; the pin half is unstarted.
+3. **Profile on a real mid-tier phone**, not a desktop throttle (§9).
+4. **`IN25` has no outline.** One Indian region in the first run joins to no
+   Natural Earth polygon. Deliberately not guessed.
+
+**Still outstanding and only the human can do it:** §5.2 decision 4 — *"Before
+Phase 4 ships, get an independent judge on a fresh rule-H draw."* The same party
+designed rule H and scored it, which is the weakest link in the evidence.
 
 **3G, verified in a browser on 2026-08-12.** Four checks, all against the live
 Blob archive rather than a build:
