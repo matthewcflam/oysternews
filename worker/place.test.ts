@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Article, GdeltLocation } from "@/lib/types";
-import { isDemonym, placeStory, regionIdFor } from "./place";
-import type { RefData } from "./refdata";
+import type { Article, GdeltLocation } from "../lib/types.ts";
+import { isDemonym, placeStory, regionIdFor } from "./place.ts";
+import type { RefData } from "./refdata.ts";
 
 /**
  * Placement is the highest-risk pure module in the project: it is the rule that

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Article } from "@/lib/types";
-import { filterArticles, hasUsableLocation, isBlocked } from "./filter";
-import type { RefData } from "./refdata";
+import type { Article } from "../lib/types.ts";
+import { filterArticles, hasUsableLocation, isBlocked } from "./filter.ts";
+import type { RefData } from "./refdata.ts";
 
 const refdata = {
   countries: new Map(),

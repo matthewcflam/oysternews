@@ -3,10 +3,12 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** **Phases 1, 2 and 2.5 complete. The live URL shows real news:**
-https://sonder-drab-eta.vercel.app/ — MapTiler basemap, 261 real city pins from
-one GDELT bundle, popups working. **Next: Phase 3** (§5) — the big one.
-**Last updated:** 2026-08-11, after closing Phase 2.5.
+**Status:** **Phases 1, 2 and 2.5 complete. Phase 3 is complete through 3F —
+the worker runs end to end and publishes to Vercel Blob.** The live URL still
+shows Phase 2.5's committed archive: https://sonder-drab-eta.vercel.app/ .
+**Next: Phase 3G** — point the frontend at `manifest.json` instead, which is the
+step that makes the map update itself.
+**Last updated:** 2026-08-12, after the first real end-to-end run.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -14,16 +16,37 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: Phase 3 (§5)** — ingestion and grouping, 7-9 evenings, the largest
-phase in the project. Read its bullet list before starting; every line in it is a
-bug that has already been paid for once. Phase 2.5 is done and **the live URL
-shows real news**: https://sonder-drab-eta.vercel.app/
+**Next action: Phase 3G** — the frontend reads `manifest.json` and renders both
+tile layers. Everything upstream of the browser now works: `worker/run.ts` runs
+the whole §3.2 flow and `.github/workflows/worker.yml` runs it 4-hourly.
 
-Phase 2.5 left three things Phase 3 inherits rather than reinvents:
-`scripts/build-real-geojson.ts` (fetch, parse, placement — all four steps are
-Phase 3's `fetch.ts`/`parse.ts`/`place.ts` in miniature and can be lifted),
+**The first real end-to-end run, 2026-08-12** (one bundle, `BUNDLE_CAP=1`), is
+the number to compare future runs against:
+
+```
+  1411 rows -> 159 blocklisted, 274 unplaceable -> 949 placed, 29 dropped
+  pool 1993 from 6 shards -> 1467 groups, 17 tier-1, 91 country-top
+  published archives/stories-<hash>.pmtiles, 91 countries
+```
+
+Two things that run surfaced, neither a bug:
+
+- **`overflow` was 204 of 1467.** Those are groups whose `minzoom` landed above
+  z12, so they are in the pipeline and not on the map. That is the §2.4 budget
+  doing its job, but it is worth watching: if it climbs toward a majority, `k`
+  or the zoom ceiling (§6 decision 1) wants revisiting rather than the budget.
+- **`unknown FIPS code TL on 1 stories`.** §8's loud-log path, working. It is
+  deliberately NOT fixed: FIPS 10-4 `TL` is **Tokelau**, while ISO `TL` is
+  **Timor-Leste**, and guessing which one GDELT meant is exactly the §3.4 trap
+  that put Russian news in Serbia. One story is not worth a wrong override;
+  check a real GDELT record before adding one to `data/fips-overrides.json`.
+
+Phase 2.5 left three things Phase 3 inherited rather than reinvented:
+`scripts/build-real-geojson.ts` (fetch, parse, placement in miniature),
 `data/demonyms.txt` in its permanent home, and a `stories.pmtiles` built from
-real data by the production tippecanoe flags.
+real data by the production tippecanoe flags. **That committed archive is what
+the live map still serves** — deleting it is Phase 3G's job, not before, or the
+map goes to zero pins (§11, 2026-08-10).
 
 One item is still outstanding and only the human can do it:
 
@@ -129,6 +152,15 @@ how you tell a rendering bug from a data bug.
 
 ### Things a fresh reader will find confusing
 
+- **`worker/` imports use relative paths WITH a `.ts` extension**, not the `@/`
+  alias the `app/` side uses. This is not a style preference. `@/` is a
+  TypeScript path mapping that Next and Vitest resolve and **plain `node` does
+  not**, and the worker runs under plain `node` in GitHub Actions — so an `@/`
+  import anywhere in `worker/` fails at runtime while passing `tsc`, `vitest`
+  and `next build`. Node also requires the explicit extension on relative
+  specifiers, which is why `tsconfig.json` sets `allowImportingTsExtensions`.
+  A type-only `import type` is erased and would survive either way; that is the
+  trap, because the file works until someone imports a value from it.
 - **`spikes/` is Python; the project is TypeScript.** Deliberate. The spike was
   throwaway exploration and Python was faster for it. The production worker is
   TypeScript per §3.1. The Python scripts stay as reproducible evidence for

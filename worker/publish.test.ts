@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { StoryGroup } from "@/lib/types";
+import type { StoryGroup } from "../lib/types.ts";
 import {
   ARCHIVE_PREFIX,
   type ArchiveStore,
@@ -19,7 +19,8 @@ import {
   pingHealthcheck,
   publish,
   statsOf,
-} from "./publish";
+  vercelBlobStore,
+} from "./publish.ts";
 
 const NOW = new Date("2026-08-12T12:00:00.000Z");
 
@@ -97,7 +98,7 @@ function memoryStore(seed: Record<string, string> = {}): MemoryStore {
       data.set(key, body);
       return `https://blob.example/${key}`;
     },
-    async urlOf(key) {
+    urlOf(key) {
       return `https://blob.example/${key}`;
     },
   };
@@ -341,6 +342,23 @@ describe("publish", () => {
       now: NOW,
     });
     expect(result.published).toBe(true);
+  });
+});
+
+describe("vercelBlobStore", () => {
+  it("derives the public URL from the token instead of looking it up", () => {
+    // Verified against the live store 2026-08-12: this is byte-identical to the
+    // url `put` returns, which is what lets get/remove skip a billable list call.
+    const store = vercelBlobStore("vercel_blob_rw_WKX9BWwJPF2TzDSL_abcdef");
+    expect(store.urlOf("manifest.json")).toBe(
+      "https://wkx9bwwjpf2tzdsl.public.blob.vercel-storage.com/manifest.json",
+    );
+  });
+
+  it("fails loudly on a token that is not in the expected form", () => {
+    // Better than constructing "https://undefined.public.blob..." and 404ing on
+    // every read with no indication of why.
+    expect(() => vercelBlobStore("garbage").urlOf("manifest.json")).toThrow("expected");
   });
 });
 

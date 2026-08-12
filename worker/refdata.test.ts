@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertUsable, loadRefData, sourceCountry, type RefData } from "./refdata";
+import { assertUsable, loadRefData, sourceCountry, type RefData } from "./refdata.ts";
 
 /**
  * These run against the REAL data/ directory rather than fixtures. That is the

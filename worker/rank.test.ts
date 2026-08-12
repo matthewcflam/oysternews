@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PlacedArticle, StoryGroup } from "@/lib/types";
-import { compareGroups, parseGkgDate, rankGroups, salienceOf, summarise } from "./rank";
+import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
+import { compareGroups, parseGkgDate, rankGroups, salienceOf, summarise } from "./rank.ts";
 
 /**
  * HANDOFF.md §7 names five tier-1 paths as required coverage. They are numbered

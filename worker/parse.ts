@@ -16,7 +16,7 @@
  *    access path (§4: there is no fallback) takes the whole map down.
  */
 
-import type { Article, GdeltLocation } from "@/lib/types";
+import type { Article, GdeltLocation } from "../lib/types.ts";
 
 /** GKG 2.1 column indices, 0-based. */
 const C_DATE = 1;
