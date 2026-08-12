@@ -9,12 +9,23 @@ import {
   removeProtocol,
   setWorkerUrl,
   type ErrorEvent,
-  type MapLayerMouseEvent,
+  type MapMouseEvent,
 } from "maplibre-gl";
 import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { basemap } from "@/lib/basemap";
-import { CLICKABLE_LAYER_IDS, SOURCE_ID, storyLayers } from "@/lib/layers";
+import {
+  BOUNDARIES_ARCHIVE,
+  BOUNDARIES_SOURCE_ID,
+  CLICKABLE_LAYER_IDS,
+  COUNTRY_OUTLINE_ID,
+  MATCH_NOTHING,
+  REGION_OUTLINE_ID,
+  SOURCE_ID,
+  boundaryLayers,
+  outlineFor,
+  storyLayers,
+} from "@/lib/layers";
 import { loadManifest } from "@/lib/manifest";
 
 /**
@@ -75,6 +86,20 @@ export default function MapView() {
     map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
     /**
+     * Dev-only test seam. §11 is this project's expensive lesson: it has shipped
+     * green and rendered nothing, twice, and both times the missing tool was a
+     * way to ask the running map what it actually did. `queryRenderedFeatures`
+     * answers that in one line; guessing pixel coordinates does not.
+     *
+     * Stripped from production builds by the NODE_ENV check, which Next inlines
+     * as a literal at build time, so this branch is not merely unreachable in
+     * production — it is not in the bundle.
+     */
+    if (process.env.NODE_ENV !== "production") {
+      (window as unknown as { __sonderMap?: unknown }).__sonderMap = map;
+    }
+
+    /**
      * Two independent things have to finish before a source can be added: the
      * manifest fetch and the map's own `load`. Either can win. Awaiting both as
      * promises is the only ordering that is correct in both directions — an
@@ -99,26 +124,77 @@ export default function MapView() {
           url: `pmtiles://${manifest.url}`,
         });
 
-        // Order matters and is asserted in layers.test.ts: country-top under
-        // stories (they overlap), labels over both.
+        // §2.2's outline archive is static and committed, so it is addressed
+        // relative to the origin rather than through the manifest.
+        map.addSource(BOUNDARIES_SOURCE_ID, {
+          type: "vector",
+          url: `pmtiles://${new URL(BOUNDARIES_ARCHIVE, window.location.href).href}`,
+        });
+
+        // Outlines go under the stories, which go under the labels. Order is
+        // asserted in layers.test.ts.
+        for (const layer of boundaryLayers()) map.addLayer(layer);
         for (const layer of storyLayers()) map.addLayer(layer);
 
-        // §2.6 is link-out only: title, source, link. Never article text.
-        for (const layer of CLICKABLE_LAYER_IDS) {
-          map.on("click", layer, (event: MapLayerMouseEvent) => {
-            const feature = event.features?.[0];
-            if (!feature) return;
-            const { title, source, url } = feature.properties as Record<string, string>;
-            new Popup({ closeButton: true, maxWidth: "280px" })
-              .setLngLat(event.lngLat)
-              .setHTML(
-                `<strong>${escapeHtml(title)}</strong><br>` +
-                  `<em>${escapeHtml(source)}</em><br>` +
-                  `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Read at source</a>`,
-              )
-              .addTo(map);
+        /** §2.2: one outline at a time, and none by default. */
+        const clearOutline = () => {
+          for (const id of [COUNTRY_OUTLINE_ID, REGION_OUTLINE_ID]) {
+            map.setFilter(id, MATCH_NOTHING);
+          }
+        };
+
+        let popup: Popup | null = null;
+
+        /**
+         * **One handler for the whole map, not one per layer.**
+         *
+         * The per-layer form registers the same handler twice over two layers
+         * that overlap by design (§2.4), so a click where both match runs it
+         * twice: two popups, and two competing writes to the outline filter.
+         * Hit-testing once gives a single deterministic answer, in the layer
+         * priority order `CLICKABLE_LAYER_IDS` states.
+         *
+         * It also gives the map a dismiss: clicking empty ocean closes the popup
+         * and clears the outline, which §2.2's "click-reveal only" implies.
+         *
+         * Note that the top-most feature wins, and at world zoom that is often a
+         * PIN sitting over a container — clicking "Texas" where a Bell County
+         * pin overlaps it selects the pin, and correctly draws no outline.
+         */
+        map.on("click", (event: MapMouseEvent) => {
+          const [feature] = map.queryRenderedFeatures(event.point, {
+            layers: CLICKABLE_LAYER_IDS.filter((id) => map.getLayer(id)),
           });
 
+          popup?.remove();
+          popup = null;
+          clearOutline();
+          if (!feature) return;
+
+          // §2.2: "Clicking any container story outlines its container in red."
+          // A PIN gets none — it is at an exact place, and drawing a region
+          // around it would claim the opposite.
+          const outline = outlineFor(feature.properties);
+          if (outline) {
+            map.setFilter(outline.layerId, ["==", ["get", "id"], outline.id]);
+          }
+
+          // §2.6 is link-out only: title, source, link. Never article text.
+          const { title, source, url } = feature.properties as Record<string, string>;
+          popup = new Popup({ closeButton: true, maxWidth: "280px" })
+            .setLngLat(event.lngLat)
+            .setHTML(
+              `<strong>${escapeHtml(title)}</strong><br>` +
+                `<em>${escapeHtml(source)}</em><br>` +
+                `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Read at source</a>`,
+            );
+          // MapLibre 6's `on` returns a Subscription rather than the emitter, so
+          // this cannot be chained onto the builder above.
+          popup.on("close", clearOutline);
+          popup.addTo(map);
+        });
+
+        for (const layer of CLICKABLE_LAYER_IDS) {
           map.on("mouseenter", layer, () => {
             map.getCanvas().style.cursor = "pointer";
           });

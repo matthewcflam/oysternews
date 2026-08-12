@@ -22,6 +22,13 @@ next-env.d.ts
 # `npm run tiles:fake` still writes here for local work; keep it out of the repo.
 *.pmtiles
 
+# The one exception, and the reason the rule above is about staleness rather
+# than about file type: boundaries.pmtiles is STATIC (§3.1). It is built once
+# from Natural Earth by `npm run boundaries`, changes only when Natural Earth
+# does, and Vercel has no tippecanoe to rebuild it at deploy time. Committing it
+# is what makes the §2.2 red outline work in production.
+!public/boundaries.pmtiles
+
 # Copied out of node_modules by predev/prebuild so MapLibre's worker is a real
 # static asset (scripts/copy-maplibre-worker.mjs). Versioned with the package,
 # so committing them would just go stale.
