@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  COUNTRIES_SOURCE_LAYER,
   COUNTRY_LAYER_ID,
   COUNTRY_LAYER_MAXZOOM,
+  COUNTRY_OUTLINE_ID,
   COUNTRY_SOURCE_LAYER,
   LABELS_LAYER_ID,
   LABEL_FONT,
+  MATCH_NOTHING,
+  REGIONS_SOURCE_LAYER,
+  REGION_OUTLINE_ID,
   STORIES_LAYER_ID,
   STORIES_SOURCE_LAYER,
+  boundaryLayers,
+  outlineFor,
   storyLayers,
 } from "./layers";
 
@@ -82,5 +89,61 @@ describe("storyLayers", () => {
 
   it("sizes pins by salience, the §2.5 comparator's own term", () => {
     expect(propertiesRead(stories.paint?.["circle-radius"])).toContain("salience");
+  });
+});
+
+describe("boundaryLayers", () => {
+  const [countryOutline, regionOutline] = boundaryLayers();
+
+  it("draws outlines as lines, never as fills (§2.2)", () => {
+    // "The polygon is never a fill. It is a click-reveal only." A filled country
+    // would read as a claim about the whole country.
+    for (const layer of [countryOutline, regionOutline]) {
+      expect(layer.type).toBe("line");
+    }
+  });
+
+  it("starts matching nothing, so no outline shows by default", () => {
+    for (const layer of [countryOutline, regionOutline]) {
+      expect(layer.filter).toEqual(MATCH_NOTHING);
+    }
+  });
+
+  it("reads the two layers built by scripts/build-boundaries.ts", () => {
+    expect(countryOutline["source-layer"]).toBe(COUNTRIES_SOURCE_LAYER);
+    expect(regionOutline["source-layer"]).toBe(REGIONS_SOURCE_LAYER);
+  });
+});
+
+describe("outlineFor", () => {
+  it("sends a country container to the countries layer", () => {
+    // A country container's region code IS its country code, e.g. Spain: SP/SP.
+    expect(outlineFor({ kind: "CONTAINER", region: "SP", country: "SP" })).toEqual({
+      layerId: COUNTRY_OUTLINE_ID,
+      id: "SP",
+    });
+  });
+
+  it("sends an admin-1 container to the regions layer", () => {
+    // GDELT's own spellings, both measured in the first real run.
+    expect(outlineFor({ kind: "CONTAINER", region: "USCA", country: "US" })).toEqual({
+      layerId: REGION_OUTLINE_ID,
+      id: "USCA",
+    });
+    expect(outlineFor({ kind: "CONTAINER", region: "UKC9", country: "UK" })).toEqual({
+      layerId: REGION_OUTLINE_ID,
+      id: "UKC9",
+    });
+  });
+
+  it("outlines nothing for a pin", () => {
+    // §2.1: a PIN is at an exact location. Drawing a region around it would
+    // claim the opposite of what the placement rule decided.
+    expect(outlineFor({ kind: "PIN", region: "USCA", country: "US" })).toBeNull();
+  });
+
+  it("outlines nothing rather than guessing when the region is missing", () => {
+    expect(outlineFor({ kind: "CONTAINER", region: "", country: "US" })).toBeNull();
+    expect(outlineFor({})).toBeNull();
   });
 });
