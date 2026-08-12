@@ -90,6 +90,61 @@ main .map {
   height: auto;
 }
 
+/* Story popups.
+
+   maplibre-gl.css draws the popup white and sets no text colour, so the content
+   inherited `body { color: #f2f4f7 }` — near-white on white, about 1.1:1, which
+   made every story title and source unreadable while the link stayed visible on
+   its UA blue. Dark plate instead of dark text: it matches the masthead and the
+   notices, and it reads over both the dark local style and the light streets-v2
+   basemap. Phase 4 owns the real popup treatment (§4, with geotag confidence);
+   this is the legibility floor until then.
+
+   The tip is a CSS triangle made of borders, so its colour lives on whichever
+   border faces the popup — one rule per anchor, all eight, or the arrow stays
+   white against a dark bubble on half the pins. */
+main .maplibregl-popup-content {
+  background: #12151a;
+  color: #f2f4f7;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+main .maplibregl-popup-content a {
+  color: #7cc0ff;
+}
+
+main .maplibregl-popup-close-button {
+  color: #f2f4f7;
+  opacity: 0.7;
+  font-size: 16px;
+  padding: 0 6px;
+}
+
+main .maplibregl-popup-close-button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  opacity: 1;
+}
+
+main .maplibregl-popup-anchor-top .maplibregl-popup-tip,
+main .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+main .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: #12151a;
+}
+
+main .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+main .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+main .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: #12151a;
+}
+
+main .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: #12151a;
+}
+
+main .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: #12151a;
+}
+
 .notice {
   position: absolute;
   bottom: 28px;
