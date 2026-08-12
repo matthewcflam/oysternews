@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "GDELT country codes that are not countries. These are KNOWN, not errors: a story",
+    "about a ship in the Atlantic really does geocode to an ocean.",
+    "",
+    "HANDOFF.md §3.4: oceans render as plain pins and are never containers — there is",
+    "no boundary to outline and no country to represent in the §2.4 country-top layer.",
+    "Anything NOT listed here and NOT in the crosswalk is a genuine gap and gets a loud",
+    "log plus a degraded pin, counted in the run summary (§8).",
+    "",
+    "OS is 0.096% of location mentions in the measured sample. OC is listed for the",
+    "same reason as the pre-emptive crosswalk overrides: it costs nothing and it is",
+    "documented in §3.4 as the other ocean code."
+  ],
+  "codes": ["OS", "OC"]
+}

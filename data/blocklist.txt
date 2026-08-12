@@ -1,0 +1,32 @@
+# Domains dropped before placement.
+#
+# This list is deliberately SHORT and is not a quality filter. FINDINGS.md §13
+# separates two populations that look alike in a domain histogram:
+#
+#   - Algorithmic finance spam. Generated stock-move copy that geocodes to
+#     whichever city the company's HQ is in and produces a pin about nothing.
+#   - Legitimate high-volume outlets. indiatimes.com, thehindu.com and
+#     hindustantimes.com are the top of the same histogram and are simply where
+#     the news is. Blocking by volume would delete India from the map.
+#
+# Only the first population belongs here. Rule H already cuts "no real place"
+# placements from 14.9% to 10.2% without any blocklist, because spam articles
+# carry few location mentions and the dominance margins push them to containers.
+#
+# §5 ordering guarantee: the blocklist runs BEFORE the tier-1 check, so a
+# blocklisted domain can never make a group tier-1-fresh. There is no overlap
+# between the two lists today; the ordering is a one-line defence against a
+# future edit that introduces one.
+
+# --- algorithmic finance spam --------------------------------------------
+themarketsdaily.com
+dailypolitical.com
+tickerreport.com
+
+# --- syndication-only ------------------------------------------------------
+# 11.2% of the entire feed in the Phase 1 sample and ~2% in the Phase 2.5
+# bundles: a radio network republishing the same wire copy across hundreds of
+# station sites. Every copy is the same story, so it inflates distinct-domain
+# salience without adding a single independent source — the one thing §2.5's
+# ranking is built on.
+iheart.com

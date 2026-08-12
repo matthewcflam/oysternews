@@ -10,6 +10,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "crosswalk": "node scripts/build-crosswalk.ts",
     "gkg": "node scripts/build-real-geojson.ts",
     "tiles:fake": "bash scripts/build-tiles.sh fixtures/fake-stories.geojson sonder-stories-fake",
     "tiles:real": "bash scripts/build-tiles.sh build/stories.geojson sonder-stories"
@@ -25,6 +27,7 @@
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
   }
 }
