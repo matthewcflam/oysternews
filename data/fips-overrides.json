@@ -1,0 +1,27 @@
+{
+  "_comment": [
+    "Hand-maintained corrections applied ON TOP OF the generated data/crosswalk.json.",
+    "Natural Earth's FIPS_10 column is populated on 236 of 258 features, and the gaps",
+    "are not random: they are mostly territories plus, awkwardly, Israel — which is",
+    "1.7% of all location mentions measured across two GKG bundles, the largest single",
+    "hole by a wide margin.",
+    "",
+    "Measured 2026-08-11 against the cached bundles: 144 distinct GDELT country codes,",
+    "7 with no crosswalk entry (IS, OS, NO, RB, OD, GP, WE) = 97.99% coverage by volume.",
+    "IS/NO/RB/OD/GP/WE are corrected here; OS is an ocean and lives in non-countries.json.",
+    "RE and SV are included pre-emptively: HANDOFF.md §3.4 observed them in a larger",
+    "sample than the two bundles above, and an unused override costs nothing.",
+    "",
+    "iso is ISO 3166-1 alpha-2. name is for logs and container labels."
+  ],
+  "fips": {
+    "IS": { "iso": "IL", "name": "Israel" },
+    "NO": { "iso": "NO", "name": "Norway" },
+    "RB": { "iso": "RS", "name": "Serbia" },
+    "OD": { "iso": "SS", "name": "South Sudan" },
+    "WE": { "iso": "PS", "name": "West Bank" },
+    "GP": { "iso": "GP", "name": "Guadeloupe" },
+    "RE": { "iso": "RE", "name": "Réunion" },
+    "SV": { "iso": "SJ", "name": "Svalbard" }
+  }
+}
