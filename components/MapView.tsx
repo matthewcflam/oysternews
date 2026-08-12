@@ -14,31 +14,22 @@ import {
 import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { basemap } from "@/lib/basemap";
+import { CLICKABLE_LAYER_IDS, SOURCE_ID, storyLayers } from "@/lib/layers";
 import { loadManifest } from "@/lib/manifest";
 
 /**
- * Phase 3G (HANDOFF.md §3.2). The archive is no longer a file in public/ — it is
- * whatever `manifest.json` currently points at, which changes on every worker run.
- * That is the whole reason this component now has an async step before it can add
- * a source: the archive URL is content-hashed, so it cannot be a constant.
+ * The map (HANDOFF.md §4). This component owns wiring only — the source, the
+ * camera, and the click behaviour. **How the layers look lives in
+ * `lib/layers.ts`**, because those specs encode product rules (§2.6 link-out,
+ * §2.3's invisible tier-1 preference, containers drawn as regions) that are
+ * worth testing rather than reviewing.
  *
- * Full styling is Phase 4. What 3G owes is correctness: both layers rendered, the
- * manifest/`load` race closed, and a failed manifest fetch that says so.
+ * The archive is whatever `manifest.json` currently points at, which changes
+ * every run — hence the async step before a source can be added.
  *
  * MapLibre 6 has no default export and aliases its Map class to avoid shadowing
  * the global `Map`, hence the named `MapLibreMap` import.
  */
-
-const STORIES_SOURCE_LAYER = "stories";
-
-/**
- * The archive's second layer: top 1 group per country at minzoom 0, so a
- * zoomed-out map is never empty (§2.4). It **overlaps** the stories layer — a
- * group can be in both — so it is capped below the zoom where the budget starts
- * admitting stories generally, or the same story draws twice on top of itself.
- */
-const COUNTRY_SOURCE_LAYER = "country-top";
-const COUNTRY_LAYER_MAXZOOM = 4;
 
 /**
  * MapLibre 6 builds its worker from a Blob that does `import "<runtime url>"`,
@@ -103,42 +94,17 @@ export default function MapView() {
       .then(([manifest]) => {
         if (cancelled) return;
 
-        map.addSource("stories", {
+        map.addSource(SOURCE_ID, {
           type: "vector",
           url: `pmtiles://${manifest.url}`,
         });
 
-        // Added first so it paints UNDER the stories layer: where both draw the
-        // same group at low zoom, the stories styling is the one that wins.
-        map.addLayer({
-          id: "country-top-pins",
-          type: "circle",
-          source: "stories",
-          "source-layer": COUNTRY_SOURCE_LAYER,
-          maxzoom: COUNTRY_LAYER_MAXZOOM,
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 4, 4, 6],
-            "circle-color": "#e5484d",
-            "circle-stroke-width": 1.5,
-            "circle-stroke-color": "#ffffff",
-          },
-        });
-
-        map.addLayer({
-          id: "stories-pins",
-          type: "circle",
-          source: "stories",
-          "source-layer": STORIES_SOURCE_LAYER,
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 4, 8, 7],
-            "circle-color": "#e5484d",
-            "circle-stroke-width": 1.5,
-            "circle-stroke-color": "#ffffff",
-          },
-        });
+        // Order matters and is asserted in layers.test.ts: country-top under
+        // stories (they overlap), labels over both.
+        for (const layer of storyLayers()) map.addLayer(layer);
 
         // §2.6 is link-out only: title, source, link. Never article text.
-        for (const layer of ["stories-pins", "country-top-pins"]) {
+        for (const layer of CLICKABLE_LAYER_IDS) {
           map.on("click", layer, (event: MapLayerMouseEvent) => {
             const feature = event.features?.[0];
             if (!feature) return;
