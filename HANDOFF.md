@@ -25,24 +25,41 @@ Phase 3's `fetch.ts`/`parse.ts`/`place.ts` in miniature and can be lifted),
 `data/demonyms.txt` in its permanent home, and a `stories.pmtiles` built from
 real data by the production tippecanoe flags.
 
-Three items are still outstanding and only the human can do them:
+One item is still outstanding and only the human can do it:
 
 ```
   MapTiler console -> restrict the key to the Vercel domain + localhost   (§2.6)
-  Vercel Blob      -> create the store, put BLOB_READ_WRITE_TOKEN in the
-                      Action secrets                                      (§3.2)
-  Dead-man switch  -> create the check, put its ping URL in the secrets   (§8)
 ```
 
-`publish.ts` is written and unit-tested against an in-memory store, but its Blob
-transport is the **REST API over `fetch` rather than `@vercel/blob`** (§0 rule 5)
-and **has never been run against a live token** — the header names and the delete
-endpoint come from the documented surface, not from a measured request. It is one
-function, `vercelBlobStore`, if it turns out the SDK is worth a dependency. This
-is the only place in the project where §0 rule 7 has not been applied; verify it
-against the real token before trusting a green run.
+**Done 2026-08-12:** the Blob store exists and is **public** (`BLOB_READ_WRITE_TOKEN`
+in `.env.local` and in the Action secrets), and the dead-man switch is a
+healthchecks.io check on a 4h period + 4h grace, so silence alerts at 2× cadence
+per §8 — its ping URL is the `HEALTHCHECK_URL` Action secret. `HEALTHCHECK_URL`
+is deliberately **not** in `.env.local`: a local run pinging it would tell the
+switch the worker ran when it did not, which is the exact false negative the
+switch exists to catch.
 
-The key is `NEXT_PUBLIC_`, so it ships inside the browser bundle where anyone can
+**Two Vercel Blob traps, both measured on 2026-08-12** and both recorded in
+`worker/publish.ts`'s header:
+
+1. **A Blob store's access mode is chosen at creation and cannot be changed**,
+   and a *private* store delivers blobs through a Function rather than by direct
+   URL. That breaks §3.2 outright — the browser range-requests the PMTiles
+   archive itself. The first store was created private and had to be destroyed
+   and rebuilt. If the store is ever recreated: **public, or the map does not
+   work.** Region is likewise permanent.
+2. **`put()` throwing on an existing pathname is an SDK-side guard, not an API
+   one.** A bare REST PUT over an existing key returns 200. So the REST transport
+   overwrites `manifest.json` happily, but **anyone swapping in `@vercel/blob`
+   must pass `allowOverwrite: true`** or every run after the first dies at the
+   manifest write, having already uploaded its archive.
+
+The rest of `vercelBlobStore` is now verified against the live store rather than
+against the docs: stable keys, text and binary round-trips, `cache-control`
+honoring `x-cache-control-max-age`, delete, and — the ones the map rests on —
+`206` range responses with a correct `content-range` and `access-control-allow-origin: *`.
+
+The MapTiler key is `NEXT_PUBLIC_`, so it ships inside the browser bundle where anyone can
 read it. Domain restriction is the only thing protecting the quota, and the quota
 is thinner than it looks — see the §3.1 warning.
 

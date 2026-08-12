@@ -16,7 +16,7 @@ import {
   contentHash,
   median,
   nextHistory,
-  pingDeadMan,
+  pingHealthcheck,
   publish,
   statsOf,
 } from "./publish";
@@ -344,13 +344,13 @@ describe("publish", () => {
   });
 });
 
-describe("pingDeadMan", () => {
+describe("pingHealthcheck", () => {
   it("reports false without a configured URL rather than throwing", async () => {
-    expect(await pingDeadMan(undefined)).toBe(false);
-    expect(await pingDeadMan("")).toBe(false);
+    expect(await pingHealthcheck(undefined)).toBe(false);
+    expect(await pingHealthcheck("")).toBe(false);
   });
 
   it("swallows a failed ping — monitoring must not fail a successful run", async () => {
-    expect(await pingDeadMan("http://127.0.0.1:1/never")).toBe(false);
+    expect(await pingHealthcheck("http://127.0.0.1:1/never")).toBe(false);
   });
 });

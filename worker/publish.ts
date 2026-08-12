@@ -26,11 +26,8 @@
  *
  * **The Blob transport is the REST API over `fetch`, not `@vercel/blob`** (§0
  * rule 5: ask before adding dependencies). It is confined to `vercelBlobStore`
- * below so swapping in the SDK is one function. **Unverified against a live
- * token** — there is no `BLOB_READ_WRITE_TOKEN` in this repo yet, so the header
- * names and the delete endpoint are written from the documented surface and not
- * from a measured request. That is the one thing in this file §0 rule 7 has not
- * been applied to; check it against a real token before trusting a green run.
+ * below, which carries the measurements taken against the live store and the two
+ * traps that came out of them.
  */
 
 import { createHash } from "node:crypto";
@@ -208,10 +205,38 @@ const BLOB_API_VERSION = "7";
 /**
  * Vercel Blob over its REST API.
  *
- * `x-add-random-suffix: 0` is load-bearing twice over: the manifest must live at
- * a stable key for the browser to find it, and the archive key must be the
- * content hash for immutability to mean anything. Blob's default is to append a
- * random suffix, which would silently break both.
+ * **The store must be created with PUBLIC access.** A private store delivers
+ * blobs through a Function instead of by direct URL, which would break §3.2's
+ * range-request architecture outright — the browser fetches byte ranges from the
+ * PMTiles archive itself. Access mode cannot be changed after a store is
+ * created, so this is a store-creation decision, not a code one. A private store
+ * fails here with `Cannot use public access on a private store` (measured
+ * 2026-08-12).
+ *
+ * Two headers are load-bearing, both learned the same way:
+ *
+ * - **`x-add-random-suffix: 0`** — the manifest must live at a stable key for the
+ *   browser to find it, and the archive key must be its content hash for
+ *   immutability to mean anything. Blob's default appends a random suffix, which
+ *   would silently break both.
+ * - **`x-allow-overwrite: 1`** — belt and braces, and the reason is a trap for
+ *   whoever swaps in the SDK. Vercel documents `put()` as throwing on a pathname
+ *   that already exists, but **the REST layer permits the overwrite regardless**
+ *   (measured 2026-08-12: a bare PUT over an existing key returned 200). The
+ *   guard lives in `@vercel/blob`, client-side. So this header is currently
+ *   decorative *here* and mandatory *there*: **anyone replacing this function
+ *   with the SDK must pass `allowOverwrite: true`**, or every run after the first
+ *   fails at the manifest write, having already uploaded the archive — the §7
+ *   gap-1 shape. It is kept rather than dropped in case Vercel moves the check
+ *   server-side, which would otherwise break this silently.
+ *
+ * Measured against the live store on 2026-08-12, all passing: stable keys, text
+ * and binary round-trips, `cache-control` honoring `x-cache-control-max-age`,
+ * overwrite, delete, and — the ones §3.2's architecture rests on — `206` range
+ * responses with a correct `content-range` and `access-control-allow-origin: *`.
+ * Note that Vercel caps the CDN's own `s-maxage` at 300s on the archives even
+ * though the browser gets `max-age=31536000`; immaterial for content-hashed
+ * keys, which never change under a given URL.
  */
 export function vercelBlobStore(token: string): ArchiveStore {
   const headers = () => ({
@@ -231,6 +256,7 @@ export function vercelBlobStore(token: string): ArchiveStore {
         ...headers(),
         "x-content-type": contentType,
         "x-add-random-suffix": "0",
+        "x-allow-overwrite": "1",
         "x-cache-control-max-age": String(maxAge),
       },
       body,
@@ -387,7 +413,9 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
 }
 
 /**
- * Ping the dead-man switch (§8).
+ * Ping the dead-man switch (§8). `run.ts` passes `process.env.HEALTHCHECK_URL`,
+ * a healthchecks.io check on a 4-hour period with a 4-hour grace — so silence
+ * alerts at 2× cadence, which is the rule §8 actually specifies.
  *
  * Best-effort by design: the run has already published successfully by the time
  * this is called, and failing it would turn a monitoring outage into a data
@@ -395,7 +423,7 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
  * "something about this run is not right" — it just must not be the thing that
  * makes the next run's window shorter.
  */
-export async function pingDeadMan(url: string | undefined): Promise<boolean> {
+export async function pingHealthcheck(url: string | undefined): Promise<boolean> {
   if (!url) return false;
   try {
     const response = await fetch(url, { method: "GET" });
