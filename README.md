@@ -4,22 +4,27 @@ A 2D web map of current world news. Stories are plotted where they happen, ranke
 by how many independent news organizations covered them — with wire services and
 papers of record given precedence over the rest — and they densify as you zoom in.
 
-**Status: Phase 2 complete — [live here](https://sonder-drab-eta.vercel.app/).** The
-data research is done, including a hand-judged accuracy audit that **failed its own
-pre-registered abort criterion**, and what was changed in response. What is on screen
-today is the skeleton: eight fake points on a real PMTiles archive. Real GDELT data
-lands in Phase 2.5.
+**Status: Phase 2.5 complete — [live here](https://sonder-drab-eta.vercel.app/).**
+The data research is done, including a hand-judged accuracy audit that **failed its
+own pre-registered abort criterion**, and what was changed in response. On screen
+today: real GDELT stories, city pins only, from a single 15-minute bundle baked
+into the archive at build time. The map does not update itself yet — the rolling
+24-hour window, grouping and ranking are Phase 3.
 
 ## Local development
 
 ```bash
 npm install
-npm run tiles:fake     # tippecanoe -> public/stories.pmtiles (needs WSL on Windows)
+npm run gkg            # fetch one GKG bundle -> build/stories.geojson
+npm run tiles:real     # tippecanoe -> public/stories.pmtiles (needs WSL on Windows)
 npm run dev
 ```
 
-The committed archive means `tiles:fake` is optional — run it only to regenerate.
-It needs tippecanoe, which on Windows means WSL:
+The archive is committed, so both build steps are optional — run them to pull a
+fresher bundle. `npm run tiles:fake` rebuilds from eight known fake points
+instead, with no network, which is how you tell a rendering bug from a data bug.
+
+Tiling needs tippecanoe, which on Windows means WSL:
 `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`.
 
 Without a `NEXT_PUBLIC_MAPTILER_KEY` the app renders on a keyless OpenFreeMap
@@ -125,6 +130,12 @@ migration path if that stops being true.
 ```
 HANDOFF.md               the plan — read this
 README.md                you are here
+app/, components/        the map
+lib/basemap.ts           MapTiler style, with a one-line OpenFreeMap escape hatch
+data/demonyms.txt        the demonym blocklist the audit made necessary
+scripts/
+  build-real-geojson.ts  one GKG bundle -> placed city pins (Phase 2.5)
+  build-tiles.sh         tippecanoe, via WSL on Windows
 spikes/gdelt/
   FINDINGS.md            measured GDELT research — part 1 and part 2
   gkg_probe.py           volume, titles, locations, sources, themes
@@ -132,7 +143,6 @@ spikes/gdelt/
   probe3.py              theme frequency, dedup math
   retry_all3.py          all three GDELT access paths
   phase1_probe.py        placement rules, geotag audit, tier-1, density
-  demonyms.txt           the demonym blocklist the audit made necessary
   audit_judged*.jsonl    the hand-judged samples, verdict by verdict
 ```
 

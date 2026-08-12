@@ -2,6 +2,7 @@
   "name": "sonder",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "predev": "node scripts/copy-maplibre-worker.mjs",
     "dev": "next dev",
@@ -9,7 +10,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "tiles:fake": "bash scripts/build-fake-tiles.sh"
+    "gkg": "node scripts/build-real-geojson.ts",
+    "tiles:fake": "bash scripts/build-tiles.sh fixtures/fake-stories.geojson sonder-stories-fake",
+    "tiles:real": "bash scripts/build-tiles.sh build/stories.geojson sonder-stories"
   },
   "dependencies": {
     "maplibre-gl": "^6.2.0",

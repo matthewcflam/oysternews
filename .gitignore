@@ -1,6 +1,13 @@
 node_modules/
 .next/
 out/
+
+# Phase 2.5: the downloaded GKG bundle (4-6 MB) and the GeoJSON generated from
+# it. `npm run gkg` re-creates both; bundles are immutable, so the cache is only
+# ever re-read, never invalidated. Phase 3 commits ONE real bundle under
+# fixtures/ as the §7 test fixture — that one is a fixture, not this cache.
+.cache/
+build/
 .vercel/
 .env
 .env.local

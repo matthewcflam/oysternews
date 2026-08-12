@@ -1,19 +1,34 @@
 #!/usr/bin/env bash
 #
-# Phase 2: build the hand-made PMTiles archive from fixtures/fake-stories.geojson.
+# Build public/stories.pmtiles from a GeoJSON file.
 #
 # HANDOFF.md §6 decision 8 — tippecanoe has no native Windows build, so on Windows
 # this shells into WSL. Everywhere else (including GitHub Actions) it calls
-# tippecanoe directly. The flags are the ones §3.1 locks for production, used here
-# on eight fake points so Phase 2 exercises the real toolchain rather than a
+# tippecanoe directly. The flags are the ones §3.1 locks for production; Phase 2
+# ran them on eight fake points and Phase 2.5 runs them on one real GKG bundle,
+# so the phase that matters (3) inherits an exercised toolchain rather than a
 # stand-in.
 #
-# Usage:  npm run tiles:fake
+# Usage:  npm run tiles:fake     eight fake points, fixtures/fake-stories.geojson
+#         npm run tiles:real     one real GKG bundle, build/stories.geojson
+#         bash scripts/build-tiles.sh <input.geojson> <archive-name>
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INPUT="$REPO_ROOT/fixtures/fake-stories.geojson"
+INPUT="${1:?usage: build-tiles.sh <input.geojson> <archive-name>}"
+NAME="${2:?usage: build-tiles.sh <input.geojson> <archive-name>}"
 OUTPUT="$REPO_ROOT/public/stories.pmtiles"
+
+case "$INPUT" in
+  /*) ;;
+  *) INPUT="$REPO_ROOT/$INPUT" ;;
+esac
+
+if [ ! -f "$INPUT" ]; then
+  echo "no such input: $INPUT" >&2
+  echo "for tiles:real, run 'npm run gkg' first." >&2
+  exit 1
+fi
 
 # §3.1: -Z0 -z12 -r1 --drop-densest-as-needed. Rank thinning is done by per-feature
 # minzoom in Phase 3, so -r1 disables tippecanoe's own radial dropping.
@@ -21,7 +36,7 @@ TIPPECANOE_ARGS=(
   -o "$OUTPUT"
   --force
   --layer=stories
-  --name="sonder-stories-fake"
+  --name="$NAME"
   -Z0 -z12 -r1
   --drop-densest-as-needed
 )
@@ -54,7 +69,7 @@ run_tippecanoe() {
     local wsl_in wsl_out
     wsl_in="$(to_wsl_path "$INPUT")"
     wsl_out="$(to_wsl_path "$OUTPUT")"
-    wsl.exe -d Ubuntu -- bash -lc "command -v tippecanoe >/dev/null || { echo 'tippecanoe is not installed in WSL. Run:  wsl -d Ubuntu -- sudo apt-get install -y tippecanoe' >&2; exit 127; }; tippecanoe -o '$wsl_out' --force --layer=stories --name=sonder-stories-fake -Z0 -z12 -r1 --drop-densest-as-needed '$wsl_in'"
+    wsl.exe -d Ubuntu -- bash -lc "command -v tippecanoe >/dev/null || { echo 'tippecanoe is not installed in WSL. Run:  wsl -d Ubuntu -- sudo apt-get install -y tippecanoe' >&2; exit 127; }; tippecanoe -o '$wsl_out' --force --layer=stories --name='$NAME' -Z0 -z12 -r1 --drop-densest-as-needed '$wsl_in'"
     return
   fi
 
