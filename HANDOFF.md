@@ -25,11 +25,22 @@ Phase 3's `fetch.ts`/`parse.ts`/`place.ts` in miniature and can be lifted),
 `data/demonyms.txt` in its permanent home, and a `stories.pmtiles` built from
 real data by the production tippecanoe flags.
 
-One item is still outstanding and only the human can do it:
+Three items are still outstanding and only the human can do them:
 
 ```
   MapTiler console -> restrict the key to the Vercel domain + localhost   (§2.6)
+  Vercel Blob      -> create the store, put BLOB_READ_WRITE_TOKEN in the
+                      Action secrets                                      (§3.2)
+  Dead-man switch  -> create the check, put its ping URL in the secrets   (§8)
 ```
+
+`publish.ts` is written and unit-tested against an in-memory store, but its Blob
+transport is the **REST API over `fetch` rather than `@vercel/blob`** (§0 rule 5)
+and **has never been run against a live token** — the header names and the delete
+endpoint come from the documented surface, not from a measured request. It is one
+function, `vercelBlobStore`, if it turns out the SDK is worth a dependency. This
+is the only place in the project where §0 rule 7 has not been applied; verify it
+against the real token before trusting a green run.
 
 The key is `NEXT_PUBLIC_`, so it ships inside the browser bundle where anyone can
 read it. Domain restriction is the only thing protecting the quota, and the quota
