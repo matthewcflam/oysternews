@@ -21,9 +21,9 @@
  * out-of-sample. The two margins differ for that reason and are not a knob.
  */
 
-import type { Article, GdeltLocation, Placement } from "@/lib/types";
-import { ADM1_TYPES, CITY_TYPES, LOCATION_COUNTRY } from "@/lib/types";
-import type { RefData } from "./refdata";
+import type { Article, GdeltLocation, Placement } from "../lib/types.ts";
+import { ADM1_TYPES, CITY_TYPES, LOCATION_COUNTRY } from "../lib/types.ts";
+import type { RefData } from "./refdata.ts";
 
 const CITY = new Set<number>(CITY_TYPES);
 const ADM1 = new Set<number>(ADM1_TYPES);

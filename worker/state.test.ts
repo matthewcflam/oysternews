@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlacedArticle } from "@/lib/types";
+import type { PlacedArticle } from "../lib/types.ts";
 import {
   RUN_PREFIX,
   TIER1_PREFIX,
@@ -11,7 +11,7 @@ import {
   pruneShards,
   readPool,
   stampOf,
-} from "./state";
+} from "./state.ts";
 
 const NOW = Date.UTC(2026, 7, 12, 12, 0, 0);
 const HOUR = 3600 * 1000;

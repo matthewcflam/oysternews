@@ -28,7 +28,7 @@
  * the trade, bought on purpose.
  */
 
-import type { PlacedArticle, StoryGroup } from "@/lib/types";
+import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
 
 /** §2.5's weight on the border-crossing term, half of the domain term. */
 export const SOURCE_COUNTRY_WEIGHT = 0.5;

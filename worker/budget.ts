@@ -28,8 +28,8 @@
  * everywhere else the floor is what does the work.
  */
 
-import type { StoryGroup } from "@/lib/types";
-import { compareGroups } from "./rank";
+import type { StoryGroup } from "../lib/types.ts";
+import { compareGroups } from "./rank.ts";
 
 /**
  * §2.4: K ~ 12-20, tuned on real data. A phone shows 2-4 tiles, so roughly 30-60

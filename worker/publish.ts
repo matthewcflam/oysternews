@@ -32,8 +32,8 @@
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { Manifest, StoryGroup } from "@/lib/types";
-import type { ShardStore } from "./state";
+import type { Manifest, StoryGroup } from "../lib/types.ts";
+import type { ShardStore } from "./state.ts";
 
 export const MANIFEST_KEY = "manifest.json";
 export const ARCHIVE_PREFIX = "archives/stories-";
@@ -196,11 +196,31 @@ export function nextHistory(
 export type ArchiveStore = ShardStore & {
   putBinary(key: string, body: Uint8Array, maxAge: number): Promise<string>;
   putText(key: string, body: string, contentType: string, maxAge: number): Promise<string>;
-  urlOf(key: string): Promise<string>;
+  /** Synchronous: a public blob's URL is derivable, never looked up. See publicBase. */
+  urlOf(key: string): string;
 };
 
 const BLOB_API = "https://blob.vercel-storage.com";
 const BLOB_API_VERSION = "7";
+
+/**
+ * A public store's URL host, derived from the token.
+ *
+ * `BLOB_READ_WRITE_TOKEN` is `vercel_blob_rw_<storeId>_<secret>`, and a public
+ * blob is served at `https://<storeid>.public.blob.vercel-storage.com/<pathname>`
+ * with the id lowercased. Verified against the live store on 2026-08-12: the
+ * derived URL is byte-identical to the one `put` returns.
+ *
+ * Deriving it rather than looking it up removes a `list` call from every `get`
+ * and every `remove`. That is not just tidiness — Vercel bills `list` as an
+ * "advanced operation", so the old shape paid a billable request to discover a
+ * URL it could have computed, on every read, forever.
+ */
+function publicBase(token: string): string {
+  const storeId = token.split("_")[3];
+  if (!storeId) throw new Error("BLOB_READ_WRITE_TOKEN is not in the expected vercel_blob_rw_<id>_<secret> form");
+  return `https://${storeId.toLowerCase()}.public.blob.vercel-storage.com`;
+}
 
 /**
  * Vercel Blob over its REST API.
@@ -292,7 +312,9 @@ export function vercelBlobStore(token: string): ArchiveStore {
     },
 
     async get(key) {
-      const response = await fetch(await this.urlOf(key));
+      const response = await fetch(this.urlOf(key));
+      // A 404 is the ordinary "not written yet" case on a first run, and callers
+      // (readHistory, run.ts's lastWatermark) treat a throw as exactly that.
       if (!response.ok) throw new Error(`blob get ${key}: HTTP ${response.status}`);
       return response.text();
     },
@@ -304,11 +326,10 @@ export function vercelBlobStore(token: string): ArchiveStore {
     },
 
     async remove(key) {
-      const url = await this.urlOf(key);
       const response = await fetch(`${BLOB_API}/delete`, {
         method: "POST",
         headers: { ...headers(), "content-type": "application/json" },
-        body: JSON.stringify({ urls: [url] }),
+        body: JSON.stringify({ urls: [this.urlOf(key)] }),
       });
       if (!response.ok) throw new Error(`blob delete ${key}: HTTP ${response.status}`);
     },
@@ -326,10 +347,8 @@ export function vercelBlobStore(token: string): ArchiveStore {
       return upload(key, body, contentType, maxAge);
     },
 
-    async urlOf(key) {
-      const match = (await listBlobs(key)).find((blob) => blob.pathname === key);
-      if (!match) throw new Error(`blob ${key} does not exist`);
-      return match.url;
+    urlOf(key) {
+      return `${publicBase(token)}/${key}`;
     },
   };
 }

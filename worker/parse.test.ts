@@ -7,7 +7,7 @@ import {
   parseRow,
   parseThemes,
   unescapeEntities,
-} from "./parse";
+} from "./parse.ts";
 
 /** Build a GKG row with the fields this project reads placed at their real indices. */
 function row(

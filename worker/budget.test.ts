@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { StoryGroup } from "@/lib/types";
-import { assignMinzoom, countryTopGroups, tileOf } from "./budget";
-import { salienceOf } from "./rank";
+import type { StoryGroup } from "../lib/types.ts";
+import { assignMinzoom, countryTopGroups, tileOf } from "./budget.ts";
+import { salienceOf } from "./rank.ts";
 
 function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   return {

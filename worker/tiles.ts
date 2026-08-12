@@ -24,7 +24,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { StoryGroup } from "@/lib/types";
+import type { StoryGroup } from "../lib/types.ts";
 
 export const STORIES_LAYER = "stories";
 export const COUNTRY_LAYER = "country-top";
@@ -98,6 +98,12 @@ export async function buildTiles(
   await runTippecanoe([
     "--force",
     "--name=sonder-stories",
+    // Progress only, not the summary. Tippecanoe's per-tile progress is a single
+    // carriage-returned line tens of thousands of characters long, which in a CI
+    // log (or a captured buffer) buries everything printed after it — including
+    // the run summary and any stack trace. That has cost one unexplained failure
+    // already.
+    "-q",
     "-Z0",
     "-z12",
     "-r1",

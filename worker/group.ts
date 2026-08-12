@@ -25,8 +25,8 @@
  */
 
 import { createHash } from "node:crypto";
-import type { PlacedArticle, StoryGroup } from "@/lib/types";
-import { summarise } from "./rank";
+import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
+import { summarise } from "./rank.ts";
 
 /** FINDINGS §8: 9 themes exceed 20%, so 15% excludes a few more and costs nothing. */
 export const THEME_CEILING = 0.15;

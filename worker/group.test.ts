@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PlacedArticle } from "@/lib/types";
-import { cellOf, groupArticles, jaccard, overCommonThemes, titleTokens } from "./group";
+import type { PlacedArticle } from "../lib/types.ts";
+import { cellOf, groupArticles, jaccard, overCommonThemes, titleTokens } from "./group.ts";
 
 const NOW = Date.UTC(2026, 7, 12, 12, 0, 0);
 
