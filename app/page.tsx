@@ -1,3 +1,4 @@
+import FreshnessStamp from "@/components/FreshnessStamp";
 import MapView from "@/components/MapView";
 
 export default function Home() {
@@ -7,12 +8,13 @@ export default function Home() {
       <header className="masthead">
         <h1>Sonder</h1>
         {/*
-          Honest about what this is: one 15-minute GDELT bundle baked into the
-          archive at build time. The rolling 24-hour window and the freshness
-          stamp are Phase 3/4 — until then the map does not move on its own, and
-          saying so is cheaper than letting someone assume it is live.
+          True as of Phase 3G: the archive is published by the worker every four
+          hours over a rolling 24-hour window, and the browser follows whatever
+          manifest.json currently points at. The stamp below says when — a claim
+          of freshness with no timestamp is the kind a visitor cannot check.
         */}
-        <p>Real stories, one 15-minute GDELT bundle. Frozen at build time.</p>
+        <p>Real stories from the last 24 hours, published every four hours.</p>
+        <FreshnessStamp />
       </header>
     </main>
   );

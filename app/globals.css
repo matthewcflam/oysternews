@@ -63,6 +63,21 @@ main .map {
   opacity: 0.85;
 }
 
+/* §2.3's freshness stamp. Quieter than the subtitle above it — it is a fact
+   about the data, not part of the pitch — until it goes stale, where §8 wants it
+   read rather than skimmed past. */
+.freshness {
+  margin: 4px 0 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  opacity: 0.65;
+}
+
+.freshness--stale {
+  color: #ff9ea1;
+  opacity: 1;
+}
+
 /* §2.6 / MapTiler Free plan: the logo sits bottom-left, opposite MapLibre's own
    text attribution bottom-right, so the two credits do not crowd each other on a
    phone. Above the map, below the notices.
