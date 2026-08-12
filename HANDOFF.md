@@ -16,9 +16,44 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: Phase 3G** — the frontend reads `manifest.json` and renders both
-tile layers. Everything upstream of the browser now works: `worker/run.ts` runs
-the whole §3.2 flow and `.github/workflows/worker.yml` runs it 4-hourly.
+**Next action: finish Phase 3G.** Everything upstream of the browser works:
+`worker/run.ts` runs the whole §3.2 flow, `.github/workflows/worker.yml` runs it
+4-hourly, and a real archive is live in Blob. **The browser is still the only
+part that has not been connected** — `components/MapView.tsx` loads the frozen
+`public/stories.pmtiles` from Phase 2.5 and has never heard of the manifest.
+
+**3G is IN PROGRESS. Done so far:** `lib/manifest.ts` + its tests (5 passing).
+That module is the whole decision record for how the browser reads data — read
+its header first. **Remaining, in order:**
+
+1. **`components/MapView.tsx`** — replace the `STORIES_ARCHIVE = "/stories.pmtiles"`
+   constant with `loadManifest()`, and point the vector source at
+   `pmtiles://${manifest.url}`. The manifest fetch is async and the map is built
+   in a `useEffect`, so the source has to be added after both the manifest
+   resolves and the map fires `load` — racing those is the obvious bug here.
+2. **Render the second layer.** The archive has two: `stories` (per-feature
+   `minzoom` from the budget) and `country-top` (top 1 per country at minzoom 0,
+   so a zoomed-out map is never empty). `worker/tiles.ts` exports both names as
+   `STORIES_LAYER` / `COUNTRY_LAYER`. **They overlap**: a group can be in both,
+   so country-top needs a `maxzoom` (~4) or the same story draws twice at low
+   zoom. Full styling is Phase 4; 3G only has to render both correctly.
+3. **The freshness stamp** (§2.3). `freshnessLabel()` and `isStale()` are written
+   and tested; they need a small client component and a place in the masthead.
+   **Render nothing until the effect runs.** Formatting a relative time during
+   SSR is the textbook hydration mismatch, and this app already has one piece of
+   console noise from a browser extension — do not add a real one underneath it.
+4. **`app/page.tsx`** — the masthead still says *"one 15-minute GDELT bundle.
+   Frozen at build time."* That stops being true the moment step 1 lands.
+5. **Then, and only then, delete `public/stories.pmtiles`** and its `.gitignore`
+   exception. Deleting it before step 1 works gives a live map with zero pins,
+   which is precisely the §11 failure this project has already paid for twice.
+6. **Handle a failed manifest fetch** (§7 critical gap 3). The existing
+   `map.on("error")` handler still advises `npm run tiles:fake`, which is now
+   wrong advice — the archive is remote.
+
+**Verify in a browser before claiming it works.** §11 is unambiguous: this
+project has been committed green and rendered nothing, twice. `npm run build`
+passing is not evidence.
 
 **The first real end-to-end run, 2026-08-12** (one bundle, `BUNDLE_CAP=1`), is
 the number to compare future runs against:
