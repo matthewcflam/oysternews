@@ -14,21 +14,31 @@ import {
 import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { basemap } from "@/lib/basemap";
+import { loadManifest } from "@/lib/manifest";
 
 /**
- * Phase 2.5 (HANDOFF.md §5). One PMTiles archive over the basemap, 2D Mercator,
- * no globe. The archive now holds real city pins from one GKG bundle
- * (scripts/build-real-geojson.ts) rather than Phase 2's eight fake points, which
- * changed nothing in here — the story data was always just a vector source.
- * Grouping, containers, the top-K budget and the country-floor layer are all
- * Phase 3/4 — deliberately absent here.
+ * Phase 3G (HANDOFF.md §3.2). The archive is no longer a file in public/ — it is
+ * whatever `manifest.json` currently points at, which changes on every worker run.
+ * That is the whole reason this component now has an async step before it can add
+ * a source: the archive URL is content-hashed, so it cannot be a constant.
+ *
+ * Full styling is Phase 4. What 3G owes is correctness: both layers rendered, the
+ * manifest/`load` race closed, and a failed manifest fetch that says so.
  *
  * MapLibre 6 has no default export and aliases its Map class to avoid shadowing
  * the global `Map`, hence the named `MapLibreMap` import.
  */
 
-const STORIES_ARCHIVE = "/stories.pmtiles";
 const STORIES_SOURCE_LAYER = "stories";
+
+/**
+ * The archive's second layer: top 1 group per country at minzoom 0, so a
+ * zoomed-out map is never empty (§2.4). It **overlaps** the stories layer — a
+ * group can be in both — so it is capped below the zoom where the budget starts
+ * admitting stories generally, or the same story draws twice on top of itself.
+ */
+const COUNTRY_SOURCE_LAYER = "country-top";
+const COUNTRY_LAYER_MAXZOOM = 4;
 
 /**
  * MapLibre 6 builds its worker from a Blob that does `import "<runtime url>"`,
@@ -73,60 +83,107 @@ export default function MapView() {
 
     map.addControl(new NavigationControl({ showCompass: false }), "top-right");
 
-    map.on("load", () => {
-      const archiveUrl = new URL(STORIES_ARCHIVE, window.location.href).href;
-
-      map.addSource("stories", {
-        type: "vector",
-        url: `pmtiles://${archiveUrl}`,
-      });
-
-      map.addLayer({
-        id: "stories-pins",
-        type: "circle",
-        source: "stories",
-        "source-layer": STORIES_SOURCE_LAYER,
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 4, 8, 7],
-          "circle-color": "#e5484d",
-          "circle-stroke-width": 1.5,
-          "circle-stroke-color": "#ffffff",
-        },
-      });
-
-      // §2.6 is link-out only: title, source, link. Never article text.
-      map.on("click", "stories-pins", (event: MapLayerMouseEvent) => {
-        const feature = event.features?.[0];
-        if (!feature) return;
-        const { title, source, url } = feature.properties as Record<string, string>;
-        new Popup({ closeButton: true, maxWidth: "280px" })
-          .setLngLat(event.lngLat)
-          .setHTML(
-            `<strong>${escapeHtml(title)}</strong><br>` +
-              `<em>${escapeHtml(source)}</em><br>` +
-              `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Read at source</a>`,
-          )
-          .addTo(map);
-      });
-
-      map.on("mouseenter", "stories-pins", () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", "stories-pins", () => {
-        map.getCanvas().style.cursor = "";
-      });
+    /**
+     * Two independent things have to finish before a source can be added: the
+     * manifest fetch and the map's own `load`. Either can win. Awaiting both as
+     * promises is the only ordering that is correct in both directions — an
+     * `map.on("load")` handler that awaits inside itself would work too, but a
+     * manifest that resolves first would then sit idle behind a network round
+     * trip it already paid for.
+     */
+    const loaded = new Promise<void>((resolve) => {
+      map.on("load", () => resolve());
     });
 
-    // §7 critical gap 3: a missing or unreachable archive must say so rather than
-    // render an empty region with no explanation.
+    // The effect can be torn down (StrictMode double-mount, navigation) while
+    // both promises are still in flight. Touching a removed map throws.
+    let cancelled = false;
+
+    Promise.all([loadManifest(), loaded])
+      .then(([manifest]) => {
+        if (cancelled) return;
+
+        map.addSource("stories", {
+          type: "vector",
+          url: `pmtiles://${manifest.url}`,
+        });
+
+        // Added first so it paints UNDER the stories layer: where both draw the
+        // same group at low zoom, the stories styling is the one that wins.
+        map.addLayer({
+          id: "country-top-pins",
+          type: "circle",
+          source: "stories",
+          "source-layer": COUNTRY_SOURCE_LAYER,
+          maxzoom: COUNTRY_LAYER_MAXZOOM,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 4, 4, 6],
+            "circle-color": "#e5484d",
+            "circle-stroke-width": 1.5,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+
+        map.addLayer({
+          id: "stories-pins",
+          type: "circle",
+          source: "stories",
+          "source-layer": STORIES_SOURCE_LAYER,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 1, 4, 8, 7],
+            "circle-color": "#e5484d",
+            "circle-stroke-width": 1.5,
+            "circle-stroke-color": "#ffffff",
+          },
+        });
+
+        // §2.6 is link-out only: title, source, link. Never article text.
+        for (const layer of ["stories-pins", "country-top-pins"]) {
+          map.on("click", layer, (event: MapLayerMouseEvent) => {
+            const feature = event.features?.[0];
+            if (!feature) return;
+            const { title, source, url } = feature.properties as Record<string, string>;
+            new Popup({ closeButton: true, maxWidth: "280px" })
+              .setLngLat(event.lngLat)
+              .setHTML(
+                `<strong>${escapeHtml(title)}</strong><br>` +
+                  `<em>${escapeHtml(source)}</em><br>` +
+                  `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Read at source</a>`,
+              )
+              .addTo(map);
+          });
+
+          map.on("mouseenter", layer, () => {
+            map.getCanvas().style.cursor = "pointer";
+          });
+          map.on("mouseleave", layer, () => {
+            map.getCanvas().style.cursor = "";
+          });
+        }
+      })
+      .catch((cause: unknown) => {
+        if (cancelled) return;
+        // §7 critical gap 3. A manifest that will not load is the one failure
+        // where the map is otherwise healthy — basemap, controls, no map error
+        // event — so nothing else would ever say why the world is empty.
+        setError(
+          `Story data unavailable — could not read the manifest. (${
+            cause instanceof Error ? cause.message : String(cause)
+          })`,
+        );
+      });
+
+    // A tile or archive that fails after the source is added: the manifest was
+    // fine, the thing it points at is not.
     map.on("error", (event: ErrorEvent) => {
       const message = event.error?.message ?? "unknown map error";
       if (/pmtiles|stories/i.test(message)) {
-        setError(`Story tiles unavailable — run \`npm run tiles:fake\`. (${message})`);
+        setError(`Story tiles unavailable — the published archive did not load. (${message})`);
       }
     });
 
     return () => {
+      cancelled = true;
       map.remove();
       removeProtocol("pmtiles");
     };

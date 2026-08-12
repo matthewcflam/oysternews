@@ -3,12 +3,11 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** **Phases 1, 2 and 2.5 complete. Phase 3 is complete through 3F —
-the worker runs end to end and publishes to Vercel Blob.** The live URL still
-shows Phase 2.5's committed archive: https://sonder-drab-eta.vercel.app/ .
-**Next: Phase 3G** — point the frontend at `manifest.json` instead, which is the
-step that makes the map update itself.
-**Last updated:** 2026-08-12, after the first real end-to-end run.
+**Status:** **Phases 1, 2, 2.5 and 3 are complete.** The worker runs 4-hourly,
+publishes to Vercel Blob, and the browser now follows `manifest.json` — the map
+updates itself with no deploy. **Next: Phase 4** (styling, salience, the popup
+treatment). Live: https://sonder-drab-eta.vercel.app/ .
+**Last updated:** 2026-08-12, after Phase 3G connected the browser.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -16,40 +15,36 @@ measured, not assumed.
 
 ## START HERE
 
-**Next action: finish Phase 3G.** Everything upstream of the browser works:
-`worker/run.ts` runs the whole §3.2 flow, `.github/workflows/worker.yml` runs it
-4-hourly, and a real archive is live in Blob. **The browser is still the only
-part that has not been connected** — `components/MapView.tsx` loads the frozen
-`public/stories.pmtiles` from Phase 2.5 and has never heard of the manifest.
+**Next action: Phase 4.** The pipeline is closed end to end. `worker/run.ts` runs
+the §3.2 flow 4-hourly under `.github/workflows/worker.yml` and publishes a
+content-hashed archive to Blob; `components/MapView.tsx` reads `manifest.json` to
+find it. **Nothing in the repo pins the data any more** — `public/stories.pmtiles`
+is deleted and `*.pmtiles` is ignored, so the map moves without a deploy.
 
-**3G is IN PROGRESS. Done so far:** `lib/manifest.ts` + its tests (5 passing).
-That module is the whole decision record for how the browser reads data — read
-its header first. **Remaining, in order:**
+**3G, verified in a browser on 2026-08-12.** Four checks, all against the live
+Blob archive rather than a build:
 
-1. **`components/MapView.tsx`** — replace the `STORIES_ARCHIVE = "/stories.pmtiles"`
-   constant with `loadManifest()`, and point the vector source at
-   `pmtiles://${manifest.url}`. The manifest fetch is async and the map is built
-   in a `useEffect`, so the source has to be added after both the manifest
-   resolves and the map fires `load` — racing those is the obvious bug here.
-2. **Render the second layer.** The archive has two: `stories` (per-feature
-   `minzoom` from the budget) and `country-top` (top 1 per country at minzoom 0,
-   so a zoomed-out map is never empty). `worker/tiles.ts` exports both names as
-   `STORIES_LAYER` / `COUNTRY_LAYER`. **They overlap**: a group can be in both,
-   so country-top needs a `maxzoom` (~4) or the same story draws twice at low
-   zoom. Full styling is Phase 4; 3G only has to render both correctly.
-3. **The freshness stamp** (§2.3). `freshnessLabel()` and `isStale()` are written
-   and tested; they need a small client component and a place in the masthead.
-   **Render nothing until the effect runs.** Formatting a relative time during
-   SSR is the textbook hydration mismatch, and this app already has one piece of
-   console noise from a browser extension — do not add a real one underneath it.
-4. **`app/page.tsx`** — the masthead still says *"one 15-minute GDELT bundle.
-   Frozen at build time."* That stops being true the moment step 1 lands.
-5. **Then, and only then, delete `public/stories.pmtiles`** and its `.gitignore`
-   exception. Deleting it before step 1 works gives a live map with zero pins,
-   which is precisely the §11 failure this project has already paid for twice.
-6. **Handle a failed manifest fetch** (§7 critical gap 3). The existing
-   `map.on("error")` handler still advises `npm run tiles:fake`, which is now
-   wrong advice — the archive is remote.
+- Real pins render from the remote archive, and are **unchanged after deleting
+  `public/stories.pmtiles`** — which is what proves the local file was not what
+  was drawing.
+- Clicking a pin opens the §2.6 link-out popup with real GDELT content.
+- The freshness stamp reads the manifest ("Updated 40 minutes ago").
+- A 404 manifest shows one notice and no map, instead of an empty world
+  (§7 critical gap 3). `FreshnessStamp` stays silent on that path on purpose:
+  two notices for one failure is worse than one.
+
+**A silent-failure trap found while verifying 3G, worth keeping.** MapLibre
+**does not error on an unknown `source-layer`.** A layer pointed at
+`"country-topXX"` produced no error event, no console error and no notice — it
+just quietly drew nothing. So "the console is clean" is NOT evidence that a layer
+is wired to real data, and this is the §11 failure mode wearing a new hat. What
+actually proved it was isolating each layer (breaking the other's name) and
+counting: `country-top` alone drew exactly one pin per country and vanished above
+z4. Use that method, not the console, when a layer looks empty.
+
+The two layers **overlap** by design — a group can be in both — so `country-top`
+carries `maxzoom: 4` and is added *first*, so `stories` paints over it. Remove
+either half and the low-zoom double-draw comes back.
 
 **Verify in a browser before claiming it works.** §11 is unambiguous: this
 project has been committed green and rendered nothing, twice. `npm run build`
@@ -79,9 +74,9 @@ Two things that run surfaced, neither a bug:
 Phase 2.5 left three things Phase 3 inherited rather than reinvented:
 `scripts/build-real-geojson.ts` (fetch, parse, placement in miniature),
 `data/demonyms.txt` in its permanent home, and a `stories.pmtiles` built from
-real data by the production tippecanoe flags. **That committed archive is what
-the live map still serves** — deleting it is Phase 3G's job, not before, or the
-map goes to zero pins (§11, 2026-08-10).
+real data by the production tippecanoe flags. **That committed archive is gone as
+of 3G** — the map now serves the worker's published archive, and the commit that
+deleted it is the same one that verified the replacement in a browser first.
 
 One item is still outstanding and only the human can do it:
 
