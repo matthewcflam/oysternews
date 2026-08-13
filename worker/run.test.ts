@@ -114,6 +114,8 @@ function summary(patch: Partial<RunSummary> = {}): RunSummary {
     tier1Groups: 60,
     countryTop: 140,
     overflow: 20,
+    regions: 300,
+    regionRows: 2400,
     published: true,
     bandRelaxed: false,
     violations: [],

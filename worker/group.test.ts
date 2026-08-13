@@ -19,6 +19,7 @@ function article(patch: Partial<PlacedArticle> = {}): PlacedArticle {
     kind: "PIN",
     countryCode: "US",
     regionId: "",
+    adm1: "",
     placeName: "New York",
     sourceCountry: "US",
     tier1: false,

@@ -37,6 +37,7 @@ function article(patch: Partial<PlacedArticle> = {}): PlacedArticle {
     kind: "PIN",
     countryCode: "US",
     regionId: "",
+    adm1: "",
     placeName: "p",
     sourceCountry: "US",
     tier1: false,
@@ -112,6 +113,15 @@ describe("jsonl", () => {
 
   it("ignores blank lines", () => {
     expect(fromJsonl("\n\n").articles).toEqual([]);
+  });
+
+  it("fills in a field the shard predates rather than handing back undefined", () => {
+    // A shard lives 24h (48 for tier-1), so for a full window after any field is
+    // added, half the pool was written without it — and the JSON.parse cast will
+    // happily claim it is a string. adm1 arrived 2026-08-13.
+    const { adm1, ...older } = article();
+    const [parsed] = fromJsonl(JSON.stringify(older)).articles;
+    expect(parsed.adm1).toBe("");
   });
 });
 

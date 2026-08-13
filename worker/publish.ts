@@ -34,10 +34,14 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Manifest, StoryGroup } from "../lib/types.ts";
 import { stampToMs } from "./fetch.ts";
+import type { RegionIndex } from "./regions.ts";
 import type { ShardStore } from "./state.ts";
 
 export const MANIFEST_KEY = "manifest.json";
-export const ARCHIVE_PREFIX = "archives/stories-";
+/** Everything content-hashed and retained together. Retention sweeps this whole directory. */
+export const ARCHIVE_DIR = "archives/";
+export const ARCHIVE_PREFIX = `${ARCHIVE_DIR}stories-`;
+export const REGIONS_PREFIX = `${ARCHIVE_DIR}regions-`;
 export const HISTORY_KEY = "state/publish-history.json";
 
 /** The manifest is a stable key and must not be cached long; the archives are immutable. */
@@ -104,6 +108,12 @@ export type PublishStats = {
 export type HistoryEntry = {
   stamp: string;
   archive: string;
+  /**
+   * The region index published with that archive. Optional: entries written
+   * before the index existed have none, and retention must read those as "this
+   * run referenced no index" rather than crashing or pruning a live key.
+   */
+  regions?: string;
   groups: number;
 };
 
@@ -202,8 +212,15 @@ export function archivesToPrune(
   keep = KEEP_ARCHIVES,
 ): string[] {
   const live = new Set<string>();
-  for (const entry of history.slice(-keep)) live.add(entry.archive);
-  return stored.filter((key) => key.startsWith(ARCHIVE_PREFIX) && !live.has(key));
+  for (const entry of history.slice(-keep)) {
+    live.add(entry.archive);
+    // An archive and its region index are one publication and are retained as
+    // one. Sweeping the whole directory rather than the stories prefix is what
+    // makes adding a second content-hashed artefact safe: a new prefix nobody
+    // updated the pruner for would otherwise accumulate for ever.
+    if (entry.regions) live.add(entry.regions);
+  }
+  return stored.filter((key) => key.startsWith(ARCHIVE_DIR) && !live.has(key));
 }
 
 export function nextHistory(
@@ -396,6 +413,8 @@ export type PublishInput = {
   /** Path to the archive tiles.ts produced. */
   archivePath: string;
   groups: StoryGroup[];
+  /** §2.3's region panel index, published beside the archive. */
+  regions: RegionIndex;
   /** Newest GKG bundle included, YYYYMMDDHHMMSS. */
   watermark: string;
   /** Injected so a test can pin it; the run passes `new Date()`. */
@@ -492,9 +511,22 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const key = archiveKey(contentHash(bytes));
   const url = await store.putBinary(key, bytes, ARCHIVE_MAX_AGE);
 
+  // Before the manifest, like the archive, and for the same reason: the flip is
+  // the only thing the browser sees, so everything it will point at has to
+  // already exist. A panel that 404s is a broken feature on a working map.
+  const regionsBody = `${JSON.stringify(input.regions)}\n`;
+  const regionsKey = `${REGIONS_PREFIX}${contentHash(Buffer.from(regionsBody))}.json`;
+  const regionsUrl = await store.putText(
+    regionsKey,
+    regionsBody,
+    "application/json",
+    ARCHIVE_MAX_AGE,
+  );
+
   const manifest: Manifest = {
     archive: key,
     url,
+    regionsUrl,
     generatedAt: now.toISOString(),
     watermark,
     stats: {
@@ -512,7 +544,12 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     MANIFEST_MAX_AGE,
   );
 
-  const updated = nextHistory(history, { stamp: watermark, archive: key, groups: stats.groups });
+  const updated = nextHistory(history, {
+    stamp: watermark,
+    archive: key,
+    regions: regionsKey,
+    groups: stats.groups,
+  });
   await store.putText(HISTORY_KEY, `${JSON.stringify(updated)}\n`, "application/json", 0);
 
   const stored = await store.list(ARCHIVE_PREFIX);

@@ -4,8 +4,10 @@ import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { StoryGroup } from "../lib/types.ts";
 import {
+  ARCHIVE_DIR,
   ARCHIVE_PREFIX,
   BAND_RELAX_AFTER_MS,
+  REGIONS_PREFIX,
   HISTORY_KEY,
   type ArchiveStore,
   type HistoryEntry,
@@ -39,6 +41,7 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
     kind: "PIN",
     countryCode: "US",
     regionId: "",
+    adm1: "",
     placeName: "p",
     distinctDomains: 1,
     distinctSourceCountries: 1,
@@ -274,6 +277,7 @@ describe("publish", () => {
       store,
       archivePath,
       groups: healthyGroups(),
+      regions: {},
       watermark: "20260812114500",
       now: NOW,
     });
@@ -291,13 +295,19 @@ describe("publish", () => {
     expect(Object.keys(written).sort()).toEqual([
       "archive",
       "generatedAt",
+      "regionsUrl",
       "stats",
       "url",
       "watermark",
     ]);
 
     expect(JSON.parse(String(store.data.get(HISTORY_KEY)))).toEqual([
-      { stamp: "20260812114500", archive: result.manifest.archive, groups: 100 },
+      {
+        stamp: "20260812114500",
+        archive: result.manifest.archive,
+        regions: expect.stringMatching(/^archives\/regions-[0-9a-f]{8}\.json$/),
+        groups: 100,
+      },
     ]);
   });
 
@@ -305,10 +315,55 @@ describe("publish", () => {
     // §7 critical gap 1. If this order ever inverts, a failed archive upload
     // leaves the manifest pointing at a key that does not exist.
     const store = memoryStore();
-    await publish({ store, archivePath, groups: healthyGroups(), watermark: "1", now: NOW });
+    await publish({ store, archivePath, groups: healthyGroups(), regions: {}, watermark: "1", now: NOW });
     expect(store.writes.indexOf(MANIFEST_KEY)).toBeGreaterThan(
       store.writes.findIndex((key) => key.startsWith(ARCHIVE_PREFIX)),
     );
+  });
+
+  it("uploads the region index before it flips the manifest", async () => {
+    // Same reason as the archive: the flip is the only thing the browser sees,
+    // so everything the manifest will point at has to exist first. A panel that
+    // 404s is a broken feature on an otherwise working map.
+    const store = memoryStore();
+    await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(),
+      regions: { US: [{ title: "t", source: "s", url: "u", date: "20260812110000", place: "p" }] },
+      watermark: "1",
+      now: NOW,
+    });
+    expect(store.writes.indexOf(MANIFEST_KEY)).toBeGreaterThan(
+      store.writes.findIndex((key) => key.startsWith(REGIONS_PREFIX)),
+    );
+  });
+
+  it("retains an archive and its index together, and prunes both when they age out", async () => {
+    // They are one publication. Pruning on the stories prefix alone would have
+    // leaked every index ever written, silently and for ever.
+    const store = memoryStore({
+      "archives/stories-old.pmtiles": "old",
+      "archives/regions-old.json": "old",
+      [HISTORY_KEY]: JSON.stringify([
+        { stamp: "1", archive: "archives/stories-old.pmtiles", regions: "archives/regions-old.json", groups: 100 },
+      ]),
+    });
+
+    const result = await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(),
+      regions: {},
+      watermark: "2",
+      now: NOW,
+    });
+    expect(result.published).toBe(true);
+
+    // One publication back is still inside KEEP_ARCHIVES, so both old keys live.
+    const remaining = await store.list(ARCHIVE_DIR);
+    expect(remaining).toContain("archives/stories-old.pmtiles");
+    expect(remaining).toContain("archives/regions-old.json");
   });
 
   it("leaves the previous manifest intact when the archive upload fails", async () => {
@@ -316,7 +371,7 @@ describe("publish", () => {
     store.failOn = ARCHIVE_PREFIX;
 
     await expect(
-      publish({ store, archivePath, groups: healthyGroups(), watermark: "1", now: NOW }),
+      publish({ store, archivePath, groups: healthyGroups(), regions: {}, watermark: "1", now: NOW }),
     ).rejects.toThrow("upload failed");
 
     expect(String(store.data.get(MANIFEST_KEY))).toContain("stories-old.pmtiles");
@@ -332,6 +387,7 @@ describe("publish", () => {
       store,
       archivePath,
       groups: healthyGroups(10),
+      regions: {},
       watermark: "20260812114500",
       now: NOW,
     });
@@ -355,6 +411,7 @@ describe("publish", () => {
       store,
       archivePath,
       groups: healthyGroups(),
+      regions: {},
       watermark: "20260812114500",
       now: NOW,
     });
@@ -375,6 +432,7 @@ describe("publish", () => {
       store,
       archivePath,
       groups: healthyGroups(),
+      regions: {},
       watermark: "1",
       now: NOW,
     });
