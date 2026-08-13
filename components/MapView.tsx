@@ -33,6 +33,7 @@ import {
   storyLayers,
 } from "@/lib/layers";
 import { loadManifest } from "@/lib/manifest";
+import { storyPopupHtml } from "@/lib/popup";
 import { loadRegionIndex, storiesFor } from "@/lib/regions";
 import type { RegionIndex } from "@/lib/types";
 import RegionPanel from "./RegionPanel";
@@ -59,13 +60,6 @@ import RegionPanel from "./RegionPanel";
  * place in public/ (scripts/copy-maplibre-worker.mjs) is the supported fix.
  */
 const WORKER_URL = "/maplibre-gl-worker.mjs";
-
-const escapeHtml = (value: unknown) =>
-  String(value ?? "").replace(
-    /[&<>"]/g,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character] as string,
-  );
 
 /** What a label click resolved to: an id the outline archive can draw, and a heading. */
 type Selection = { id: string; name: string };
@@ -340,15 +334,12 @@ export default function MapView() {
             map.setFilter(outline.layerId, ["==", ["get", "id"], outline.id]);
           }
 
-          // §2.6 is link-out only: title, source, link. Never article text.
-          const { title, source, url } = feature.properties as Record<string, string>;
+          // §2.6 (link-out only) and §5.2 decision 3 (the pin half of the
+          // geotag-confidence treatment) both live in `lib/popup.ts`, where they
+          // are tested rather than reviewed.
           const popup = new Popup({ closeButton: true, maxWidth: "280px" })
             .setLngLat(event.lngLat)
-            .setHTML(
-              `<strong>${escapeHtml(title)}</strong><br>` +
-                `<em>${escapeHtml(source)}</em><br>` +
-                `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">Read at source</a>`,
-            );
+            .setHTML(storyPopupHtml(feature.properties));
           // MapLibre 6's `on` returns a Subscription rather than the emitter, so
           // this cannot be chained onto the builder above.
           popup.on("close", clearOutline);

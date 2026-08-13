@@ -11,8 +11,10 @@ now updates itself: a GitHub Action runs the pipeline every four hours over a
 rolling 24-hour window, publishes a content-hashed archive to Vercel Blob, and the
 browser follows `manifest.json` to find it. No deploy is involved. Phase 4 is the
 map's own presentation: **clicking a country or state label outlines that region
-and opens a panel of its top stories** — built and verified in a browser on
-2026-08-13 — with the geotag-confidence treatment still to come.
+and opens a panel of its top stories**, and **every story says where the placement
+rule put it and that a rule put it there** — the audit measured pins right 69.7%
+of the time [52.7, 82.6], so the map does not get to imply otherwise. Both were
+built and verified in a browser on 2026-08-13.
 
 ## Local development
 
@@ -161,6 +163,8 @@ lib/
                          two providers that do not share a schema (§2.3)
   regions.ts             the browser's side of the region index: lazy fetch,
                          one row lookup, the panel's age line
+  popup.ts               what a story popup may say: title, source, link, and
+                         where the rule placed it (§2.6, §5.2 decision 3)
 worker/                  the 4-hourly pipeline: fetch, place, group, budget,
                          tile, publish. run.ts is the entry point
   regions.ts             per-region top-N index — what the §2.3 panel reads,
@@ -175,6 +179,9 @@ scripts/
   build-tiles.sh         tippecanoe, via WSL on Windows
 spikes/gdelt/
   FINDINGS.md            measured GDELT research — part 1 and part 2
+  pin-confidence.mjs     asks whether any per-pin signal predicts a correct
+                         placement. It does not (§9.1) — that is why the
+                         geotag-confidence treatment is uniform
   gkg_probe.py           volume, titles, locations, sources, themes
   quality_probe.py       geotag quality, syndication, API probes
   probe3.py              theme frequency, dedup math
