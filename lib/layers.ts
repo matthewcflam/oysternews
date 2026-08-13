@@ -121,7 +121,10 @@ export const LABEL_FONT = ["Noto Sans Regular"];
 /**
  * The layers, in the order they must be added. Order is load-bearing twice:
  * country-top paints UNDER stories so the overlap resolves to the stories
- * styling, and labels paint over both.
+ * styling, and the headline layer comes last — but it is **not appended to the
+ * style**. It is inserted below the basemap's place labels, so that §2.3's
+ * clickable country and state names win symbol collisions against our
+ * headlines. See `firstPlaceLabelLayerId` for the measurement that forced it.
  */
 export function storyLayers(): [
   CircleLayerSpecification,
@@ -178,6 +181,56 @@ export function storyLayers(): [
 
 /** The layers a click should hit-test, top-most first. Labels are not clickable. */
 export const CLICKABLE_LAYER_IDS = [STORIES_LAYER_ID, COUNTRY_LAYER_ID];
+
+/**
+ * Where the headline layer must be inserted: **below the basemap's own place
+ * labels**.
+ *
+ * **Measured 2026-08-13, and it is why this function exists.** MapLibre resolves
+ * symbol collisions from the TOP layer down, so whichever symbol layer is
+ * highest claims its space first and everything under it yields. Added last —
+ * the obvious order, and what this file did until now — our headlines therefore
+ * outranked MapTiler's `state_label` and `country_label`, and deleted them:
+ *
+ * ```
+ *   view       place labels drawn   with the headline layer hidden
+ *   US z5              2                        6
+ *   US z6              3                        4
+ *   India z5           7                        9
+ *   US z4, z7        9 / 19                   9 / 18
+ * ```
+ *
+ * That is up to two thirds of §2.3's clickable targets gone, and gone *worst
+ * where the news is densest* — the US at z5 — which is precisely where a visitor
+ * is most likely to try the gesture. The place label is load-bearing UI now, not
+ * basemap decoration, so it outranks our headline.
+ *
+ * **Only the headline layer moves.** The two circle layers stay on top: a pin is
+ * the thing being mapped, and a country name drawn over a pin would hide data
+ * behind decoration. Circles do not participate in symbol collision at all, so
+ * keeping them above costs nothing.
+ */
+const PLACE_LABEL_SOURCE_LAYERS = [
+  "country_label",
+  "country_disputed_label",
+  "state_label",
+  "place",
+];
+
+/**
+ * The id of the basemap's first place-label layer, or `undefined` to append.
+ *
+ * `undefined` is the honest answer for a style this does not recognize —
+ * `addLayer(layer, undefined)` appends, which is the pre-2026-08-13 behaviour:
+ * the headlines still draw, and only the collision priority reverts.
+ */
+export function firstPlaceLabelLayerId(
+  layers: readonly { id: string; "source-layer"?: string }[],
+): string | undefined {
+  return layers.find((layer) =>
+    PLACE_LABEL_SOURCE_LAYERS.includes(layer["source-layer"] ?? ""),
+  )?.id;
+}
 
 /* -------------------------------------------------------------------------- */
 /* §2.2's red click-outline                                                    */

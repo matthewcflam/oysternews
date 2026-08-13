@@ -5,13 +5,14 @@ doc, or a previous conversation contradicts it, this file wins.
 
 **Status:** **Phases 1, 2, 2.5 and 3 are complete**, and the 4-hourly worker has
 now run green in CI. **Phase 4 is in progress**: both layers are styled, the
-§2.2 outline works, and §2.3's region index is published — but **§2.3's client
-half is not started**, and it is the next thing to build. Live:
-https://sonder-drab-eta.vercel.app/ .
-**Last updated:** 2026-08-13, after four things: a bad Blob token failed the
+§2.2 outline works, and **§2.3 is complete on both sides** — the index is
+published and the label gesture, the outline, the panel and the Global button
+are built and verified in a browser. Live: https://sonder-drab-eta.vercel.app/ .
+**Last updated:** 2026-08-13, after five things: a bad Blob token failed the
 first two scheduled runs, the count band was caught one run from wedging the
-pipeline shut for good, §2.3 was redesigned around clicking place labels, and
-its per-region index was built and verified published.
+pipeline shut for good, §2.3 was redesigned around clicking place labels, its
+per-region index was built and verified published, and its client half was built
+against the live archive.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -72,59 +73,57 @@ pin "Pakistan's top stories".
 > and it is nearly redundant in a state panel, where the user just clicked the
 > state. Lowering `REGION_TOP_N` for adm1 keys only is the next cheapest.
 
+**§2.3's client half is built, 2026-08-13**, and verified in a browser against
+the live archive before it was committed. `lib/labels.ts` decides which rendered
+feature is a place label and at what level; `lib/regions.ts` fetches the index;
+`components/RegionPanel.tsx` renders it; `MapView.tsx` wires the gesture. What
+was verified, by driving the real map:
+
+```
+  country label -> KZ outlined, panel lists its real stories, camera unmoved
+  state label   -> USTN outlined, Tennessee's stories, at z5
+  pin click     -> wins the tap, closes the panel, draws its own outline
+  ocean click   -> clears outline, panel and popup
+  Global        -> [0,20] z2, nothing selected
+  390x844       -> panel and outline both usable on a phone
+```
+
+Four things that only appeared once it was running, all of them now decided:
+
+- **Our headlines were deleting the basemap's place labels — up to two thirds of
+  them.** MapLibre resolves symbol collisions from the TOP layer down, so the
+  headline layer, appended last, claimed its space before MapTiler's
+  `state_label` and `country_label` and they simply did not draw. Measured over
+  the US at z5: **2 place labels with the headline layer visible, 6 with it
+  hidden**; z6 3 against 4; India z5 7 against 9. That is §2.3's clickable
+  target disappearing *worst where the news is densest*. Fixed by inserting the
+  headline layer **below** the basemap's first place-label layer
+  (`firstPlaceLabelLayerId`), which re-measured at 6/6, 4/4 and 9/9 — zero
+  suppression — while the headlines still draw. **The two circle layers stay on
+  top**: a pin is the data, and circles do not participate in symbol collision
+  anyway. A place name may now draw over a headline, which is the price.
+- **A container click clears a region lock**, which is the question step 3 left
+  open. One outline, one panel: a container outline drawn while a region outline
+  was still up leaves the user unable to say what is selected.
+- **The panel heading reads `name:en`, not `name`.** MapTiler writes `name` in
+  the local script, so Kazakhstan headed the panel as "Қазақстан". Nothing joins
+  on either — the id still comes from the boundary hit-test — this is display
+  only.
+- **`lib/layers.ts` contained a literal NUL byte** in `MATCH_NOTHING`, which made
+  **git treat the whole file as binary and show no diff for it**, in a repo whose
+  history is supposed to read as the build log (§0). Replaced with the empty
+  string, which `build-boundaries.ts` can never emit (`if (!id) continue`).
+
 **Phase 4, remaining:**
 
-1. **The §2.3 client half — the label gesture and the panel. NOT STARTED.**
-   `components/MapView.tsx` and `lib/layers.ts` are untouched by the 2026-08-13
-   work; the map still behaves exactly as it did before it. Everything below is
-   ahead of you, and the order is chosen so each step is verifiable in a browser
-   the moment it lands:
-
-   1. **`lib/labels.ts` — which rendered feature is a place label, and at what
-      level.** `map.queryRenderedFeatures(point)` with no layer filter returns
-      basemap features too. Accept a feature as a country when its source-layer
-      is `country_label` (MapTiler) **or** `place` with `class === "country"`
-      (OpenFreeMap), and as a state on `state_label` or `place`/`class="state"`.
-      **Both spellings are required — the two providers do not share a schema**
-      (§2.3), and MapTiler has already changed theirs once. Unit-test both
-      shapes: when this breaks it breaks silently, with no error and no console
-      warning, which is §11's failure mode exactly.
-   2. **An unpainted `fill` layer on `BOUNDARIES_SOURCE_ID`**, hit-tested *after*
-      the pin layers so a pin still wins a tap. This is what turns a clicked
-      label into a region id: project the label feature's own point, query the
-      fill at that pixel, take `countries` or `regions` according to the level
-      the label gave. **No name matching** — see §2.3. §2.2 says the polygon is
-      never a fill; an unpainted hit target is not a visual fill, and §2.2 now
-      carries that amendment explicitly rather than by reinterpretation.
-   3. **The region outline.** Reuse `COUNTRY_OUTLINE_ID` / `REGION_OUTLINE_ID`
-      and their `MATCH_NOTHING` filter-swap. Note this is a *second* outline
-      concern alongside §2.2's container click-reveal, and `clearOutline()`
-      currently assumes one at a time — decide whether a container click clears a
-      region lock before writing it, not after.
-   4. **The default zoom moves z1.5 → z2.** Forced, not chosen: MapTiler draws no
-      country labels below z2, so the whole gesture is invisible on arrival
-      otherwise (§2.3).
-   5. **The panel**, reading `manifest.regionsUrl`, fetched **lazily on first
-      open** — it is ~151 KB gzipped and nothing needs it until a label is
-      clicked. `regionsUrl` is **optional**: a manifest published before
-      2026-08-13 has none, and the map must still render with the panel simply
-      unavailable. §2.6 applies — title, source, link, never article text.
-   6. **The Global corner button**, which resets the camera to whole-planet and
-      closes the panel. This is the only camera move in the feature, and
-      therefore the only place `prefers-reduced-motion: reduce` (§2.6) applies —
-      check it at call time, not at mount, because the OS setting can change
-      while the page is open.
-
-   **Verify in a browser before claiming any of it works.** §11 is not a
-   suggestion: this project has been committed green and rendered nothing twice.
-   `npm run build` passing is not evidence, and neither is a clean console — an
-   unknown `source-layer` draws nothing and says nothing (see below).
-2. **The geotag-confidence treatment** (§5.2 decision 3, *not* optional garnish —
+1. **The geotag-confidence treatment** (§5.2 decision 3, *not* optional garnish —
    pins measured 69.7% [52.7, 82.6]). The container ring is the container half of
    it; the pin half is unstarted.
-3. **Profile on a real mid-tier phone**, not a desktop throttle (§9).
-4. **`IN25` has no outline.** One Indian region in the first run joins to no
+2. **Profile on a real mid-tier phone**, not a desktop throttle (§9).
+3. **`IN25` has no outline.** One Indian region in the first run joins to no
    Natural Earth polygon. Deliberately not guessed.
+4. **Read the `panel` line on the next full-window run** and check the payload
+   against the 500 KB projection below. Nothing in §2.3 needs it before then.
 
 **Still outstanding and only the human can do it:** §5.2 decision 4 — *"Before
 Phase 4 ships, get an independent judge on a fresh rule-H draw."* The same party
@@ -560,6 +559,15 @@ camera to whole-planet zoom and closes the panel.
 >    respectively. The default camera is z1.5, so **on the production basemap
 >    there are no country labels on screen when the map first loads.** The
 >    default zoom has to move to z2, which is forced rather than chosen.
+>
+> 3. **Our own headlines were deleting those labels, measured after the gesture
+>    was built.** MapLibre resolves symbol collisions from the top layer down, so
+>    the headline layer appended last outranked `state_label` and
+>    `country_label`: over the US at z5, **2 place labels drew instead of 6**.
+>    The headline layer is therefore inserted *below* the basemap's place labels
+>    (`firstPlaceLabelLayerId`), and re-measured at zero suppression. **The place
+>    label is load-bearing UI now, not basemap decoration** — anything that
+>    competes with it for space loses.
 >
 > **State labels carry no region code on either provider** — MapTiler has
 > `iso_a2` + `admin_level`, OpenFreeMap has only a name. Joining "California" to

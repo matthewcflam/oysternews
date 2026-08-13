@@ -26,6 +26,7 @@ import {
   REGION_OUTLINE_ID,
   SOURCE_ID,
   boundaryLayers,
+  firstPlaceLabelLayerId,
   hitLayers,
   matchId,
   outlineFor,
@@ -220,7 +221,18 @@ export default function MapView() {
         // under everything (§2.3 step 2).
         for (const layer of hitLayers()) map.addLayer(layer);
         for (const layer of boundaryLayers()) map.addLayer(layer);
-        for (const layer of storyLayers()) map.addLayer(layer);
+
+        /**
+         * The pins go on top; the headlines go **below the basemap's place
+         * labels**, so a country or state name always wins the symbol collision
+         * against a headline and stays clickable for §2.3. Measured: appending
+         * the headline layer deleted two thirds of the state labels over the US
+         * at z5 — see `firstPlaceLabelLayerId`.
+         */
+        const [countryPins, storyPins, headlines] = storyLayers();
+        map.addLayer(countryPins);
+        map.addLayer(storyPins);
+        map.addLayer(headlines, firstPlaceLabelLayerId(map.getStyle().layers));
 
         /** §2.2: one outline at a time, and none by default. */
         const clearOutline = () => {
