@@ -8,9 +8,8 @@ publishes to Vercel Blob, and the browser now follows `manifest.json` — the ma
 updates itself with no deploy. **Next: Phase 4** (styling, salience, the popup
 treatment). Live: https://sonder-drab-eta.vercel.app/ .
 **Last updated:** 2026-08-13, after the first scheduled runs failed on a bad Blob
-token and the first full-window run published 6,718 groups. **Read the publish-band
-warning below before the next run** — the band is now armed and its trailing median
-is two smoke runs.
+token, the first full-window run published 6,718 groups, and the count band was
+found one run away from wedging the pipeline shut permanently.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -165,21 +164,39 @@ is why it is a named assertion at the entry point rather than a check folded int
    must pass `allowOverwrite: true`** or every run after the first dies at the
    manifest write, having already uploaded its archive.
 
-> **OPEN, and it will fail the next run: the count band is armed on a poisoned
-> median.** The first full-window run (2026-08-13 09:11 UTC, 12 bundles) published
-> **6,718 groups, 161 countries, 107 tier-1** — against a history whose other two
-> entries are 1-bundle smoke runs at 846 and 1,467. That is the third entry, so
-> `BAND_MIN_HISTORY` is now met and the band is live at **median 1,467 → [586,
-> 3,668]**. A steady-state run is several times that and climbs further as the
-> 24-hour pool fills, so the next run publishes nothing — **and a refused run does
-> not append to history**, so the median never moves and the refusal is permanent.
-> Fail-closed becomes fail-forever.
->
-> The band was designed for steady state, where the window is full and volume
-> swings ~2× (§4). It has no notion of a pipeline still filling its own window,
-> where 2-5× growth per run is correct behaviour. The low side still does its job;
-> the high side is what misfires. Decide before the next scheduled run —
-> §6 wants this as a decision, not a silent threshold nudge.
+**The count band nearly wedged the pipeline shut, permanently.** The first
+full-window run (2026-08-13 09:11 UTC, 12 bundles) published **6,718 groups, 161
+countries, 107 tier-1** — and that third history entry armed the band for the
+first time, against a median of two **1-bundle smoke runs** (846, 1,467). Band
+[586, 3,668]; every steady-state run from then on is several times that and
+climbs further as the 24-hour pool fills.
+
+That would have refused the next run, and **a refused run does not append to
+history** — so the median never moves and the refusal repeats for ever.
+Fail-closed becomes fail-forever, with the dead-man switch as the only symptom.
+Two fixes, both landed:
+
+1. **The history was reset** to the single full-window entry, so the band
+   re-bootstraps from comparable runs. **Never seed the band with a smoke run**:
+   a 1-bundle run and a 12-bundle run are not the same measurement, and the band
+   cannot tell them apart.
+2. **`BAND_RELAX_AFTER_MS`** — past 8 hours (§8's 2× cadence) without a
+   successful publish, the count band stands down and the run publishes, logging
+   a loud `WARN`. **Only the count band relaxes.** `MIN_GROUPS`, the country
+   floor and the title rate stay armed, and they are the ones that catch real
+   garbage; the band is the only invariant whose reference point is the
+   pipeline's own history, which is what makes it the only one that can poison
+   itself.
+
+**A third Blob trap, measured while doing that: the CDN serves a stale copy of a
+key you just overwrote, even at `max-age=0, s-maxage=0`.** An overwrite of
+`state/publish-history.json` read back as the *old* body with
+`X-Vercel-Cache: HIT, Age: 6`. At the 4-hourly cadence this never bites — the
+cache is long gone. It bites the moment two runs happen minutes apart, which is
+exactly what smoke-testing looks like: the second run can read the first's
+pre-write manifest and history, and then reason about a watermark and a band that
+are one run out of date. Add a cache-busting query when verifying a write by
+hand, and do not trust a back-to-back run's view of state.
 
 The rest of `vercelBlobStore` is now verified against the live store rather than
 against the docs: stable keys, text and binary round-trips, `cache-control`

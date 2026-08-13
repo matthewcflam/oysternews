@@ -88,9 +88,15 @@ export async function newestStamp(): Promise<string> {
   return stamp;
 }
 
-/** Step a YYYYMMDDHHMMSS stamp by whole minutes. */
-export function shiftStamp(stamp: string, minutes: number): string {
-  const at = Date.UTC(
+/**
+ * A YYYYMMDDHHMMSS stamp as epoch milliseconds, UTC.
+ *
+ * `NaN` on anything that is not fourteen digits, so callers can tell a malformed
+ * stamp from a real instant rather than silently getting 1970.
+ */
+export function stampToMs(stamp: string): number {
+  if (!/^\d{14}$/.test(stamp)) return Number.NaN;
+  return Date.UTC(
     Number(stamp.slice(0, 4)),
     Number(stamp.slice(4, 6)) - 1,
     Number(stamp.slice(6, 8)),
@@ -98,7 +104,11 @@ export function shiftStamp(stamp: string, minutes: number): string {
     Number(stamp.slice(10, 12)),
     Number(stamp.slice(12, 14)),
   );
-  const moved = new Date(at + minutes * 60_000);
+}
+
+/** Step a YYYYMMDDHHMMSS stamp by whole minutes. */
+export function shiftStamp(stamp: string, minutes: number): string {
+  const moved = new Date(stampToMs(stamp) + minutes * 60_000);
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
     `${moved.getUTCFullYear()}${pad(moved.getUTCMonth() + 1)}${pad(moved.getUTCDate())}` +
