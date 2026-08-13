@@ -138,6 +138,8 @@ export type RunSummary = {
   countryTop: number;
   overflow: number;
   published: boolean;
+  /** The count band stood down because publication had been blocked past 2× cadence. */
+  bandRelaxed: boolean;
   violations: string[];
   archive: string;
   prunedArchives: number;
@@ -264,6 +266,7 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     countryTop: countryTop.length,
     overflow,
     published: result.published,
+    bandRelaxed: result.published ? result.bandRelaxed : false,
     violations: result.published ? [] : result.violations,
     archive: result.published ? result.manifest.archive : "",
     prunedArchives: result.published ? result.pruned : 0,
@@ -297,6 +300,15 @@ export function formatSummary(summary: RunSummary): string {
   }
   for (const [code, count] of summary.unknownFips) {
     lines.push(`WARN         unknown FIPS code ${code} on ${count} stories — needs a data/fips-overrides entry`);
+  }
+
+  // Publishing past the band is the deliberate escape from a fail-forever wedge,
+  // but it is still a run that published output its own history says is
+  // implausible. It must never look like an ordinary success in the log.
+  if (summary.bandRelaxed) {
+    lines.push(
+      "WARN         count band stood down — publication had been blocked past 2× cadence",
+    );
   }
 
   if (summary.published) {

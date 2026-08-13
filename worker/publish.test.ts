@@ -5,23 +5,26 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { StoryGroup } from "../lib/types.ts";
 import {
   ARCHIVE_PREFIX,
-  type ArchiveStore,
-  assertStoreReachable,
+  BAND_RELAX_AFTER_MS,
   HISTORY_KEY,
+  type ArchiveStore,
   type HistoryEntry,
   MANIFEST_KEY,
   MIN_COUNTRIES,
   archiveKey,
   archivesToPrune,
+  assertStoreReachable,
   checkInvariants,
   contentHash,
   median,
   nextHistory,
   pingHealthcheck,
   publish,
+  staleness,
   statsOf,
   vercelBlobStore,
 } from "./publish.ts";
+import { stampOfDate } from "./run.ts";
 
 const NOW = new Date("2026-08-12T12:00:00.000Z");
 
@@ -106,8 +109,20 @@ function memoryStore(seed: Record<string, string> = {}): MemoryStore {
   return store;
 }
 
+/**
+ * A published history ending one hour before NOW.
+ *
+ * The stamps have to sit close to NOW rather than at a fixed point in the past:
+ * the count band only applies while publication is current (BAND_RELAX_AFTER_MS),
+ * so a history stamped twelve hours back would silently disarm the very
+ * invariant most of these tests are about.
+ */
 function history(counts: number[]): HistoryEntry[] {
-  return counts.map((groups, i) => ({ stamp: `2026081200${i}000`, archive: `a${i}`, groups }));
+  return counts.map((groups, i) => ({
+    stamp: stampOfDate(new Date(NOW.getTime() - (counts.length - i) * 60 * 60_000)),
+    archive: `a${i}`,
+    groups,
+  }));
 }
 
 let archivePath = "";
@@ -165,6 +180,27 @@ describe("checkInvariants", () => {
     // The band is inclusive at both edges.
     expect(checkInvariants(statsOf(healthyGroups(400)), past)).toEqual([]);
     expect(checkInvariants(statsOf(healthyGroups(2500)), past)).toEqual([]);
+  });
+
+  it("stands the band down once publication has been blocked past 2x cadence", () => {
+    // The fail-forever wedge, measured 2026-08-13: a refused run does not append
+    // to history, so the median that refused it never moves and the next run is
+    // refused identically, for ever. The band has to be able to give up.
+    const past = history([1000, 1000, 1000]);
+    const flood = statsOf(healthyGroups(5000));
+    expect(checkInvariants(flood, past, BAND_RELAX_AFTER_MS - 1)[0]).toContain("outside");
+    expect(checkInvariants(flood, past, BAND_RELAX_AFTER_MS)).toEqual([]);
+  });
+
+  it("keeps the other three invariants armed when the band stands down", () => {
+    // The band is the only one whose reference point is the pipeline's own
+    // history, so it is the only one that can poison itself. The floors catch
+    // actual garbage and must not be relaxed with it.
+    const past = history([1000, 1000, 1000]);
+    const collapsed = statsOf(healthyGroups(5000).map((g) => ({ ...g, countryCode: "US" })));
+    const violations = checkInvariants(collapsed, past, BAND_RELAX_AFTER_MS * 10);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toContain("distinct countries");
   });
 
   it("rejects a run whose stories collapsed onto a handful of countries", () => {
@@ -343,6 +379,27 @@ describe("publish", () => {
       now: NOW,
     });
     expect(result.published).toBe(true);
+  });
+});
+
+describe("staleness", () => {
+  const now = new Date("2026-08-13T12:00:00Z");
+
+  it("measures from the newest stamp, not the last entry", () => {
+    // nextHistory appends, so the newest entry is normally last — but the band's
+    // escape hatch must not hinge on that ordering holding.
+    const entries: HistoryEntry[] = [
+      { stamp: "20260813110000", archive: "a", groups: 1 },
+      { stamp: "20260813090000", archive: "b", groups: 1 },
+    ];
+    expect(staleness(entries, now)).toBe(60 * 60_000);
+  });
+
+  it("reports an unpublished store as infinitely stale rather than 1970", () => {
+    expect(staleness([], now)).toBe(Number.POSITIVE_INFINITY);
+    expect(staleness([{ stamp: "not-a-stamp", archive: "a", groups: 1 }], now)).toBe(
+      Number.POSITIVE_INFINITY,
+    );
   });
 });
 

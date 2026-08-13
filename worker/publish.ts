@@ -33,6 +33,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import type { Manifest, StoryGroup } from "../lib/types.ts";
+import { stampToMs } from "./fetch.ts";
 import type { ShardStore } from "./state.ts";
 
 export const MANIFEST_KEY = "manifest.json";
@@ -72,6 +73,27 @@ export const MIN_TITLE_RATE = 0.95;
 /** A window that produced nothing is a failure even with no history to compare to. */
 export const MIN_GROUPS = 1;
 
+/**
+ * How long the count band may block publication before it stops being a guard
+ * and starts being the outage. 8 hours — §8's 2× cadence, the same threshold the
+ * UI's stale notice uses.
+ *
+ * **This exists because fail-closed can otherwise become fail-forever.** A
+ * refused run does not append to history, so the trailing median never moves,
+ * so the next run is refused for exactly the same reason. Measured on 2026-08-13:
+ * the band armed on a median of two 1-bundle smoke runs (846, 1467) while real
+ * runs were publishing 6,718 groups, which would have wedged the pipeline
+ * permanently with the dead-man switch as the only symptom.
+ *
+ * **Only the count band relaxes.** MIN_GROUPS, the country floor and the title
+ * rate stay armed unconditionally, and they are the ones that actually catch
+ * garbage — a placement collapse shows up as too few countries, a parse break as
+ * missing titles. The band is the fuzziest of the four and the only one whose
+ * reference point is the pipeline's own history, which is what makes it the one
+ * that can poison itself.
+ */
+export const BAND_RELAX_AFTER_MS = 8 * 60 * 60 * 1000;
+
 export type PublishStats = {
   groups: number;
   countries: number;
@@ -108,7 +130,12 @@ export function median(values: number[]): number {
  * *and* the country floor is a different diagnosis from one that fails only the
  * band, and the Action log is the only place anyone will read it.
  */
-export function checkInvariants(stats: PublishStats, history: HistoryEntry[]): string[] {
+export function checkInvariants(
+  stats: PublishStats,
+  history: HistoryEntry[],
+  /** Milliseconds since the last successful publish. Past BAND_RELAX_AFTER_MS the band stands down. */
+  staleFor = 0,
+): string[] {
   const violations: string[] = [];
 
   if (stats.groups < MIN_GROUPS) {
@@ -117,7 +144,7 @@ export function checkInvariants(stats: PublishStats, history: HistoryEntry[]): s
     return violations;
   }
 
-  if (history.length >= BAND_MIN_HISTORY) {
+  if (history.length >= BAND_MIN_HISTORY && staleFor < BAND_RELAX_AFTER_MS) {
     const mid = median(history.map((entry) => entry.groups));
     const low = Math.floor(mid * COUNT_BAND_LOW);
     const high = Math.ceil(mid * COUNT_BAND_HIGH);
@@ -257,6 +284,15 @@ function publicBase(token: string): string {
  * Note that Vercel caps the CDN's own `s-maxage` at 300s on the archives even
  * though the browser gets `max-age=31536000`; immaterial for content-hashed
  * keys, which never change under a given URL.
+ *
+ * **`get` reads through the CDN, and the CDN will serve a key you just
+ * overwrote.** Measured 2026-08-13: a fresh PUT to `state/publish-history.json`
+ * read back as the *previous* body, with `X-Vercel-Cache: HIT` and `Age: 6`,
+ * under `cache-control: public, max-age=0, s-maxage=0`. Nothing in the pipeline
+ * re-reads a key it wrote in the same run, and at a 4-hourly cadence the cache
+ * is long expired, so this is not a live bug — but two runs minutes apart (what
+ * smoke-testing looks like) means the second can read the first's pre-write
+ * manifest and history. Verify a hand-written key with a cache-busting query.
  */
 export function vercelBlobStore(token: string): ArchiveStore {
   const headers = () => ({
@@ -367,8 +403,26 @@ export type PublishInput = {
 };
 
 export type PublishResult =
-  | { published: true; manifest: Manifest; stats: PublishStats; pruned: number }
+  | { published: true; manifest: Manifest; stats: PublishStats; pruned: number; bandRelaxed: boolean }
   | { published: false; violations: string[]; stats: PublishStats };
+
+/**
+ * How long since the last successful publish, from the history's own stamps.
+ *
+ * The stamp is the watermark — the newest GKG bundle that run included — not the
+ * wall clock it ran at. For "has publication been blocked for too long" the two
+ * are within one run of each other, and using the watermark keeps this readable
+ * from the history alone, with no extra field to backfill on an existing store.
+ *
+ * `Infinity` on an empty or unparseable history, which reads as "nothing has
+ * published, so nothing is protecting anything" — and the band is inert there
+ * anyway, for want of BAND_MIN_HISTORY entries.
+ */
+export function staleness(history: HistoryEntry[], now: Date): number {
+  const stamps = history.map((entry) => stampToMs(entry.stamp)).filter((ms) => !Number.isNaN(ms));
+  if (stamps.length === 0) return Number.POSITIVE_INFINITY;
+  return now.getTime() - Math.max(...stamps);
+}
 
 /**
  * Fail fast on a token that cannot reach the store.
@@ -428,7 +482,10 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const stats = statsOf(groups);
   const history = await readHistory(store);
 
-  const violations = checkInvariants(stats, history);
+  const staleFor = staleness(history, now);
+  const bandRelaxed = history.length >= BAND_MIN_HISTORY && staleFor >= BAND_RELAX_AFTER_MS;
+
+  const violations = checkInvariants(stats, history, staleFor);
   if (violations.length > 0) return { published: false, violations, stats };
 
   const bytes = await readFile(archivePath);
@@ -462,7 +519,7 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const stale = archivesToPrune(stored, updated);
   for (const old of stale) await store.remove(old);
 
-  return { published: true, manifest, stats, pruned: stale.length };
+  return { published: true, manifest, stats, pruned: stale.length, bandRelaxed };
 }
 
 /**

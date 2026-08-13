@@ -115,6 +115,7 @@ function summary(patch: Partial<RunSummary> = {}): RunSummary {
     countryTop: 140,
     overflow: 20,
     published: true,
+    bandRelaxed: false,
     violations: [],
     archive: "archives/stories-a1b2c3d4.pmtiles",
     prunedArchives: 1,
@@ -161,6 +162,15 @@ describe("formatSummary", () => {
     expect(text).toContain("PUBLISHED    NOTHING");
     expect(text).toContain("only 3 distinct countries");
     expect(text).not.toContain("stories-a1b2c3d4");
+  });
+
+  it("never lets a relaxed count band read as an ordinary success", () => {
+    // The band standing down is the escape from a fail-forever wedge, but the run
+    // still published output its own history calls implausible. §8's whole
+    // premise is that the summary is the only interface to these failures.
+    const text = formatSummary(summary({ bandRelaxed: true }));
+    expect(text).toContain("WARN");
+    expect(text).toContain("count band stood down");
   });
 
   it("flags a publish whose healthcheck ping failed", () => {
