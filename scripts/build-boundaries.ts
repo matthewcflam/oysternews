@@ -131,9 +131,33 @@ function countryOutlines(features: Feature[], byIso: Map<string, string>): Featu
   return out;
 }
 
+/**
+ * Admin-1 regions where Natural Earth's own `fips` is demonstrably wrong, keyed
+ * by its `iso_3166_2`. **This is not the same thing as guessing a join** (§3.4) —
+ * an entry belongs here only with evidence from both sides.
+ *
+ * `IN-TN`, added 2026-08-13, is the whole list and shows the standard:
+ *
+ *   - **GDELT emits `IN25` for Tamil Nadu**, 80 mentions across the 12 committed
+ *     GKG bundles, and never `IN22`.
+ *   - **Natural Earth writes `fips: IN22` on Tamil Nadu** — and writes `IN22` on
+ *     **Puducherry** as well, which is where the error shows itself. FIPS 10-4
+ *     assigns `IN22` to Puducherry, so NE's Tamil Nadu is the wrong one of the
+ *     two, by NE's own internal contradiction rather than by our say-so.
+ *
+ * It was costing two bugs, not one. `IN25` had no outline at all (the symptom in
+ * the plan), and a **Puducherry** container outlined *Tamil Nadu* along with it,
+ * because both polygons answered to the same id. The second was silent.
+ */
+const ADM1_FIPS_OVERRIDES: Record<string, string> = {
+  "IN-TN": "IN25",
+};
+
 function regionOutlines(features: Feature[]): Feature[] {
   const out: Feature[] = [];
+  const countriesById = new Map<string, Set<string>>();
   let usPostal = 0;
+  let overridden = 0;
 
   for (const feature of features) {
     const iso3166 = value(feature.properties.iso_3166_2);
@@ -142,20 +166,72 @@ function regionOutlines(features: Feature[]): Feature[] {
     // `US06`, so keeping it would produce a polygon nothing can ever match.
     const id = iso3166.startsWith("US-")
       ? `US${iso3166.slice(3)}`
-      : value(feature.properties.fips);
+      : (ADM1_FIPS_OVERRIDES[iso3166] ?? value(feature.properties.fips));
 
     if (!id) continue;
     if (iso3166.startsWith("US-")) usPostal += 1;
+    if (ADM1_FIPS_OVERRIDES[iso3166]) overridden += 1;
+
+    const country =
+      value(feature.properties.iso_a2) || value(feature.properties.adm0_a3) || "??";
+    (countriesById.get(id) ?? countriesById.set(id, new Set()).get(id)!).add(country);
+
     out.push(outline(feature, id));
   }
 
-  console.log(`  regions:   ${out.length} outlines (${usPostal} rewritten to US postal codes)`);
+  console.log(
+    `  regions:   ${out.length} outlines (${usPostal} rewritten to US postal codes,` +
+      ` ${overridden} corrected by ADM1_FIPS_OVERRIDES)`,
+  );
+
+  /**
+   * **An id answered by polygons in two different countries is a wrong outline
+   * waiting to happen**, and it is the §11 failure shape: nothing errors, the
+   * map just draws a border somewhere else. Natural Earth's `fips` is not a
+   * unique key — 187 codes are carried by more than one admin-1 feature, and
+   * most of those are *fine*, because NE splits a region into provinces that
+   * each carry the parent's code and together compose it. The ones that are not
+   * fine are the ones that cross a border, so that is what this counts.
+   *
+   * Measured 2026-08-13: 16 such codes, all but one in the Balkans, where NE's
+   * fips column is stale about Kosovo, Serbia, Montenegro and North Macedonia.
+   * Only **one of the 16 is reachable from real data** (`AE02`, Ajman against two
+   * Omani governorates). Loud, not fatal: the outline is cosmetic and a build
+   * that refuses to produce a map over a Kosovo boundary code would be worse
+   * than one that says so.
+   */
+  const crossBorder = [...countriesById].filter(([, countries]) => countries.size > 1);
+  if (crossBorder.length > 0) {
+    console.warn(
+      `  WARN ${crossBorder.length} region ids span more than one country and may ` +
+        `outline the wrong place: ` +
+        crossBorder.map(([id, c]) => `${id} (${[...c].join("/")})`).join(", "),
+    );
+  }
+
   return out;
 }
 
+/**
+ * **A forward-slash literal, never `path.join`** — and the paths handed after it
+ * get the same treatment (`posix`, below).
+ *
+ * This is the trap `worker/tiles.ts` documents at length, found here on
+ * 2026-08-13 by being the second script to run tippecanoe from Windows Node.
+ * `path.join` returns `scripts\run-tippecanoe.sh`, bash reads `\r` as an escape,
+ * and reports `scriptsrun-tippecanoe.sh: No such file or directory`. It hid
+ * because this file is run **by hand and rarely** — the archive it builds is
+ * committed and static (§3.1) — so the fix that landed in `tiles.ts` never
+ * reached the one other caller.
+ */
+const SCRIPT = "scripts/run-tippecanoe.sh";
+
+/** A path as an argument to bash, not as a path for this process. See tiles.ts. */
+const posix = (value: string): string => value.replaceAll("\\", "/");
+
 function runTippecanoe(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("bash", [path.join(REPO_ROOT, "scripts", "run-tippecanoe.sh"), ...args], {
+    const child = spawn("bash", [SCRIPT, ...args.map(posix)], {
       stdio: "inherit",
     });
     child.on("error", reject);
