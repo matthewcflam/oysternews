@@ -50,13 +50,25 @@ stories into higher-zoom tiles, so a country's tile at world zoom does not
 contain them, and a panel built on `queryRenderedFeatures` would call one floor
 pin "Pakistan's top stories".
 
-Measured on the live pool, 2026-08-13: **161 countries, 962 rows, 258 KB raw /
-82 KB gzipped** at `REGION_TOP_N = 10`, 66 regions at the cap and 37 with a
-single story. **Zero admin-1 regions in that measurement, and that is expected**
-— `adm1` did not exist when those shards were written. **State panels therefore
-fill in over 24 hours** as pre-change shards expire, and the payload will grow
-with them; re-measure from the run summary's `panel` line rather than trusting
-the 82 KB.
+**Verified published, 2026-08-13 10:08 UTC**, by a full local run:
+
+```
+  panel        449 regions indexed, 1685 rows
+  449 keys = 163 countries + 286 adm1,  465 KB raw / 151 KB gzipped
+  282 bytes per row;  USCA carries its 10
+```
+
+> **The payload is going to grow, and it is worth watching.** Those 286 admin-1
+> keys come from **one run's** articles — every shard written before `adm1`
+> existed contributes none. As the window turns over, adm1 coverage rises to the
+> whole pool, and 24 hours of it could plausibly reach ~1,500 keys and ~5,000
+> rows, which at 282 bytes/row is roughly **500 KB gzipped**. That is a lot to
+> hand a phone (§1) for a panel.
+>
+> Do not pre-optimise it — **read the `panel` line on a full-window run first.**
+> If it does need trimming, the cheapest cut is `place`: it is the longest field
+> and it is nearly redundant in a state panel, where the user just clicked the
+> state. Lowering `REGION_TOP_N` for adm1 keys only is the next cheapest.
 
 **Phase 4, remaining:**
 
@@ -323,6 +335,20 @@ how you tell a rendering bug from a data bug.
   but holds only Phase 2's eight fake points. Until the real bundle lands, the test
   plan in §7 is a specification, not something you can run — there is no test runner
   installed yet either.
+- **On Windows, `bash` is WSL's bash, not Git Bash** — `C:\WINDOWS\system32\bash.exe`.
+  So `spawn("bash", ...)` from `worker/tiles.ts` lands *inside Linux*, where
+  `command -v tippecanoe` succeeds and `scripts/run-tippecanoe.sh` took its
+  native branch — the one that skipped path translation, on the reasonable-
+  sounding grounds that native tippecanoe implies native paths. It does not: the
+  caller is still Windows Node, so the arguments are still `C:/…`. The symptom is
+  `unable to open database file` on a path that reads perfectly well in the error
+  message. Fixed 2026-08-13 by translating in **both** branches, which is a no-op
+  on a Linux runner. Two smaller Windows-only traps sat behind it, both in
+  `tiles.ts`: an argument to `bash` must be built with **forward slashes**, never
+  `path.join`, or the backslash is eaten before bash sees it — first the script's
+  own name (`scriptsrun-tippecanoe.sh: No such file or directory`), then every
+  `-L` and `-o` path. None of this affects CI, which is why `worker/run.ts` had
+  never once run on the dev machine.
 - **tippecanoe does not run natively on Windows, and this machine is Windows.**
   Production is unaffected — `tiles.ts` runs in GitHub Actions on Linux — but
   local tile builds need WSL or Docker. This first bites in **Phase 2**, which
