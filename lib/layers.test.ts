@@ -1,18 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
   COUNTRIES_SOURCE_LAYER,
+  COUNTRY_HIT_ID,
   COUNTRY_LAYER_ID,
   COUNTRY_LAYER_MAXZOOM,
   COUNTRY_OUTLINE_ID,
   COUNTRY_SOURCE_LAYER,
+  HIT_LAYER_FOR,
   LABELS_LAYER_ID,
   LABEL_FONT,
   MATCH_NOTHING,
+  OUTLINE_LAYER_FOR,
   REGIONS_SOURCE_LAYER,
+  REGION_HIT_ID,
   REGION_OUTLINE_ID,
   STORIES_LAYER_ID,
   STORIES_SOURCE_LAYER,
   boundaryLayers,
+  hitLayers,
+  matchId,
   outlineFor,
   storyLayers,
 } from "./layers";
@@ -112,6 +118,52 @@ describe("boundaryLayers", () => {
   it("reads the two layers built by scripts/build-boundaries.ts", () => {
     expect(countryOutline["source-layer"]).toBe(COUNTRIES_SOURCE_LAYER);
     expect(regionOutline["source-layer"]).toBe(REGIONS_SOURCE_LAYER);
+  });
+});
+
+describe("hitLayers", () => {
+  const [countryHit, regionHit] = hitLayers();
+
+  it("paints nothing — §2.2's amendment is the whole of what makes it legal", () => {
+    // §2.2: "The polygon is never a fill." The 2026-08-13 amendment allows an
+    // UNPAINTED fill purely as a hit target. A visible colour here is a
+    // violation of the product rule, not a styling change, so it fails a test.
+    for (const layer of [countryHit, regionHit]) {
+      expect(layer.type).toBe("fill");
+      expect(layer.paint?.["fill-opacity"]).toBe(0);
+      expect(layer.paint?.["fill-color"]).toBeUndefined();
+      // `visibility: none` would remove the layer from queryRenderedFeatures
+      // entirely — the layer would stop answering, silently.
+      expect(layer.layout?.visibility).toBeUndefined();
+    }
+  });
+
+  it("hit-tests the same two archives the outlines draw", () => {
+    expect(countryHit["source-layer"]).toBe(COUNTRIES_SOURCE_LAYER);
+    expect(regionHit["source-layer"]).toBe(REGIONS_SOURCE_LAYER);
+    expect([countryHit.id, regionHit.id]).toEqual([COUNTRY_HIT_ID, REGION_HIT_ID]);
+  });
+
+  it("carries no filter, unlike the outlines", () => {
+    // The outlines are filtered down to one region; the hit targets must answer
+    // for every polygon or a label click would find nothing under it.
+    for (const layer of [countryHit, regionHit]) expect(layer.filter).toBeUndefined();
+  });
+
+  it("routes a label's level to a hit layer and an outline of the same level", () => {
+    expect(HIT_LAYER_FOR.country).toBe(COUNTRY_HIT_ID);
+    expect(HIT_LAYER_FOR.state).toBe(REGION_HIT_ID);
+    expect(OUTLINE_LAYER_FOR.country).toBe(COUNTRY_OUTLINE_ID);
+    expect(OUTLINE_LAYER_FOR.state).toBe(REGION_OUTLINE_ID);
+  });
+});
+
+describe("matchId", () => {
+  it("is the inverse of MATCH_NOTHING over the same property", () => {
+    expect(matchId("USCA")).toEqual(["==", ["get", "id"], "USCA"]);
+    // The sentinel must be a value no boundary feature can hold —
+    // build-boundaries.ts skips a feature with no code.
+    expect(MATCH_NOTHING).toEqual(["==", ["get", "id"], ""]);
   });
 });
 

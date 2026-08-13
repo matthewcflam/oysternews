@@ -140,6 +140,34 @@ export type StoryGroup = {
   minzoom: number;
 };
 
+/**
+ * One row in §2.3's region panel. §2.6 link-out only — **this type IS the
+ * constraint**: it is the whole of what a panel row can hold, so article prose
+ * cannot reach the panel without changing a shape that both halves of the app
+ * compile against.
+ *
+ * It lives here rather than in `worker/regions.ts` — which builds it — because
+ * the browser renders it, and `worker/` imports carry a `.ts` extension that only
+ * plain `node` wants (§0). `lib/types.ts` is the file both sides already share.
+ *
+ * Deliberately not `StoryGroup`: publishing the group wholesale would ship
+ * salience, tier-1 flags and coordinates the panel has no business rendering, and
+ * would put a tier-1 badge one line of JSX away from existing, which §2.3 forbids.
+ */
+export type RegionStory = {
+  title: string;
+  /** The publishing domain, shown as the source. */
+  source: string;
+  url: string;
+  /** Newest article in the group, GKG stamp — drives the relative freshness line. */
+  date: string;
+  /** Where the story sits, for the panel's second line. */
+  place: string;
+};
+
+/** region id (`PK`, `USCA`) -> its top stories, best first. */
+export type RegionIndex = Record<string, RegionStory[]>;
+
 /** What publish.ts writes next to the archive; the browser reads this, never GDELT (§2.6). */
 export type Manifest = {
   /** Content-hashed archive key, e.g. "stories-a1b2c3d4.pmtiles". */

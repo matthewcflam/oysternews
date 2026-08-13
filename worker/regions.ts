@@ -29,8 +29,15 @@
  * is what makes that enforceable rather than aspirational.
  */
 
-import type { StoryGroup } from "../lib/types.ts";
+import type { RegionIndex, RegionStory, StoryGroup } from "../lib/types.ts";
 import { compareGroups } from "./rank.ts";
+
+/**
+ * Re-exported so this module still reads as the owner of the index's shape while
+ * the declarations live where the browser can reach them without a `.ts`-suffixed
+ * import (§0). `lib/types.ts` carries the rules those two types encode.
+ */
+export type { RegionIndex, RegionStory };
 
 /**
  * How many stories a region keeps.
@@ -40,28 +47,6 @@ import { compareGroups } from "./rank.ts";
  * and N is the only term anyone can turn.
  */
 export const REGION_TOP_N = 10;
-
-/**
- * One row in the panel. §2.6 link-out only — this type IS the constraint.
- *
- * Deliberately not `StoryGroup`: publishing the group wholesale would ship
- * salience, tier-1 flags and coordinates the panel has no business rendering,
- * and would put a tier-1 badge one line of JSX away from existing, which §2.3
- * forbids.
- */
-export type RegionStory = {
-  title: string;
-  /** The publishing domain, shown as the source. */
-  source: string;
-  url: string;
-  /** Newest article in the group, GKG stamp — drives the relative freshness line. */
-  date: string;
-  /** Where the story sits, for the panel's second line. */
-  place: string;
-};
-
-/** region id (`PK`, `USCA`) -> its top stories, best first. */
-export type RegionIndex = Record<string, RegionStory[]>;
 
 function rowOf(group: StoryGroup): RegionStory {
   return {
