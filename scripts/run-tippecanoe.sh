@@ -37,15 +37,28 @@ to_wsl_arg() {
     | sed -E 's|/mnt/([A-Z])/|/mnt/\l\1/|g'
 }
 
+# Translate FIRST, for every branch.
+#
+# The obvious shape — translate only when shelling into wsl.exe, on the grounds
+# that native tippecanoe implies native paths — is wrong, and cost a run to find
+# on 2026-08-13. On Windows, `bash` resolves to C:\WINDOWS\system32\bash.exe,
+# which is **WSL's bash, not Git Bash**. So this script is already executing
+# inside Linux, `command -v tippecanoe` succeeds, and the native branch runs with
+# the Windows paths Node built — `unable to open database file` on a path that
+# looks perfectly reasonable in the error message.
+#
+# Translating unconditionally is a no-op where there is nothing to translate: a
+# Linux CI runner never produces an argument that looks like `C:/…`.
+translated=()
+for arg in "$@"; do
+  translated+=("$(to_wsl_arg "$arg")")
+done
+
 if command -v tippecanoe >/dev/null 2>&1; then
-  exec tippecanoe "$@"
+  exec tippecanoe "${translated[@]}"
 fi
 
 if command -v wsl.exe >/dev/null 2>&1; then
-  translated=()
-  for arg in "$@"; do
-    translated+=("$(to_wsl_arg "$arg")")
-  done
 
   # Quote every argument for the remote shell, so paths with spaces survive.
   quoted=""

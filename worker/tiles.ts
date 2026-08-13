@@ -30,6 +30,32 @@ export const STORIES_LAYER = "stories";
 export const COUNTRY_LAYER = "country-top";
 
 /**
+ * **A forward-slash literal, never `path.join`.** This is an argument to `bash`,
+ * not a path for this process to open, and on Windows `path.join` returns
+ * `scripts\run-tippecanoe.sh` — which bash reads as an escaped `r`, and reports
+ * as `scriptsrun-tippecanoe.sh: No such file or directory`.
+ *
+ * The same family of bug as the `wslpath` note in `scripts/build-tiles.sh`, and
+ * it hid for as long as it did because it is **Windows-only**: `path.join` gives
+ * a forward slash on the Linux runner, so CI has always been fine and the dev
+ * machine could not run the worker at all. Measured 2026-08-13, the first time
+ * anyone ran `worker/run.ts` end to end on Windows.
+ */
+const SCRIPT = "scripts/run-tippecanoe.sh";
+
+/**
+ * A path as an argument to bash, not as a path for this process.
+ *
+ * Same hazard as `SCRIPT`, one level down: `path.join` builds these with
+ * backslashes on Windows, and they cross the same argv boundary that ate the
+ * script name. `run-tippecanoe.sh` does handle `C:\Users\x` — but only if the
+ * backslashes survive the trip, and its own comment records the contract as
+ * *"Node on Windows hands over C:/Users/x"*. This is that contract, made real
+ * rather than assumed. A no-op on Linux, where there is nothing to replace.
+ */
+const posix = (value: string): string => value.replaceAll("\\", "/");
+
+/**
  * §2.6 is link-out only: title, source, link. **Never article text.**
  *
  * That is a copyright constraint, and this function is where it is actually
@@ -109,11 +135,11 @@ export async function buildTiles(
     "-r1",
     "--drop-densest-as-needed",
     "-o",
-    outputPath,
+    posix(outputPath),
     "-L",
-    `${STORIES_LAYER}:${storiesFile}`,
+    `${STORIES_LAYER}:${posix(storiesFile)}`,
     "-L",
-    `${COUNTRY_LAYER}:${countryFile}`,
+    `${COUNTRY_LAYER}:${posix(countryFile)}`,
   ]);
 
   return {
@@ -132,7 +158,7 @@ export async function buildTiles(
  */
 function runTippecanoe(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("bash", [path.join("scripts", "run-tippecanoe.sh"), ...args], {
+    const child = spawn("bash", [SCRIPT, ...args], {
       stdio: ["ignore", "inherit", "inherit"],
     });
     child.on("error", reject);
