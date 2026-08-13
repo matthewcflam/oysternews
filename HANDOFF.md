@@ -167,15 +167,117 @@ would be noise.
 
 **Phase 4, remaining:**
 
-1. **Profile on a real mid-tier phone**, not a desktop throttle (§9).
-2. **`IN25` has no outline.** One Indian region in the first run joins to no
-   Natural Earth polygon. Deliberately not guessed.
-3. **Read the `panel` line on the next full-window run** and check the payload
-   against the 500 KB projection below. Nothing in §2.3 needs it before then.
+1. **Profile on a real mid-tier phone**, not a desktop throttle (§9). This is the
+   last item, and it needs hardware — nothing in this repo can stand in for it.
+
+**`IN25` is fixed, 2026-08-13, and it was not a missing polygon.** Natural Earth
+writes `fips: IN22` on **Tamil Nadu** — and on **Puducherry**, which is the code
+FIPS 10-4 actually assigns to Puducherry. GDELT emits **`IN25` for Tamil Nadu, 80
+mentions across the 12 committed GKG bundles**, never `IN22`. So NE contradicts
+itself and GDELT is unambiguous, which is what made this a correction rather than
+the §3.4 guess the plan was right to refuse.
+
+It was costing **two** bugs. `IN25` drew nothing — the known one — and a
+**Puducherry** container silently outlined *the whole of Tamil Nadu* along with
+it, because both polygons answered to `IN22`. Fixed by `ADM1_FIPS_OVERRIDES` in
+`scripts/build-boundaries.ts`; both verified in a browser afterwards.
+
+> **Natural Earth's `fips` is not a unique key, and the build now says so.**
+> 187 codes are carried by more than one admin-1 feature. Most are harmless — NE
+> splits a region into provinces that each carry the parent's code and together
+> compose it, which is what you want. The ones that are not harmless **cross a
+> border**, and `regionOutlines` now logs those loudly: **16 of them, 15 in the
+> Balkans** where NE's fips column is stale about Kosovo, Serbia, Montenegro and
+> North Macedonia, plus `ID28` (Indonesian Maluku against Timorese Lautém).
+> **Only one is reachable from real data** — `AE02`, Ajman against two Omani
+> governorates — so this is a warning, not a fix. Do not "fix" the other 15
+> without evidence from both sides, which is the rule that made `IN-TN` legal.
+
+**The `panel` payload is measured, 2026-08-13, against the live archive** — the
+item that was waiting on a full-window run. It has more than doubled:
+
+```
+  was  (10:08)   449 keys = 163 countries + 286 adm1   465 KB raw / 151 KB gz
+  now  (13:48)   903 keys = 191 countries + 712 adm1  1069 KB raw / 328 KB gz
+                 3,817 rows, 287 bytes per row
+```
+
+That is squarely on the projected trajectory toward ~500 KB, and adm1 coverage is
+still filling. **The two cheap cuts the plan proposed are now measured, and both
+are too small to matter**: capping adm1 at 5 rows instead of 10 saves 60 KB
+(328 → 268), and dropping `place` entirely saves 27 KB (328 → 301). The cost
+structure is 287 bytes × 3,817 rows, and the rows are title, source and url —
+the three things §2.6 says a row *is*.
+
+> **So the cut order is settled and it is not `place`.** Trim `REGION_TOP_N` for
+> adm1 keys first; `place` last, and reluctantly, because since 2026-08-13 naming
+> the place is the geotag-confidence treatment (§5.2 decision 3) and the panel
+> would be saying less than the popup for 8% of the payload.
+>
+> **The real lever, when it binds, is architectural**: the panel needs *one*
+> region and downloads all 903. A per-region key would make it a ~3 KB fetch, at
+> the cost of many small Blob writes per run instead of one. **Do not build it
+> yet** — the index is lazy, fetched on first panel open and not at load, so it
+> costs nothing against §9's first-paint target. Revisit when it clears ~500 KB
+> or when a phone profile says the panel is slow to open.
 
 **Still outstanding and only the human can do it:** §5.2 decision 4 — *"Before
 Phase 4 ships, get an independent judge on a fresh rule-H draw."* The same party
 designed rule H and scored it, which is the weakest link in the evidence.
+
+> **Decide what a disagreement means BEFORE the draw is judged.** §5.1's abort
+> criterion is still live and its tie-break is the *lower bound*: pins under 50%
+> stops the project. The pins' lower bound is **52.7% on n=33**, so 2.7 points of
+> margin on a small sample. Deciding after the number arrives is precisely what
+> pre-registration exists to prevent, and this project has already honoured one
+> firing criterion — that is most of what makes the evidence worth anything.
+
+---
+
+## OPEN INCIDENT — the count band is refusing runs again, 2026-08-13
+
+**The 17:13 UTC scheduled run failed and the map has not moved since 13:48 UTC.**
+Runs #4 and #5 succeeded, so this is not the Blob token. Diagnosed from the
+public store rather than the Action log (which needs auth):
+
+```
+  publish history   6718, 7145, 8095, 14360      median 7620
+  count band        [3048, 19050]                 = [0.4x, 2.5x] of the median
+  growth rate       8095 (10:15) -> 14360 (13:45) = ~1,790 groups/hour
+  projected 17:13   14360 + ~6,200  =  ~20,500    > 19,050, so the band refuses
+```
+
+`run.ts` sets `process.exitCode = 1` when nothing is published, which is exactly
+the shape of the failure (`Run the pipeline`, with the archive uploaded by the
+on-failure step — so the pipeline got as far as building tiles).
+
+**This is the trap of 2026-08-13 morning wearing its other face.** That one was
+the *lower* bound: a median from smoke runs refusing real ones. This is the
+*upper* bound, and the cause is the same — **the band's reference set has to be
+runs comparable to this one, and a pool that is still filling makes every earlier
+run incomparable.** A refused run does not append to history, so the median
+cannot catch up on its own.
+
+**It self-heals, slowly and repeatedly.** `BAND_RELAX_AFTER_MS` stands the band
+down 8 hours after the last success, so the run at/after **21:48 UTC** should
+publish with a loud `WARN`. Then the median moves to 8095, the band becomes
+[3238, 20238], and a ~22k run **refuses again**. Expect roughly two more
+relax-publish-refuse cycles — call it 16-24 hours of a map that moves once per 8
+hours — until the pool stabilises and `HISTORY_LIMIT = 24` ages the three
+bootstrap entries out. **That prediction is falsifiable: if the next success is
+not stamped `bandRelaxed`, this diagnosis is wrong.**
+
+**Two fixes, and the second is the one that matters:**
+
+1. **Reset the history** to the single most recent entry, as on 2026-08-13
+   morning. Restores service in one run. It is a write to the live store, so it
+   needs a human.
+2. **Band against the most recent successful run rather than the trailing
+   median.** A median is the wrong statistic for a quantity with a trend in it —
+   it lags by design, which is the whole defect. The most recent run tracks
+   growth while still catching a sudden 2.5× jump or collapse, which is all the
+   band was ever for. **This is a change to a guard that has now bitten twice, so
+   it wants a decision and a test, not a quiet edit.**
 
 **3G, verified in a browser on 2026-08-12.** Four checks, all against the live
 Blob archive rather than a build:
@@ -259,6 +361,23 @@ Two things that run surfaced, neither a bug:
   > on. §2.3's region panel now reaches those stories, which softens the symptom
   > and does nothing about the cause — do not let it become the reason this is
   > never revisited.
+  >
+  > **DECIDED 2026-08-13: accept it. Overflow is the budget working, not a
+  > defect, and the panel is the reachability mechanism.** Two things settle it.
+  > First, **the zoom ceiling cannot help**: GDELT gives city centroids, so every
+  > Chicago story shares one coordinate (§6 decision 1) and deferred stories at
+  > the same point do not separate however far you zoom. Raising z12 buys
+  > nothing. That leaves `K` as the only lever that puts these on the *map*, and
+  > `K` is exactly what sets the ~30-60 pins §9 requires — so surfacing them
+  > costs the readability the budget exists to protect.
+  >
+  > Second, and this is the product answer rather than the mechanical one:
+  > **the map is meant to show the most salient stories, not all of them.** A
+  > feed of 42,000 groups a day was never going to be a map. Exclusion is the
+  > feature. The warning above still stands as written — do not let the panel
+  > excuse a *broken* budget — but "a third of the feed is not on the map" is
+  > not by itself evidence of one. **Revisit if overflow passes ~50%**, which
+  > would mean the budget is deferring stories a reader would call top-of-mind.
 - **`unknown FIPS code TL on 1 stories`.** §8's loud-log path, working. It is
   deliberately NOT fixed: FIPS 10-4 `TL` is **Tokelau**, while ISO `TL` is
   **Timor-Leste**, and guessing which one GDELT meant is exactly the §3.4 trap
@@ -278,9 +397,10 @@ long-standing open item. Evidence, 2026-08-12: fetching the style URL with `curl
 same URL loads normally from the browser at `localhost:3000`. That is the
 signature of a referer allowlist that includes localhost.
 
-**Not yet confirmed from here: that the allowlist also contains the Vercel
-domain.** Nothing in this repo can check it, and getting it wrong breaks the
-basemap in production only. Load the deployed site and confirm the basemap draws.
+**Confirmed 2026-08-13: the allowlist contains the Vercel domain.** Loaded
+`https://sonder-drab-eta.vercel.app/` in a browser: the style, `tiles.json`, all
+three sprite pairs and the glyph ranges return **200**, the basemap draws, and
+the pins draw over it. This was the last unverified item in §2.6's basemap chain.
 
 **Done 2026-08-12:** the Blob store exists and is **public** (`BLOB_READ_WRITE_TOKEN`
 in `.env.local` and in the Action secrets), and the dead-man switch is a
@@ -1339,10 +1459,10 @@ content model. No topic classification is needed anywhere in this project.
 | 5 | ~~Red-outline precedence when two are lit~~ | **RESOLVED 2026-08-13 — there is never more than one.** Every click clears both outlines and the panel before it establishes anything, so a container click inside a locked region *replaces* the region outline rather than joining it | The row assumed a region lock and a §2.2 container click-reveal could be lit together and proposed distinguishing them by weight. Building it made the simpler answer obvious: one red outline and one panel, or the user cannot say which of the two the map claims is selected. Two lit outlines with a weight difference asks the reader to decode a legend that is not on screen. If two ever do need to co-exist, the brighter-and-thicker treatment is still the right shape — do not introduce a second colour |
 | 6 | ~~Country auto-zoom level~~ | **SUPERSEDED 2026-08-13** | §2.3 no longer moves the camera when a region is selected, so there is no country fit to compute. The Global button is the only camera move left, and its target is fixed (whole planet). Kept as a row because the reasoning — a fixed zoom is wrong for both Monaco and Russia — returns the moment anyone re-proposes auto-zoom |
 | 7 | Blob transfer allowance | unverified | Ten minutes. The one free-tier limit that could actually bind |
-| 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Still pending the one `sudo` password.** Docker 29.0.1 is installed with its daemon stopped and is the unused fallback |
-| 9 | Tier-1 list membership | keep all **28** domains as-is; review once real data flows in Phase 3 | The list now *grants* precedence instead of measuring coverage (§2.5), so membership is load-bearing. `newsweek.com` and `latimes.com` are 26% of the tier-1 records actually present, and both are more arguable as papers of record than the wires that returned zero. Trimming them would shrink an already 1%-thin signal, so the provisional call is to keep them and look at real placements before editing. Absent domains cost nothing — if GDELT starts crawling Reuters, it just works |
+| 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Installed and in use since 2026-08-10.** `wsl -d Ubuntu -- which tippecanoe` answers `/usr/bin/tippecanoe`, and it built both the Phase 2 archive and the 2026-08-13 boundaries rebuild. This row read *"still pending the one `sudo` password"* until 2026-08-13, three days after it stopped being true — §0 rule 1. Docker 29.0.1 is installed with its daemon stopped and is the unused fallback |
+| 9 | Tier-1 list membership | **RESOLVED 2026-08-13 — keep all 28, unchanged.** The concern that forced this row does not survive real data | The row was provisional because `newsweek.com` and `latimes.com` — the two members most arguable as papers of record — were **26% of the tier-1 records in the three-hour spike**, so the thinnest part of the list was carrying a quarter of a privileged class. **Measured on the live 24-hour index, they are 4% and 5%.** The class is now led by `independent.co.uk` 16%, `scmp.com` 16%, `theguardian.com` 16%, `bbc.co.uk` 15%, with `aljazeera.com` present at 6% after returning **zero** in the spike. The spike's ranking was a small-sample artifact, and the list now looks like what it was built to be. 15 of 28 domains still return nothing (Reuters, AP, NYT, WaPo, WSJ…) and still cost nothing. Also measured: tier-1 is **1.9% of groups but 6.2% of panel rows** — the §2.5 comparator promoting them roughly threefold, which is the rule working, visible for the first time |
 | 10 | Tier-1 freshness clock | **newest** tier-1 article in the group | "Published in the last 48 hours" against the *oldest* would expire a story that a tier-1 outlet is still actively covering. Newest means a follow-up piece renews the 48 hours, which reads as the same story continuing — matching "unless it is replaced by another tier-1 story" |
-| 11 | Basemap provider and billing unit | **RESOLVED 2026-08-10 — MapLibre GL JS + MapTiler, per-request billing.** Google Maps was investigated and rejected | **Google would work**: the Map Tiles API serves 2D tiles over a `{z}/{x}/{y}` template that drops into a MapLibre `raster` source, third-party renderers are explicitly contemplated in its policies, roadmap tiles are custom-stylable, and it is 100k tiles/mo free then $0.60/1k with *graceful* overflow instead of a pause. Rejected anyway: the tiles are **raster**, which fights §9's <2.5s-on-4G target and needs `scaleFactor2x` for retina (halving the free tier), it requires a **credit card** against §2.6's "free tier everywhere," its logo rules cost real phone screen, and `createSession` turns `basemap()` from a pure function into an async stateful one — losing §3.1's one-line escape hatch. **MapTiler SDK** (per-session, 5,000/mo, ~10-15× the headroom) is the stronger economic option and was also declined: the headroom is theoretical at portfolio traffic, and the SDK is MapTiler-specific, which kills the OpenFreeMap swap that made this whole investigation possible without a key. Deferring is cheap — the SDK wraps MapLibre, so switching stays small. **Revisit above ~200 visits/month.** Evidence and measurements: `spikes/basemap/CASE-STUDY.md` |
+| 11 | Basemap provider and billing unit | **RESOLVED 2026-08-10 — MapLibre GL JS + MapTiler, per-request billing.** Google Maps was investigated and rejected | **Google would work**: the Map Tiles API serves 2D tiles over a `{z}/{x}/{y}` template that drops into a MapLibre `raster` source, third-party renderers are explicitly contemplated in its policies, roadmap tiles are custom-stylable, and it is 100k tiles/mo free then $0.60/1k with *graceful* overflow instead of a pause. Rejected anyway: the tiles are **raster**, which fights §9's <2.5s-on-4G target and needs `scaleFactor2x` for retina (halving the free tier), it requires a **credit card** against §2.6's "free tier everywhere," its logo rules cost real phone screen, and `createSession` turns `basemap()` from a pure function into an async stateful one — losing §3.1's one-line escape hatch. **MapTiler SDK** (per-session, 5,000/mo, ~10-15× the headroom) is the stronger economic option and was also declined: the headroom is theoretical at portfolio traffic, and the SDK is MapTiler-specific, which kills the OpenFreeMap swap that made this whole investigation possible without a key. Deferring is cheap — the SDK wraps MapLibre, so switching stays small. **Revisit above ~200 visits/month.** Evidence and measurements: `spikes/basemap/CASE-STUDY.md`. **2026-08-13: that trigger now has a trigger.** Nothing in the repo measured visits, so "revisit above ~200/month" could only ever fire by accident; `@vercel/analytics` is in `app/layout.tsx` (free on Hobby, one script, no consent banner, §2.6 intact). **Stay on MapTiler until it reads above ~200**, and treat the OpenFreeMap swap as the escape hatch already owned rather than a pre-emptive move: OpenFreeMap draws **state labels only at z5-8** against MapTiler's z2-11, so switching now would quietly cost most of §2.3's state gesture at the zooms visitors arrive at |
 
 ---
 
