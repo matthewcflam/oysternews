@@ -70,7 +70,7 @@ jobs:
       # re-running it. Kept short because it is debugging material, not a backup.
       - name: Upload the archive on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: stories-pmtiles-${{ github.run_id }}
           path: build/stories.pmtiles

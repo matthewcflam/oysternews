@@ -46,6 +46,7 @@ import { placeStory } from "./place.ts";
 import {
   MANIFEST_KEY,
   type ArchiveStore,
+  assertStoreReachable,
   pingHealthcheck,
   publish,
   vercelBlobStore,
@@ -314,9 +315,15 @@ export function formatSummary(summary: RunSummary): string {
 async function main(): Promise<void> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) throw new Error("BLOB_READ_WRITE_TOKEN is not set");
+  const store = vercelBlobStore(token);
+
+  // Here rather than inside run(): the credential enters the process at this
+  // line and nowhere else, and run() takes an injected store precisely so a
+  // caller can hand it a fake. A reachability probe belongs to the real one.
+  await assertStoreReachable(store);
 
   const summary = await run({
-    store: vercelBlobStore(token),
+    store,
     healthcheckUrl: process.env.HEALTHCHECK_URL,
     cap: process.env.BUNDLE_CAP ? Number(process.env.BUNDLE_CAP) : undefined,
   });

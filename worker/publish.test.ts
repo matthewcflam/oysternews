@@ -6,6 +6,7 @@ import type { StoryGroup } from "../lib/types.ts";
 import {
   ARCHIVE_PREFIX,
   type ArchiveStore,
+  assertStoreReachable,
   HISTORY_KEY,
   type HistoryEntry,
   MANIFEST_KEY,
@@ -342,6 +343,26 @@ describe("publish", () => {
       now: NOW,
     });
     expect(result.published).toBe(true);
+  });
+});
+
+describe("assertStoreReachable", () => {
+  it("passes on a store the token can read", async () => {
+    await expect(assertStoreReachable(memoryStore())).resolves.toBeUndefined();
+  });
+
+  it("names the token, and keeps the underlying error as the cause", async () => {
+    // The regression: a bad token used to surface as a bare 403 from inside
+    // appendShards, four steps downstream, because every read swallows its own
+    // failure as "not written yet". The message has to say BLOB_READ_WRITE_TOKEN
+    // — that is the entire point of the check.
+    const store = memoryStore();
+    const cause = new Error('HTTP 403 {"code":"forbidden","message":"Cannot get store id from token"}');
+    store.list = async () => {
+      throw cause;
+    };
+    await expect(assertStoreReachable(store)).rejects.toThrow("BLOB_READ_WRITE_TOKEN");
+    await expect(assertStoreReachable(store)).rejects.toMatchObject({ cause });
   });
 });
 
