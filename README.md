@@ -27,9 +27,17 @@ The rest are for working on the pipeline rather than the map:
 
 ```bash
 npm run gkg            # fetch one GKG bundle -> build/stories.geojson
-npm run worker         # the full 4-hourly pipeline, once, locally
+npm run worker         # the full 4-hourly pipeline, once, locally — PUBLISHES
 npm run boundaries     # rebuild public/boundaries.pmtiles from Natural Earth
 ```
+
+> **`npm run worker` is not a dry run.** It writes state shards, flips the live
+> manifest, and moves the deployed map to the archive it just built. There is no
+> `--dry-run`. `BUNDLE_CAP=1` limits the *fetch* and not the *publish* — the pool
+> is a rolling 24-hour window, so a one-bundle run still publishes the whole
+> window and is a fully comparable entry in the publish history. It will not ping
+> the dead-man switch, because `HEALTHCHECK_URL` is deliberately absent from
+> `.env.local` (HANDOFF §8).
 
 Tiling needs tippecanoe, which on Windows means WSL:
 `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`.
@@ -149,6 +157,8 @@ lib/
   layers.ts              the layer specs — product rules, hence layers.test.ts
 worker/                  the 4-hourly pipeline: fetch, place, group, budget,
                          tile, publish. run.ts is the entry point
+  regions.ts             per-region top-N index — what the §2.3 panel reads,
+                         because the tiles cannot answer that question
 data/
   demonyms.txt           the demonym blocklist the audit made necessary
   crosswalk.json         FIPS 10-4 -> ISO, generated; fips-overrides.json on top
