@@ -370,6 +370,40 @@ export type PublishResult =
   | { published: true; manifest: Manifest; stats: PublishStats; pruned: number }
   | { published: false; violations: string[]; stats: PublishStats };
 
+/**
+ * Fail fast on a token that cannot reach the store.
+ *
+ * **Every read in this pipeline swallows its own errors**, and each one has a
+ * good reason to: `lastWatermark` and `readHistory` both treat a failure as "not
+ * written yet", which is the correct reading on a first run and must not block
+ * publication. The cost is that a credential failure is invisible until the
+ * first *write* — measured 2026-08-13, when a stale `BLOB_READ_WRITE_TOKEN` in
+ * the Action secrets sailed past the manifest read, made the run believe it had
+ * no watermark and refetch the whole window, and then died four steps later at
+ * `appendShards` with a bare 403 from inside `state.ts`. Nothing in that stack
+ * trace named the token.
+ *
+ * One authenticated `list` at startup turns that into one line. It is billed as
+ * an "advanced operation", so this must stay at one call per run — which is why
+ * it is a named assertion called once from the entry point, and not a check
+ * folded into `get`.
+ */
+export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
+  try {
+    await store.list(ARCHIVE_PREFIX);
+  } catch (cause) {
+    throw new Error(
+      "BLOB_READ_WRITE_TOKEN cannot reach the Blob store. The token is the whole " +
+        "of the store's identity — `vercel_blob_rw_<storeId>_<secret>` — so this is " +
+        "a stale, truncated or quoted token rather than a permissions setting. " +
+        "GitHub stores a secret literally: surrounding quotes copied out of " +
+        ".env.local become part of the value, and `node --env-file` strips them " +
+        "locally, so the same token can work here and fail in Actions.",
+      { cause },
+    );
+  }
+}
+
 export async function readHistory(store: ArchiveStore): Promise<HistoryEntry[]> {
   try {
     const parsed = JSON.parse(await store.get(HISTORY_KEY)) as unknown;

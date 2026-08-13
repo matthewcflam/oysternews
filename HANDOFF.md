@@ -7,7 +7,10 @@ doc, or a previous conversation contradicts it, this file wins.
 publishes to Vercel Blob, and the browser now follows `manifest.json` — the map
 updates itself with no deploy. **Next: Phase 4** (styling, salience, the popup
 treatment). Live: https://sonder-drab-eta.vercel.app/ .
-**Last updated:** 2026-08-12, after Phase 3G connected the browser.
+**Last updated:** 2026-08-13, after the first scheduled runs failed on a bad Blob
+token and the first full-window run published 6,718 groups. **Read the publish-band
+warning below before the next run** — the band is now armed and its trailing median
+is two smoke runs.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -127,6 +130,26 @@ is deliberately **not** in `.env.local`: a local run pinging it would tell the
 switch the worker ran when it did not, which is the exact false negative the
 switch exists to catch.
 
+**The first two scheduled runs both failed, 2026-08-13, and the cause is a third
+Blob trap: the Action secret held a token the store could not parse.**
+`{"code":"forbidden","message":"Cannot get store id from token or header"}` on the
+first shard write. The token *is* the store's identity — `vercel_blob_rw_<storeId>_<secret>`
+— so a stale, truncated, or **quoted** value is a different store, not a weaker
+permission. `.env.local` writes the value in quotes and `node --env-file` strips
+them; GitHub stores a secret literally, so the same token works locally and 403s
+in Actions. Fixed by re-pasting the value alone.
+
+**What made that expensive is worth more than the fix.** Every read in the
+pipeline swallows its own errors, and each one is right to — `lastWatermark` and
+`readHistory` both have to read "not written yet" as normal on a first run. So a
+dead credential sailed past the manifest read, made the run believe it had no
+watermark, refetched the whole window, and died four steps later inside
+`state.ts` with a bare 403 that named nothing. `assertStoreReachable()` now runs
+one authenticated `list` at the top of `main()` and turns that into one line. It
+is billed as an advanced operation, so it must stay **one call per run** — that
+is why it is a named assertion at the entry point rather than a check folded into
+`get`.
+
 **Two Vercel Blob traps, both measured on 2026-08-12** and both recorded in
 `worker/publish.ts`'s header:
 
@@ -141,6 +164,22 @@ switch exists to catch.
    overwrites `manifest.json` happily, but **anyone swapping in `@vercel/blob`
    must pass `allowOverwrite: true`** or every run after the first dies at the
    manifest write, having already uploaded its archive.
+
+> **OPEN, and it will fail the next run: the count band is armed on a poisoned
+> median.** The first full-window run (2026-08-13 09:11 UTC, 12 bundles) published
+> **6,718 groups, 161 countries, 107 tier-1** — against a history whose other two
+> entries are 1-bundle smoke runs at 846 and 1,467. That is the third entry, so
+> `BAND_MIN_HISTORY` is now met and the band is live at **median 1,467 → [586,
+> 3,668]**. A steady-state run is several times that and climbs further as the
+> 24-hour pool fills, so the next run publishes nothing — **and a refused run does
+> not append to history**, so the median never moves and the refusal is permanent.
+> Fail-closed becomes fail-forever.
+>
+> The band was designed for steady state, where the window is full and volume
+> swings ~2× (§4). It has no notion of a pipeline still filling its own window,
+> where 2-5× growth per run is correct behaviour. The low side still does its job;
+> the high side is what misfires. Decide before the next scheduled run —
+> §6 wants this as a decision, not a silent threshold nudge.
 
 The rest of `vercelBlobStore` is now verified against the live store rather than
 against the docs: stable keys, text and binary round-trips, `cache-control`
