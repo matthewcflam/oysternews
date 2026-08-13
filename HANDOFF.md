@@ -37,6 +37,27 @@ without a deploy.
 - **A dev-only `window.__sonderMap` seam**, stripped from production builds
   (verified: 0 occurrences in `.next/static`).
 
+**§2.3 was redesigned 2026-08-13 and the worker half is built.** Clicking a
+**country or state label on the basemap** outlines that region red and opens a
+left-side panel of its top stories. The camera does not move — that is a change
+from the original §2.3, made deliberately. See §2.3 for the rule and for the two
+measurements that shaped it.
+
+The panel's data is a **published per-region index**, `archives/regions-<hash>.json`,
+written by `worker/regions.ts` and pointed at by the manifest's `regionsUrl`.
+**It could not be queried from the tiles**: the §2.4 budget bakes deferred
+stories into higher-zoom tiles, so a country's tile at world zoom does not
+contain them, and a panel built on `queryRenderedFeatures` would call one floor
+pin "Pakistan's top stories".
+
+Measured on the live pool, 2026-08-13: **161 countries, 962 rows, 258 KB raw /
+82 KB gzipped** at `REGION_TOP_N = 10`, 66 regions at the cap and 37 with a
+single story. **Zero admin-1 regions in that measurement, and that is expected**
+— `adm1` did not exist when those shards were written. **State panels therefore
+fill in over 24 hours** as pre-change shards expire, and the payload will grow
+with them; re-measure from the run summary's `panel` line rather than trusting
+the 82 KB.
+
 **Phase 4, remaining:**
 
 1. **The three §2.3 UI states.** Country lock-on with auto-zoom and a corner
@@ -98,6 +119,14 @@ Two things that run surfaced, neither a bug:
   z12, so they are in the pipeline and not on the map. That is the §2.4 budget
   doing its job, but it is worth watching: if it climbs toward a majority, `k`
   or the zoom ceiling (§6 decision 1) wants revisiting rather than the budget.
+
+  > **It climbed. Measured 2026-08-13 on a full window: 2,453 of 7,145 — 34%,
+  > up from 14%.** The window filling is exactly when this was expected to grow,
+  > so it is not yet a fault, but it is a third of the feed unreachable at any
+  > zoom and it is heading toward the majority that §6 decision 1 says to act
+  > on. §2.3's region panel now reaches those stories, which softens the symptom
+  > and does nothing about the cause — do not let it become the reason this is
+  > never revisited.
 - **`unknown FIPS code TL on 1 stories`.** §8's loud-log path, working. It is
   deliberately NOT fixed: FIPS 10-4 `TL` is **Tokelau**, while ISO `TL` is
   **Timor-Leste**, and guessing which one GDELT meant is exactly the §3.4 trap
@@ -405,22 +434,64 @@ Tier-1 priority (§2.5) is part of that single comparator, not a fourth state an
 not a filter. There is no tier-1 toggle and no tier-1 badge; the preference is
 invisible except in *which* stories are on screen.
 
-| State | Camera | Red outline | Content |
-|---|---|---|---|
-| **Default** | free pan and zoom anywhere | **none** | per-tile top-K |
-| **Country** | locks onto a country, auto-zooms in | the selected country | per-tile top-K |
-| **Global** | a corner button; resets zoom to default | none | per-tile top-K |
+| State | Camera | Red outline | Panel | Map content |
+|---|---|---|---|---|
+| **Default** | free pan and zoom anywhere | **none** | closed | per-tile top-K |
+| **Region** | **unchanged** | the clicked country or state | that region's top stories | per-tile top-K |
+| **Global** | a corner button; resets zoom to default | none | closed | per-tile top-K |
 
 **Default** is the base state. The user scrolls freely and zooms wherever they
 like; zooming in makes more stories in that area reachable.
 
-**Country** locks focus onto one country, outlines it red, and auto-zooms. The
-zoom is what surfaces more of that country's stories — more tiles cover the same
-country, so stories that lost the budget at world zoom now win. Nothing about the
-*content* logic changes.
+**Region** is entered by **clicking a country or state label on the basemap**.
+That region outlines red and a left-side panel opens listing its top stories.
+The camera does not move.
 
 **Global** is not a structural state. It is a preset of Default that returns the
-camera to whole-planet zoom.
+camera to whole-planet zoom and closes the panel.
+
+> **This replaced the original "Country" state on 2026-08-13, and two things
+> changed.** The old rule locked onto a country and auto-zoomed, on the theory
+> that the zoom is what surfaces more of that country's stories. The panel does
+> that directly, so the zoom stopped being the mechanism and became merely a
+> camera move the user did not ask for.
+>
+> **The label is what makes the gesture unambiguous.** Clicking a landmass cannot
+> tell "California" from "the United States"; clicking the *word* California can.
+> That is the whole reason the gesture is label-based.
+>
+> **The panel is still one content model.** Its ordering is `compareGroups` —
+> the same comparator the tile budget and the country floor use. It does not
+> re-rank, does not filter by tier-1, and carries no badge. §2.6 applies as hard
+> as in the popup: title, source, link, never article text, enforced by the
+> `RegionStory` type being the whole of what a panel row can hold.
+>
+> **It does reach stories the map cannot.** A group whose `minzoom` landed above
+> the z12 ceiling is in the pipeline and not on the map — 34% of the feed as of
+> 2026-08-13, see §2.4. The panel lists it, because it is genuinely one of that
+> region's top stories. This is the one place the panel shows something the map
+> does not, and it is deliberate.
+
+> **Two measurements shaped this, both taken before it was built.**
+>
+> 1. **The two basemaps do not share a label schema.** MapTiler's `planet_v4`
+>    uses separate source-layers (`country_label`, `state_label`); OpenFreeMap
+>    uses OpenMapTiles' single `place` layer discriminated by `class`. A hit-test
+>    must accept both, and **MapTiler has already changed schemas once** — if
+>    they do it again the gesture stops working with no error and no console
+>    warning, which is §11's failure shape. It needs a test, not a comment.
+> 2. **Label zoom ranges differ, and one bites on arrival.** Country labels are
+>    z2-12 on MapTiler and z0-9 on OpenFreeMap; state labels z2-11 and **z5-8**
+>    respectively. The default camera is z1.5, so **on the production basemap
+>    there are no country labels on screen when the map first loads.** The
+>    default zoom has to move to z2, which is forced rather than chosen.
+>
+> **State labels carry no region code on either provider** — MapTiler has
+> `iso_a2` + `admin_level`, OpenFreeMap has only a name. Joining "California" to
+> `USCA` by name is §3.4's join trap wearing a new hat. So the label supplies
+> only the *level* (country or state); the region id comes from hit-testing our
+> own `boundaries.pmtiles` at the label's anchor. **No name matching anywhere**,
+> and the id is by construction one the outline archive can draw.
 
 > **Screen density stays roughly constant across zoom levels** — 2-4 visible
 > tiles × K, so ~30-60 pins whether you are looking at the planet or at one city.

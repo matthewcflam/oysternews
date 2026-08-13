@@ -258,6 +258,7 @@ function buildGroup(members: PlacedArticle[], now: number): StoryGroup {
     kind: face.kind,
     countryCode: face.countryCode,
     regionId: face.regionId,
+    adm1: face.adm1,
     placeName: face.placeName,
     minzoom: 0,
     ...stats,

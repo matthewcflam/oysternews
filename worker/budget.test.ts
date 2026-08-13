@@ -14,6 +14,7 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
     kind: "PIN",
     countryCode: "US",
     regionId: "",
+    adm1: "",
     placeName: "p",
     distinctDomains: 1,
     distinctSourceCountries: 0,

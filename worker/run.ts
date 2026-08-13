@@ -52,6 +52,7 @@ import {
   vercelBlobStore,
 } from "./publish.ts";
 import { rankGroups } from "./rank.ts";
+import { buildRegionIndex, indexStats } from "./regions.ts";
 import { type RefData, assertUsable, loadRefData, sourceCountry } from "./refdata.ts";
 import { appendShards, pruneShards, readPool } from "./state.ts";
 import { buildTiles } from "./tiles.ts";
@@ -95,6 +96,9 @@ export function toPlaced(
     kind: placement.kind,
     countryCode: location.countryCode,
     regionId: placement.kind === "CONTAINER" ? placement.regionId : "",
+    // Every placement, not just containers — see PlacedArticle.adm1. A country
+    // location carries no adm1Code at all, which is correctly "".
+    adm1: location.adm1Code,
     placeName: location.name,
     sourceCountry: sourceCountry(article.domain, data),
     tier1: data.tier1.has(article.domain),
@@ -137,6 +141,9 @@ export type RunSummary = {
   tier1Groups: number;
   countryTop: number;
   overflow: number;
+  /** §2.3's panel index: regions covered and total rows. */
+  regions: number;
+  regionRows: number;
   published: boolean;
   /** The count band stood down because publication had been blocked past 2× cadence. */
   bandRelaxed: boolean;
@@ -223,6 +230,11 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   const { groups: budgeted, overflow } = assignMinzoom(ranked);
   const countryTop = countryTopGroups(budgeted);
 
+  // Built from the budgeted groups, which is every group in the window — the
+  // panel deliberately reaches stories the z12 ceiling drops (§2.4 overflow).
+  const regions = buildRegionIndex(budgeted);
+  const regionStats = indexStats(regions);
+
   // --- tiles ---------------------------------------------------------------
   await buildTiles(budgeted, countryTop, WORK_DIR, ARCHIVE_PATH);
 
@@ -231,6 +243,7 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     store,
     archivePath: ARCHIVE_PATH,
     groups: budgeted,
+    regions,
     watermark: newestFetched,
     now,
   });
@@ -265,6 +278,10 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     tier1Groups: budgeted.filter((group) => group.tier1Fresh).length,
     countryTop: countryTop.length,
     overflow,
+    // Named, not spread: indexStats returns `rows`, and this object already has
+    // a `rows` meaning parsed GKG rows. Spreading silently overwrote it.
+    regions: regionStats.regions,
+    regionRows: regionStats.rows,
     published: result.published,
     bandRelaxed: result.published ? result.bandRelaxed : false,
     violations: result.published ? [] : result.violations,
@@ -287,6 +304,7 @@ export function formatSummary(summary: RunSummary): string {
     `place        ${summary.placed} placed, ${summary.dropped} dropped`,
     `pool         ${summary.poolSize} articles from ${summary.shardsRead} shards (${summary.duplicatesDropped} dupes, ${summary.badLines} bad lines)`,
     `groups       ${summary.groups} groups, ${summary.tier1Groups} tier-1, ${summary.countryTop} country-top, ${summary.overflow} overflow`,
+    `panel        ${summary.regions} regions indexed, ${summary.regionRows} rows`,
   ];
 
   // §8: a schema change shows up here first, as a nonzero short-row count.

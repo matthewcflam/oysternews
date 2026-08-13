@@ -84,6 +84,19 @@ export type PlacedArticle = {
   countryCode: string;
   /** For containers: the region this pin represents. Empty for pins. */
   regionId: string;
+  /**
+   * FIPS admin-1 code of wherever the story was placed (`USCA`), "" when the
+   * location has none — a country-level container, or a city GDELT did not
+   * attribute to a region.
+   *
+   * **Distinct from `regionId`, and carried for PINs too.** `regionId` answers
+   * "what does this container represent", so it is empty on a pin by design.
+   * This answers "what region is this story IN", which a pin very much has. The
+   * §2.3 region panel needs the second question: pins are 33.5% of the feed, so
+   * a panel built on `regionId` alone would show a state's containers and
+   * silently omit a third of its news.
+   */
+  adm1: string;
   /** Display name of the place, for debugging and the container label. */
   placeName: string;
   /** ISO country of the *publisher*, inferred from the domain. "" when unknown. */
@@ -108,6 +121,8 @@ export type StoryGroup = {
   kind: "PIN" | "CONTAINER";
   countryCode: string;
   regionId: string;
+  /** Admin-1 the group sits in, pins included. See PlacedArticle.adm1. */
+  adm1: string;
   placeName: string;
   /** Distinct publishing domains across the group — the primary salience term. */
   distinctDomains: number;
@@ -131,6 +146,15 @@ export type Manifest = {
   archive: string;
   /** Absolute URL of the archive. */
   url: string;
+  /**
+   * Absolute URL of the per-region story index (§2.3's panel), content-hashed
+   * and immutable like the archive.
+   *
+   * Optional because a manifest published before the index existed is still a
+   * valid manifest, and the browser must keep rendering the map from it rather
+   * than failing over a panel it cannot open yet.
+   */
+  regionsUrl?: string;
   /** ISO timestamp of the run that produced it — drives the §2.3 freshness stamp. */
   generatedAt: string;
   /** Newest GKG bundle included, YYYYMMDDHHMMSS. */
