@@ -155,6 +155,10 @@ lib/
   basemap.ts             MapTiler style, with a one-line OpenFreeMap escape hatch
   manifest.ts            how the browser finds the published archive
   layers.ts              the layer specs — product rules, hence layers.test.ts
+  labels.ts              which basemap feature is a country or state label, on
+                         two providers that do not share a schema (§2.3)
+  regions.ts             the browser's side of the region index: lazy fetch,
+                         one row lookup, the panel's age line
 worker/                  the 4-hourly pipeline: fetch, place, group, budget,
                          tile, publish. run.ts is the entry point
   regions.ts             per-region top-N index — what the §2.3 panel reads,

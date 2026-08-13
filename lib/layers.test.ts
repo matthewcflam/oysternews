@@ -17,6 +17,7 @@ import {
   STORIES_LAYER_ID,
   STORIES_SOURCE_LAYER,
   boundaryLayers,
+  firstPlaceLabelLayerId,
   hitLayers,
   matchId,
   outlineFor,
@@ -38,9 +39,12 @@ const propertiesRead = (value: unknown, found: string[] = []): string[] => {
 };
 
 describe("storyLayers", () => {
-  it("puts country-top under stories, and labels over both", () => {
+  it("puts country-top under stories, with the headlines last", () => {
     // Order is the whole mechanism for resolving the overlap between the two
-    // layers. A reordering would silently reintroduce the low-zoom double draw.
+    // circle layers. A reordering would silently reintroduce the low-zoom
+    // double draw. The headline layer is last here but is NOT appended to the
+    // style — MapView inserts it below the basemap's place labels, so §2.3's
+    // clickable country and state names win the symbol collision.
     expect(layers.map((layer) => layer.id)).toEqual([
       COUNTRY_LAYER_ID,
       STORIES_LAYER_ID,
@@ -95,6 +99,35 @@ describe("storyLayers", () => {
 
   it("sizes pins by salience, the §2.5 comparator's own term", () => {
     expect(propertiesRead(stories.paint?.["circle-radius"])).toContain("salience");
+  });
+});
+
+describe("firstPlaceLabelLayerId", () => {
+  // The two live styles, 2026-08-13. MapTiler splits its label layers by
+  // source-layer; OpenFreeMap puts everything in `place`.
+  const maptiler = [
+    { id: "Water", "source-layer": "water" },
+    { id: "State labels z2", "source-layer": "state_label" },
+    { id: "Country labels", "source-layer": "country_label" },
+  ];
+  const openfreemap = [
+    { id: "water", "source-layer": "water" },
+    { id: "label_country_1", "source-layer": "place" },
+    { id: "label_state", "source-layer": "place" },
+  ];
+
+  it("finds the FIRST place-label layer on either provider", () => {
+    // First, not last: inserting before the topmost place-label layer is what
+    // puts our headlines under all of them.
+    expect(firstPlaceLabelLayerId(maptiler)).toBe("State labels z2");
+    expect(firstPlaceLabelLayerId(openfreemap)).toBe("label_country_1");
+  });
+
+  it("returns undefined for a style it does not recognise", () => {
+    // addLayer(layer, undefined) appends — the headlines still draw, and only
+    // the collision priority reverts. A throw here would blank the map.
+    expect(firstPlaceLabelLayerId([{ id: "background" }])).toBeUndefined();
+    expect(firstPlaceLabelLayerId([])).toBeUndefined();
   });
 });
 
