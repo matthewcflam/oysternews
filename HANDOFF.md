@@ -33,18 +33,20 @@ without a deploy.
   where the measured distribution actually varies (p50 0.693, max 4.357 — half
   of all stories sit at exactly one domain), not evenly spaced. Containers draw
   as hollow rings, pins solid. Headlines are a symbol layer from z4 with
-  `text-allow-overlap: false` and `symbol-sort-key` from salience.
+  `text-allow-overlap: false` and `symbol-sort-key` from salience, added
+  **below the basemap's place labels** — see the collision measurement below
+  before moving it.
 - **The §2.2 red click-outline**, with `scripts/build-boundaries.ts` and a
   committed `public/boundaries.pmtiles`. Read that script's header before
   touching it: the FIPS join is the only hard part and it is §3.4 all over again.
 - **A dev-only `window.__sonderMap` seam**, stripped from production builds
   (verified: 0 occurrences in `.next/static`).
 
-**§2.3 was redesigned 2026-08-13 and the worker half is built.** Clicking a
+**§2.3 was redesigned 2026-08-13 and both halves are built.** Clicking a
 **country or state label on the basemap** outlines that region red and opens a
 left-side panel of its top stories. The camera does not move — that is a change
-from the original §2.3, made deliberately. See §2.3 for the rule and for the two
-measurements that shaped it.
+from the original §2.3, made deliberately. See §2.3 for the rule and for the
+three measurements that shaped it.
 
 The panel's data is a **published per-region index**, `archives/regions-<hash>.json`,
 written by `worker/regions.ts` and pointed at by the manifest's `regionsUrl`.
@@ -153,6 +155,36 @@ z4. Use that method, not the console, when a layer looks empty.
 The two layers **overlap** by design — a group can be in both — so `country-top`
 carries `maxzoom: 4` and is added *first*, so `stories` paints over it. Remove
 either half and the low-zoom double-draw comes back.
+
+**How to drive the map from a headless browser, which is what verified §2.3.**
+Guessing pixel coordinates does not work — a label is wherever the collision
+solver put it. Ask the map instead, through the dev-only `window.__sonderMap`
+seam, and synthesize the click at the feature's own projected position:
+
+```js
+const label = map.queryRenderedFeatures().find(
+  (f) => f.sourceLayer === "country_label" && f.properties["name:en"] === "Kazakhstan");
+const p = map.project(label.geometry.coordinates);
+const rect = map.getCanvas().getBoundingClientRect();
+const opts = { bubbles: true, clientX: rect.left + p.x, clientY: rect.top + p.y, button: 0 };
+for (const t of ["mousedown", "mouseup", "click"]) map.getCanvas().dispatchEvent(new MouseEvent(t, opts));
+```
+
+MapLibre listens on the canvas, so a synthetic event drives the real handler.
+Then read the *result* out of the map rather than off a screenshot —
+`map.getFilter("country-outline")` says exactly which region is outlined, and
+`document.querySelector(".panel h2")` says what the panel thinks it is showing.
+Three things this needs to be usable: **wait ~4s after any `jumpTo`** before
+querying, because labels are placed asynchronously and an immediate query
+returns `undefined`; the seam is **dev-only** (`NODE_ENV`), so this works
+against `next dev` and not against a production build; and `queryRenderedFeatures`
+with no arguments returns the basemap's features too, which is the whole reason
+the gesture is possible.
+
+**Toggling a layer's `visibility` is how you measure what it costs.** Counting
+place labels with `stories-labels` visible and then hidden is what turned "the
+labels look sparse" into "2 of 6, and here is the fix" — the same isolate-and-count
+method as the `country-top` trap above.
 
 **Verify in a browser before claiming it works.** §11 is unambiguous: this
 project has been committed green and rendered nothing, twice. `npm run build`
@@ -546,7 +578,7 @@ camera to whole-planet zoom and closes the panel.
 > region's top stories. This is the one place the panel shows something the map
 > does not, and it is deliberate.
 
-> **Two measurements shaped this, both taken before it was built.**
+> **Three measurements shaped this — two before it was built, one after.**
 >
 > 1. **The two basemaps do not share a label schema.** MapTiler's `planet_v4`
 >    uses separate source-layers (`country_label`, `state_label`); OpenFreeMap
@@ -556,10 +588,9 @@ camera to whole-planet zoom and closes the panel.
 >    warning, which is §11's failure shape. It needs a test, not a comment.
 > 2. **Label zoom ranges differ, and one bites on arrival.** Country labels are
 >    z2-12 on MapTiler and z0-9 on OpenFreeMap; state labels z2-11 and **z5-8**
->    respectively. The default camera is z1.5, so **on the production basemap
->    there are no country labels on screen when the map first loads.** The
->    default zoom has to move to z2, which is forced rather than chosen.
->
+>    respectively. The default camera was z1.5, so **on the production basemap
+>    there were no country labels on screen when the map first loaded.** The
+>    default zoom is now z2 (`lib/basemap.ts`), forced rather than chosen.
 > 3. **Our own headlines were deleting those labels, measured after the gesture
 >    was built.** MapLibre resolves symbol collisions from the top layer down, so
 >    the headline layer appended last outranked `state_label` and
@@ -1246,7 +1277,7 @@ content model. No topic classification is needed anywhere in this project.
 | 2 | Cadence | **4-hourly** | Cuts Actions minutes and tile builds 4×, imperceptible against a 24h window, serves "stability over freshness" |
 | 3 | Cron trigger | **`schedule` only**, plus a monthly calendar reminder | The 60-day auto-disable is repo-*inactivity* based, not elapsed time. Drops a third-party service and a never-rotating `actions: write` PAT |
 | 4 | State storage | **append-only per-run shards**, expired by filename | A 25-40 MB read-modify-write JSON is a database without a database's properties. Shards delete three resilience mechanisms |
-| 5 | Red-outline precedence when two are lit | selected region stays outlined; a container click inside it renders **brighter and thicker**, not a second colour | Two red outlines can be on screen at once; they need to be distinguishable without introducing a second colour. **Still live under the 2026-08-13 §2.3** — a region lock and a §2.2 container click-reveal are exactly the two, and `clearOutline()` currently assumes one at a time |
+| 5 | ~~Red-outline precedence when two are lit~~ | **RESOLVED 2026-08-13 — there is never more than one.** Every click clears both outlines and the panel before it establishes anything, so a container click inside a locked region *replaces* the region outline rather than joining it | The row assumed a region lock and a §2.2 container click-reveal could be lit together and proposed distinguishing them by weight. Building it made the simpler answer obvious: one red outline and one panel, or the user cannot say which of the two the map claims is selected. Two lit outlines with a weight difference asks the reader to decode a legend that is not on screen. If two ever do need to co-exist, the brighter-and-thicker treatment is still the right shape — do not introduce a second colour |
 | 6 | ~~Country auto-zoom level~~ | **SUPERSEDED 2026-08-13** | §2.3 no longer moves the camera when a region is selected, so there is no country fit to compute. The Global button is the only camera move left, and its target is fixed (whole planet). Kept as a row because the reasoning — a fixed zoom is wrong for both Monaco and Russia — returns the moment anyone re-proposes auto-zoom |
 | 7 | Blob transfer allowance | unverified | Ten minutes. The one free-tier limit that could actually bind |
 | 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Still pending the one `sudo` password.** Docker 29.0.1 is installed with its daemon stopped and is the unused fallback |
@@ -1282,6 +1313,11 @@ single-location.
    half-written archive and breaks the map for everyone.
 2. **Article body never rendered.** A test must assert the popup contains title,
    source, and link and *nothing else*. This failure mode is legal, not visual.
+   **There are two such surfaces since 2026-08-13**: the §2.6 popup and §2.3's
+   region panel. The panel is the safer of the two — `RegionStory` (`lib/types.ts`)
+   has no field an article body could arrive in, so the constraint is enforced by
+   the type rather than by a rendering choice — but neither has the DOM assertion
+   this gap asks for.
 3. **Tile fetch failure is undefined.** A 404 or timeout currently produces a
    blank region with no explanation.
 

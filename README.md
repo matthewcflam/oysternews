@@ -10,7 +10,9 @@ own pre-registered abort criterion**, and what was changed in response. The map
 now updates itself: a GitHub Action runs the pipeline every four hours over a
 rolling 24-hour window, publishes a content-hashed archive to Vercel Blob, and the
 browser follows `manifest.json` to find it. No deploy is involved. Phase 4 is the
-map's own presentation — the three camera states and the confidence treatment.
+map's own presentation: **clicking a country or state label outlines that region
+and opens a panel of its top stories** — built and verified in a browser on
+2026-08-13 — with the geotag-confidence treatment still to come.
 
 ## Local development
 
