@@ -497,6 +497,50 @@ to a little under half, which is what the accuracy gain is bought with.
 3. The same party designed the rule and judged the sample. An independent judge on
    a fresh draw would be worth an evening before Phase 4 ships.
 
+### 9.1 There is no per-pin confidence signal — measured 2026-08-13
+
+Phase 4 owes pins a geotag-confidence treatment (`HANDOFF.md` §5.2 decision 3).
+The version of that worth building is a **graded** one — draw the shaky pins
+differently — so before building the uniform version, the obvious grading input
+was tested.
+
+The only per-pin quantity available at render time is **how many times the placed
+location was mentioned** in the article. It is the natural candidate, because the
+defect rule H exists to fix is a city mentioned *once* beating a state mentioned
+four times — and rule H only fixes that when an adm1 is actually in the record.
+
+Scored on both judged samples. The rule-S draw contributes because **for 40 of its
+records rule H picks the identical pin**, so the judge's verdict is a verdict on
+the pin rule H would draw; the 4 where it picks something else are dropped.
+`pin-confidence.mjs` reproduces this, including the recorded 33 pins / 69.7%
+[52.7, 82.6] exactly, which is what says the replay is faithful.
+
+| Sample | mentioned once | mentioned 2+ | Fisher |
+|---|---|---|---|
+| out-of-sample (60) | n=6 **33.3%** [9.7, 70.0] | n=27 **77.8%** [59.2, 89.4] | **p=0.053** |
+| transferred (110) | n=12 **58.3%** [32.0, 80.7] | n=28 **64.3%** [45.8, 79.3] | p=0.736 |
+| pooled | n=18 **50.0%** [29.0, 71.0] | n=55 **70.9%** [57.9, 81.2] | p=0.152 |
+
+**It does not replicate.** The out-of-sample draw alone looks like a strong,
+buildable signal — 33% against 78%, and a p that rounds to significance — and it
+rests on **six pins**. The larger sample flattens the same comparison to six
+points. Whatever separated those six was the interval, not the feature.
+
+**This is the fourth time on this project that a plausible mechanism has died on
+measurement, and the first where the measurement's own first half was the thing
+that would have misled.** The lesson is narrower than "measure it": a sub-stratum
+of a sample sized for a go/no-go is not evidence for a finer decision, however
+clean its numbers look. §9's own caveat 2 said so in advance — n=33 "decides the
+go/no-go and nothing finer" — and a 6-pin sub-stratum of it is two orders below
+that.
+
+**What it decided:** the treatment is uniform. A uniform *visual* treatment
+carries no information — the hollow container ring reads as a lesser claim only
+because it contrasts with pins, and a halo on every pin has nothing to contrast
+with — while costing a third circle layer of overdraw on a phone. So the pin half
+is textual: the popup names the place the rule chose, and says a rule chose it
+(`lib/popup.ts`).
+
 ## 10. The demonym filter has a trap in it
 
 Part 1 made demonym filtering a required step. Implementing it the obvious way —

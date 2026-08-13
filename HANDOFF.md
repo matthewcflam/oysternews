@@ -5,14 +5,17 @@ doc, or a previous conversation contradicts it, this file wins.
 
 **Status:** **Phases 1, 2, 2.5 and 3 are complete**, and the 4-hourly worker has
 now run green in CI. **Phase 4 is in progress**: both layers are styled, the
-§2.2 outline works, and **§2.3 is complete on both sides** — the index is
-published and the label gesture, the outline, the panel and the Global button
-are built and verified in a browser. Live: https://sonder-drab-eta.vercel.app/ .
-**Last updated:** 2026-08-13, after five things: a bad Blob token failed the
+§2.2 outline works, **§2.3 is complete on both sides** — the index is published
+and the label gesture, the outline, the panel and the Global button are built and
+verified in a browser — and the **geotag-confidence treatment is complete in both
+halves**. What is left is the phone profile, one missing outline, and one payload
+number to read. Live: https://sonder-drab-eta.vercel.app/ .
+**Last updated:** 2026-08-13, after six things: a bad Blob token failed the
 first two scheduled runs, the count band was caught one run from wedging the
 pipeline shut for good, §2.3 was redesigned around clicking place labels, its
-per-region index was built and verified published, and its client half was built
-against the live archive.
+per-region index was built and verified published, its client half was built
+against the live archive, and the pin half of the geotag-confidence treatment was
+built after a measurement refused the graded version of it.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -41,6 +44,11 @@ without a deploy.
   touching it: the FIPS join is the only hard part and it is §3.4 all over again.
 - **A dev-only `window.__sonderMap` seam**, stripped from production builds
   (verified: 0 occurrences in `.next/static`).
+- **The geotag-confidence treatment** (§5.2 decision 3), in both halves: the
+  hollow container ring above, and the popup's placement line (`lib/popup.ts`).
+  The pin half is uniform because grading it was measured and refused — see
+  below, and do not re-derive the graded version from the out-of-sample numbers
+  alone.
 
 **§2.3 was redesigned 2026-08-13 and both halves are built.** Clicking a
 **country or state label on the basemap** outlines that region red and opens a
@@ -116,15 +124,53 @@ Four things that only appeared once it was running, all of them now decided:
   history is supposed to read as the build log (§0). Replaced with the empty
   string, which `build-boundaries.ts` can never emit (`if (!id) continue`).
 
+**The geotag-confidence treatment is complete, 2026-08-13**, and the measurement
+that shaped it is the interesting half. §5.2 decision 3 asks for a treatment
+because pins measured 69.7% [52.7, 82.6]; the container half was already the
+hollow ring. Before building the pin half, the question was whether it could be
+**graded** — whether anything the pipeline knows separates a shaky pin from a
+sound one. The only candidate available at render time is how many times the
+placed location was mentioned, and **it does not survive a second sample**:
+
+```
+                       mentioned once        mentioned 2+        Fisher
+  out-of-sample (60)   n= 6  33.3%           n=27  77.8%         p=0.053
+  transferred  (110)   n=12  58.3%           n=28  64.3%         p=0.736
+  pooled               n=18  50.0%           n=55  70.9%         p=0.152
+```
+
+The first row is a signal worth building on and it rests on **six pins**. The
+second row is the same comparison on a larger sample and it is flat. FINDINGS
+§9.1 has the method — the rule-S draw contributes the 40 records where rule H
+picks the identical pin, so the judge's verdict transfers — and
+`spikes/gdelt/pin-confidence.mjs` re-runs it.
+
+**So the treatment is uniform, and textual.** A uniform *visual* treatment
+carries no information: the container ring reads as a lesser claim only because
+it contrasts with pins, and a halo on every pin has nothing to contrast with,
+while costing a third circle layer of overdraw on a phone (§1). The popup instead
+**names the place the rule picked and says a rule picked it** — "Somewhere in
+Wyoming, United States · placed automatically" for a container, the place name
+alone for a pin. `place` was already in the tile properties and unused in the
+browser, so the payload was already paid for. It makes the claim falsifiable at a
+glance, which is the point: verifying this in a browser turned up a Brilliant
+Earth earnings story pinned at "Beverly Hills, Texas" and an American
+Conservative piece about the NYT sitting in Wyoming, both now visibly labelled as
+guesses rather than silently presented as facts.
+
+That work moved the popup's HTML out of `MapView.tsx` into **`lib/popup.ts`**,
+where §2.6 (title, source, link, never article text) is asserted by
+`popup.test.ts` instead of reviewed — which closes **§7 critical gap 2**. The
+number itself stays Phase 6's job: §5.2 decision 3 puts "publish 69.7% [52.7,
+82.6] and the method" on the About page, and an interval repeated in every popup
+would be noise.
+
 **Phase 4, remaining:**
 
-1. **The geotag-confidence treatment** (§5.2 decision 3, *not* optional garnish —
-   pins measured 69.7% [52.7, 82.6]). The container ring is the container half of
-   it; the pin half is unstarted.
-2. **Profile on a real mid-tier phone**, not a desktop throttle (§9).
-3. **`IN25` has no outline.** One Indian region in the first run joins to no
+1. **Profile on a real mid-tier phone**, not a desktop throttle (§9).
+2. **`IN25` has no outline.** One Indian region in the first run joins to no
    Natural Earth polygon. Deliberately not guessed.
-4. **Read the `panel` line on the next full-window run** and check the payload
+3. **Read the `panel` line on the next full-window run** and check the payload
    against the 500 KB projection below. Nothing in §2.3 needs it before then.
 
 **Still outstanding and only the human can do it:** §5.2 decision 4 — *"Before
@@ -1054,6 +1100,16 @@ thresholds**, both clear.
 3. **Pins ship in the "state the measured accuracy" band.** The lower bound is
    52.7%, not 70%. **Phase 6 must publish 69.7% [52.7, 82.6] and the method**, and
    Phase 4's geotag-confidence treatment is not optional garnish.
+
+   > **Built 2026-08-13, and it is uniform because grading it was measured and
+   > refused.** Mention count — the only per-pin signal available at render time
+   > — looked strong on the out-of-sample draw (33% against 78%, p=0.053, on six
+   > pins) and went flat on the larger sample (58% against 64%, p=0.74). FINDINGS
+   > §9.1. So the popup names the place the rule chose and says a rule chose it,
+   > identically on every story; `lib/popup.ts` holds both the rule and the
+   > table. **Phase 6 still owes the interval and the method** — this line does
+   > not discharge that, it just stops the map from making a silent claim in the
+   > meantime.
 4. **Before Phase 4 ships, get an independent judge on a fresh rule-H draw.** The
    same party designed rule H and scored it. That is the weakest link in the
    evidence and it costs one evening.
@@ -1207,7 +1263,10 @@ content — only the highlight, the panel and (for Global) the camera differ.
 
 Container pins, red click-outline, symbol layer with `text-allow-overlap: false`
 and `symbol-sort-key` from salience. Relative freshness stamp, explicit stale
-notice past 2× the cadence. Geotag confidence treatment lands here.
+notice past 2× the cadence. Geotag confidence treatment lands here — **done
+2026-08-13**, in both halves: the hollow container ring (`lib/layers.ts`) and the
+popup's placement line (`lib/popup.ts`), the second of which is uniform across
+pins because §5.2 decision 3's note says grading was measured and refused.
 
 **Profile against the performance targets on a real mid-tier phone**, not a
 desktop throttle.
@@ -1316,8 +1375,16 @@ single-location.
    **There are two such surfaces since 2026-08-13**: the §2.6 popup and §2.3's
    region panel. The panel is the safer of the two — `RegionStory` (`lib/types.ts`)
    has no field an article body could arrive in, so the constraint is enforced by
-   the type rather than by a rendering choice — but neither has the DOM assertion
-   this gap asks for.
+   the type rather than by a rendering choice.
+
+   > **Closed for the popup, 2026-08-13.** Its HTML now comes from one pure
+   > function, `storyPopupHtml` in `lib/popup.ts`, and `popup.test.ts` strips the
+   > tags and asserts the rendered text is **exactly** title, source, placement
+   > line and "Read at source" — so a feature that started carrying prose fails a
+   > test rather than shipping. The same test pins the other rule the popup could
+   > break: no field but those four may reach it, `tier1` least of all, because
+   > §2.3 says the preference is invisible and a badge is what that forbids. The
+   > panel still has no DOM assertion; its type is doing the work.
 3. **Tile fetch failure is undefined.** A 404 or timeout currently produces a
    blank region with no explanation.
 

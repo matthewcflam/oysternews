@@ -112,8 +112,8 @@ main .map {
    made every story title and source unreadable while the link stayed visible on
    its UA blue. Dark plate instead of dark text: it matches the masthead and the
    notices, and it reads over both the dark local style and the light streets-v2
-   basemap. Phase 4 owns the real popup treatment (§4, with geotag confidence);
-   this is the legibility floor until then.
+   basemap. The dark plate started as the legibility floor; §5.2 decision 3's
+   geotag-confidence line (`.popup__place`, below) is what Phase 4 added on top.
 
    The tip is a CSS triangle made of borders, so its colour lives on whichever
    border faces the popup — one rule per anchor, all eight, or the arrow stays
@@ -126,6 +126,19 @@ main .maplibregl-popup-content {
 
 main .maplibregl-popup-content a {
   color: #7cc0ff;
+}
+
+/* §5.2 decision 3, the pin half of the geotag-confidence treatment: where the
+   rule put this story, and that a rule put it there. Same weight as the panel's
+   meta line — it is context for the headline, not a competing claim, and at 0.6
+   over the plate it still clears 4.5:1. It is deliberately identical on every
+   story: `lib/popup.ts` has the measurement showing there is no per-pin signal
+   to grade on. */
+main .popup__place {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  opacity: 0.6;
 }
 
 main .maplibregl-popup-close-button {
