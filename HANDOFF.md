@@ -3,13 +3,15 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** **Phases 1, 2, 2.5 and 3 are complete.** The worker runs 4-hourly,
-publishes to Vercel Blob, and the browser now follows `manifest.json` — the map
-updates itself with no deploy. **Next: Phase 4** (styling, salience, the popup
-treatment). Live: https://sonder-drab-eta.vercel.app/ .
-**Last updated:** 2026-08-13, after the first scheduled runs failed on a bad Blob
-token, the first full-window run published 6,718 groups, and the count band was
-found one run away from wedging the pipeline shut permanently.
+**Status:** **Phases 1, 2, 2.5 and 3 are complete**, and the 4-hourly worker has
+now run green in CI. **Phase 4 is in progress**: both layers are styled, the
+§2.2 outline works, and §2.3's region index is published — but **§2.3's client
+half is not started**, and it is the next thing to build. Live:
+https://sonder-drab-eta.vercel.app/ .
+**Last updated:** 2026-08-13, after four things: a bad Blob token failed the
+first two scheduled runs, the count band was caught one run from wedging the
+pipeline shut for good, §2.3 was redesigned around clicking place labels, and
+its per-region index was built and verified published.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -72,10 +74,51 @@ pin "Pakistan's top stories".
 
 **Phase 4, remaining:**
 
-1. **The three §2.3 UI states.** Country lock-on with auto-zoom and a corner
-   button that resets to whole-planet. Same content in all three — camera and
-   highlight only. `prefers-reduced-motion: reduce` must be honored (§2.6), which
-   is a real constraint the moment a `flyTo` is involved.
+1. **The §2.3 client half — the label gesture and the panel. NOT STARTED.**
+   `components/MapView.tsx` and `lib/layers.ts` are untouched by the 2026-08-13
+   work; the map still behaves exactly as it did before it. Everything below is
+   ahead of you, and the order is chosen so each step is verifiable in a browser
+   the moment it lands:
+
+   1. **`lib/labels.ts` — which rendered feature is a place label, and at what
+      level.** `map.queryRenderedFeatures(point)` with no layer filter returns
+      basemap features too. Accept a feature as a country when its source-layer
+      is `country_label` (MapTiler) **or** `place` with `class === "country"`
+      (OpenFreeMap), and as a state on `state_label` or `place`/`class="state"`.
+      **Both spellings are required — the two providers do not share a schema**
+      (§2.3), and MapTiler has already changed theirs once. Unit-test both
+      shapes: when this breaks it breaks silently, with no error and no console
+      warning, which is §11's failure mode exactly.
+   2. **An unpainted `fill` layer on `BOUNDARIES_SOURCE_ID`**, hit-tested *after*
+      the pin layers so a pin still wins a tap. This is what turns a clicked
+      label into a region id: project the label feature's own point, query the
+      fill at that pixel, take `countries` or `regions` according to the level
+      the label gave. **No name matching** — see §2.3. §2.2 says the polygon is
+      never a fill; an unpainted hit target is not a visual fill, and §2.2 now
+      carries that amendment explicitly rather than by reinterpretation.
+   3. **The region outline.** Reuse `COUNTRY_OUTLINE_ID` / `REGION_OUTLINE_ID`
+      and their `MATCH_NOTHING` filter-swap. Note this is a *second* outline
+      concern alongside §2.2's container click-reveal, and `clearOutline()`
+      currently assumes one at a time — decide whether a container click clears a
+      region lock before writing it, not after.
+   4. **The default zoom moves z1.5 → z2.** Forced, not chosen: MapTiler draws no
+      country labels below z2, so the whole gesture is invisible on arrival
+      otherwise (§2.3).
+   5. **The panel**, reading `manifest.regionsUrl`, fetched **lazily on first
+      open** — it is ~151 KB gzipped and nothing needs it until a label is
+      clicked. `regionsUrl` is **optional**: a manifest published before
+      2026-08-13 has none, and the map must still render with the panel simply
+      unavailable. §2.6 applies — title, source, link, never article text.
+   6. **The Global corner button**, which resets the camera to whole-planet and
+      closes the panel. This is the only camera move in the feature, and
+      therefore the only place `prefers-reduced-motion: reduce` (§2.6) applies —
+      check it at call time, not at mount, because the OS setting can change
+      while the page is open.
+
+   **Verify in a browser before claiming any of it works.** §11 is not a
+   suggestion: this project has been committed green and rendered nothing twice.
+   `npm run build` passing is not evidence, and neither is a clean console — an
+   unknown `source-layer` draws nothing and says nothing (see below).
 2. **The geotag-confidence treatment** (§5.2 decision 3, *not* optional garnish —
    pins measured 69.7% [52.7, 82.6]). The container ring is the container half of
    it; the pin half is unstarted.
@@ -444,6 +487,12 @@ location.
 - Rendered as a **pin at the container's center, at every zoom level.**
 - Clicking the story **outlines the container in red.**
 - The polygon is never a fill. It is a click-reveal only.
+  - **Amended 2026-08-13:** §2.3's label gesture needs an **unpainted** `fill`
+    layer over the same polygons, purely as a hit target, to turn a clicked
+    label into a region id without matching names (§3.4). Nothing is painted, so
+    the rule above is untouched as a *visual* rule — but it said "never a fill"
+    flatly, and this is the exception, written down rather than reasoned around.
+    If a fill ever acquires a visible colour, that is a violation.
 - One container feature per region per window, carrying `{region_id, count,
   top_title, top_url}` — not one per story.
 - `top_title` / `top_url` are picked by the §2.5 comparator, so a region's
@@ -1108,9 +1157,14 @@ Critical details, each of which is a real bug avoided:
 2D Mercator. Two tile layers (stories + country-top) over the MapTiler basemap,
 plus boundaries for the red outline.
 
-The three UI states from §2.3: free pan/zoom by default, country lock-on with a
-red outline and auto-zoom, and a corner button that resets to whole-planet. All
-three render the same content — only the camera and the highlight differ.
+The states from §2.3: free pan/zoom by default; clicking a country or state
+label outlines that region and opens a panel of its top stories, camera
+unchanged; and a corner button that resets to whole-planet. All render the same
+content — only the highlight, the panel and (for Global) the camera differ.
+
+> **Rewritten 2026-08-13.** This paragraph described country lock-on with
+> auto-zoom until then. §2.3 carries the new rule and why it changed; the only
+> camera move left in the feature is the Global button.
 
 Container pins, red click-outline, symbol layer with `text-allow-overlap: false`
 and `symbol-sort-key` from salience. Relative freshness stamp, explicit stale
@@ -1180,12 +1234,12 @@ content model. No topic classification is needed anywhere in this project.
 
 | # | Decision | Provisional | Why |
 |---|---|---|---|
-| 1 | Zoom ceiling | cap data zoom at **z10** for v1 | GDELT gives city centroids, so all Chicago stories share one coordinate and do not spread on zoom. Revisit with spiderfy if it feels flat |
+| 1 | Zoom ceiling | **z12 as built**, not the z10 this row proposed | GDELT gives city centroids, so all Chicago stories share one coordinate and do not spread on zoom. Revisit with spiderfy if it feels flat. **Correction 2026-08-13:** this row said z10 while §3.1's locked flags say `-z12` and `worker/tiles.ts` has always passed `-z12`. The build is the truth; the row was never updated. Every overflow figure in this document is against z12 |
 | 2 | Cadence | **4-hourly** | Cuts Actions minutes and tile builds 4×, imperceptible against a 24h window, serves "stability over freshness" |
 | 3 | Cron trigger | **`schedule` only**, plus a monthly calendar reminder | The 60-day auto-disable is repo-*inactivity* based, not elapsed time. Drops a third-party service and a never-rotating `actions: write` PAT |
 | 4 | State storage | **append-only per-run shards**, expired by filename | A 25-40 MB read-modify-write JSON is a database without a database's properties. Shards delete three resilience mechanisms |
-| 5 | Red-outline precedence in country state | selected country stays outlined; a container click inside it renders **brighter and thicker**, not a second colour | Two red outlines can be on screen at once; they need to be distinguishable without introducing a second colour |
-| 6 | Country auto-zoom level | fit the country's bounding box with padding | A fixed zoom is wrong for both Monaco and Russia |
+| 5 | Red-outline precedence when two are lit | selected region stays outlined; a container click inside it renders **brighter and thicker**, not a second colour | Two red outlines can be on screen at once; they need to be distinguishable without introducing a second colour. **Still live under the 2026-08-13 §2.3** — a region lock and a §2.2 container click-reveal are exactly the two, and `clearOutline()` currently assumes one at a time |
+| 6 | ~~Country auto-zoom level~~ | **SUPERSEDED 2026-08-13** | §2.3 no longer moves the camera when a region is selected, so there is no country fit to compute. The Global button is the only camera move left, and its target is fixed (whole planet). Kept as a row because the reasoning — a fixed zoom is wrong for both Monaco and Russia — returns the moment anyone re-proposes auto-zoom |
 | 7 | Blob transfer allowance | unverified | Ten minutes. The one free-tier limit that could actually bind |
 | 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Still pending the one `sudo` password.** Docker 29.0.1 is installed with its daemon stopped and is the unused fallback |
 | 9 | Tier-1 list membership | keep all **28** domains as-is; review once real data flows in Phase 3 | The list now *grants* precedence instead of measuring coverage (§2.5), so membership is load-bearing. `newsweek.com` and `latimes.com` are 26% of the tier-1 records actually present, and both are more arguable as papers of record than the wires that returned zero. Trimming them would shrink an already 1%-thin signal, so the provisional call is to keep them and look at real placements before editing. Absent domains cost nothing — if GDELT starts crawling Reuters, it just works |
