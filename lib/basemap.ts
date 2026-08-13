@@ -15,6 +15,21 @@
 const MAPTILER_STYLE = "streets-v2";
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
+/**
+ * The default camera, and the "Global" button's target (§2.3).
+ *
+ * **z2, not z1.5, and the basemap is what forces it.** MapTiler draws no country
+ * labels below z2 (`country_label` is z2-12; OpenFreeMap's are z0-9), and §2.3's
+ * whole gesture is clicking a country label — so at z1.5 on the production
+ * basemap the feature is invisible on arrival, with nothing on screen to click.
+ * Measured against both live styles on 2026-08-13.
+ *
+ * It lives in this file rather than next to the layers because the constraint is
+ * a property of the basemap, not of our data.
+ */
+export const DEFAULT_CENTER: [number, number] = [0, 20];
+export const DEFAULT_ZOOM = 2;
+
 export type Basemap = {
   styleUrl: string;
   provider: "maptiler" | "openfreemap";
