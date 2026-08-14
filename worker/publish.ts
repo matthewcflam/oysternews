@@ -57,15 +57,50 @@ const HISTORY_LIMIT = 24;
 // --- Output invariants (§5, §8) ---------------------------------------------
 
 /**
- * The band is deliberately loose. §4 measures GDELT volume swinging ~2× by time
- * of day; a rolling 24-hour window smooths that away, but a recovery run after
- * an outage genuinely does publish a thin window and must not be blocked from
- * self-healing. These thresholds are set to catch a collapse, not a wobble.
+ * The count band: absolute group counts, not a ratio against past runs.
+ *
+ * **It was self-referential until 2026-08-14 and that is what broke it, twice in
+ * one day.** The band used to be `[0.4×, 2.5×]` of the trailing median of up to
+ * 24 past runs, which fails for a reason no tuning fixes: a refused run does not
+ * append to history (`publish` returns before the history write), so the median
+ * that refused a run never moves and the next run is refused identically. Fail-
+ * closed becomes fail-forever. It fired on the *lower* bound at 09:11 UTC, when a
+ * median of two 1-bundle smoke runs (846, 1467) refused a real 6,718-group run,
+ * and on the *upper* bound from 17:13 UTC, when a median of 7,620 — taken while
+ * the 24-hour pool was still filling — refused runs of ~20,500 and up. Same
+ * defect both times: **a median is a lagging statistic and the pool has a trend
+ * in it**, so the reference set describes a past that is not comparable to now.
+ *
+ * Absolute bounds have no feedback loop at all. They also arm on the very first
+ * run, where the old band was inert for want of history — the exact moment a
+ * bootstrap mistake ships unguarded.
+ *
+ * **Where the numbers come from — both ends are measured, not chosen.**
+ *
+ * ```
+ *   1,467   a 1-bundle smoke run (2026-08-12, BUNDLE_CAP=1)
+ *   2,000   FLOOR
+ *  40,700   steady state: §4's distinct city stories after dedup, per day
+ *  60,000   CEILING              = 1.47× steady state
+ *  75,000   grouping stops merging entirely: ~112,500 records/day (§4)
+ *                                 × ~67% placed (measured: 1411 rows -> 949)
+ * ```
+ *
+ * The floor sits above a single-bundle run and 20× below steady state, so it
+ * catches a collapse and an accidental `BUNDLE_CAP` without ever false-firing.
+ * The ceiling sits between steady state and total grouping failure, which is the
+ * only interval where an upper bound is informative: **above 75,000 it would
+ * stop catching the one failure it exists for**, and below ~50,000 it would
+ * refuse ordinary days.
+ *
+ * **These are calibration constants with a shelf life.** They are correct for
+ * GDELT's volume as measured on 2026-08-12/13 and for the current grouping key.
+ * Anything that changes either — a looser grouping key, GDELT raising its crawl
+ * rate, widening the window past 24 hours — invalidates them. Re-derive from a
+ * fresh §4 measurement rather than nudging the ceiling up until runs pass.
  */
-export const COUNT_BAND_LOW = 0.4;
-export const COUNT_BAND_HIGH = 2.5;
-/** No band until there is something to compare against — the first runs bootstrap it. */
-export const BAND_MIN_HISTORY = 3;
+export const COUNT_BAND_MIN = 2_000;
+export const COUNT_BAND_MAX = 60_000;
 /**
  * A live 24-hour window spans well over a hundred countries (§3.4 observed 168
  * distinct FIPS codes in the audit alone), so this floor only fires when
@@ -82,19 +117,22 @@ export const MIN_GROUPS = 1;
  * and starts being the outage. 8 hours — §8's 2× cadence, the same threshold the
  * UI's stale notice uses.
  *
- * **This exists because fail-closed can otherwise become fail-forever.** A
- * refused run does not append to history, so the trailing median never moves,
- * so the next run is refused for exactly the same reason. Measured on 2026-08-13:
- * the band armed on a median of two 1-bundle smoke runs (846, 1467) while real
- * runs were publishing 6,718 groups, which would have wedged the pipeline
- * permanently with the dead-man switch as the only symptom.
+ * **What this guards against changed on 2026-08-14, and it is still needed.** It
+ * was built for a self-poisoning median: a refused run does not append to
+ * history, so the median that refused it never moved and the next run was refused
+ * identically, for ever. Absolute bounds cannot poison themselves, so that
+ * failure mode is gone. What replaces it is a **stale constant** — COUNT_BAND_MAX
+ * is calibrated against GDELT volume as measured, and if real volume outgrows it
+ * then every run is refused for the same reason with no self-correction at all.
+ * That is the same wedge with a slower fuse, and this valve is the only thing
+ * between it and a dead map. Past 8 hours the band stands down, the map keeps
+ * moving, and the WARN is the signal to go re-derive the constants.
  *
  * **Only the count band relaxes.** MIN_GROUPS, the country floor and the title
  * rate stay armed unconditionally, and they are the ones that actually catch
  * garbage — a placement collapse shows up as too few countries, a parse break as
- * missing titles. The band is the fuzziest of the four and the only one whose
- * reference point is the pipeline's own history, which is what makes it the one
- * that can poison itself.
+ * missing titles. The band is the fuzziest of the four and the only one carrying
+ * a number that can go out of date without anything in the pipeline noticing.
  */
 export const BAND_RELAX_AFTER_MS = 8 * 60 * 60 * 1000;
 
@@ -126,23 +164,20 @@ export function statsOf(groups: StoryGroup[]): PublishStats {
   };
 }
 
-export function median(values: number[]): number {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
 /**
  * Every reason this run must not publish, as human-readable lines.
  *
  * Returns all of them rather than the first: a run that fails the count band
  * *and* the country floor is a different diagnosis from one that fails only the
  * band, and the Action log is the only place anyone will read it.
+ *
+ * **This reads nothing but the run in front of it.** It took no `history`
+ * argument until 2026-08-13 and takes none again as of 2026-08-14 — the band's
+ * bounds are constants now, and passing history here would imply the guard still
+ * derives something from past runs. It does not, and that is the whole fix.
  */
 export function checkInvariants(
   stats: PublishStats,
-  history: HistoryEntry[],
   /** Milliseconds since the last successful publish. Past BAND_RELAX_AFTER_MS the band stands down. */
   staleFor = 0,
 ): string[] {
@@ -154,13 +189,10 @@ export function checkInvariants(
     return violations;
   }
 
-  if (history.length >= BAND_MIN_HISTORY && staleFor < BAND_RELAX_AFTER_MS) {
-    const mid = median(history.map((entry) => entry.groups));
-    const low = Math.floor(mid * COUNT_BAND_LOW);
-    const high = Math.ceil(mid * COUNT_BAND_HIGH);
-    if (stats.groups < low || stats.groups > high) {
+  if (staleFor < BAND_RELAX_AFTER_MS) {
+    if (stats.groups < COUNT_BAND_MIN || stats.groups > COUNT_BAND_MAX) {
       violations.push(
-        `group count ${stats.groups} outside [${low}, ${high}] around trailing median ${mid}`,
+        `group count ${stats.groups} outside [${COUNT_BAND_MIN}, ${COUNT_BAND_MAX}]`,
       );
     }
   }
@@ -434,8 +466,10 @@ export type PublishResult =
  * from the history alone, with no extra field to backfill on an existing store.
  *
  * `Infinity` on an empty or unparseable history, which reads as "nothing has
- * published, so nothing is protecting anything" — and the band is inert there
- * anyway, for want of BAND_MIN_HISTORY entries.
+ * published, so nothing is protecting anything". **Callers must not hand that
+ * straight to the relax valve** — an empty history would stand the band down on
+ * the first run of a fresh store. `publish` gates on `history.length > 0` for
+ * exactly this reason.
  */
 export function staleness(history: HistoryEntry[], now: Date): number {
   const stamps = history.map((entry) => stampToMs(entry.stamp)).filter((ms) => !Number.isNaN(ms));
@@ -501,10 +535,17 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const stats = statsOf(groups);
   const history = await readHistory(store);
 
+  // `history.length > 0` is load-bearing, not defensive. `staleness` returns
+  // Infinity on an empty history, so without it the very first run of a fresh
+  // store would relax the band and publish any count at all — which is exactly
+  // the bootstrap moment a mistake most wants to ship through. The valve means
+  // "we have published before and it has been too long since", and with nothing
+  // published there is nothing being blocked. The old BAND_MIN_HISTORY covered
+  // this by accident; now it is the condition itself.
   const staleFor = staleness(history, now);
-  const bandRelaxed = history.length >= BAND_MIN_HISTORY && staleFor >= BAND_RELAX_AFTER_MS;
+  const bandRelaxed = history.length > 0 && staleFor >= BAND_RELAX_AFTER_MS;
 
-  const violations = checkInvariants(stats, history, staleFor);
+  const violations = checkInvariants(stats, bandRelaxed ? staleFor : 0);
   if (violations.length > 0) return { published: false, violations, stats };
 
   const bytes = await readFile(archivePath);

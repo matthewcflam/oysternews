@@ -320,12 +320,19 @@ export function formatSummary(summary: RunSummary): string {
     lines.push(`WARN         unknown FIPS code ${code} on ${count} stories — needs a data/fips-overrides entry`);
   }
 
-  // Publishing past the band is the deliberate escape from a fail-forever wedge,
-  // but it is still a run that published output its own history says is
-  // implausible. It must never look like an ordinary success in the log.
+  // Publishing past the band is the deliberate escape from a wedge, but it is
+  // still a run that published output the guard called implausible. It must never
+  // look like an ordinary success in the log.
+  //
+  // Since 2026-08-14 the band is two absolute constants, so this line has a
+  // second job: it is the ONLY signal that those constants have gone stale.
+  // Nothing self-corrects any more — if real volume outgrows COUNT_BAND_MAX,
+  // every run is refused until a human re-derives it. Hence the instruction.
   if (summary.bandRelaxed) {
     lines.push(
-      "WARN         count band stood down — publication had been blocked past 2× cadence",
+      "WARN         count band stood down — blocked past 2× cadence.",
+      "             Re-derive COUNT_BAND_MIN/MAX against a fresh §4 volume",
+      "             measurement; do not nudge them until runs pass.",
     );
   }
 
