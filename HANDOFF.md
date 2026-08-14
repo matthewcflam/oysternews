@@ -330,6 +330,56 @@ the judge marks WRONG, they pick a reason from a fixed list. One extra click,
 and 90 records yield ~35 classified failures against the 15 self-classified ones
 above — enough to say whether class 1 is real before anyone writes the rule.
 
+### The judging sheet is built, 2026-08-14 — §5.2 decision 4 is now unblocked
+
+```
+  npm run judge:draw  -- 90 --bundles 6      -> build/judge.html   (send this)
+  npm run judge:score -- judged-<draw>.jsonl -> accuracy + §5.1 verdict
+```
+
+A first draw is committed: **90 records, 50 pins / 40 containers, seed 20260814**,
+drawn from 3,379 placed and disjoint from all 170 previously judged URLs.
+`build/judge.html` is a single self-contained file — no server, no install, works
+offline, autosaves to `localStorage`, and downloads a JSONL at the end.
+
+**Four things about the sheet are methodological, not cosmetic.** Undo any of
+them and the draw stops being comparable with the one it is checking:
+
+1. **It shows the headline, the source and the placement. Nothing else.** No
+   trace, no branch, no mention counts, and above all **not the 69.7%**.
+   Anchoring is the exact failure a second judge exists to rule out, and it is
+   free to prevent here. Verified mechanically: the generated file contains four
+   fields per record and none of the trace.
+2. **There is no link to the article.** §5.1's method is *"judged by reading the
+   headline against the placement"*, and UNJUDGEABLE is a real verdict for
+   headlines that do not say enough — it was 1 of 34 pins last time. A judge who
+   can open the article never marks UNJUDGEABLE, which silently changes the
+   denominator. The URL is in the JSONL and deliberately not on screen.
+3. **Containers are put as "Somewhere in X"**, mirroring `lib/popup.ts`. Judging
+   a container as though it claimed an exact spot scores it against a claim the
+   map never made (§2.2).
+4. **The reason is only asked after the verdict is already WRONG**, so it cannot
+   move the accuracy number.
+
+**The scorer hardcodes §5.1's thresholds and reads them off the lower bound.**
+That looks stricter than §5.1's tables, which are stated on the point estimate,
+and is exactly equivalent: the lower bound is never above the point estimate, so
+the only case they land in different bands is the straddle — where §5.1 already
+mandates the lower bound. **Do not edit those constants to fit a result.**
+
+> **Its Wilson implementation reproduces all four published intervals exactly**
+> — rule-H pins 23/33 → [52.7, 82.6], containers 21/26 → [62.1, 91.5], rule-S
+> 33/61 → [41.7, 66.0] and 15/40 → [24.2, 53.0]. That is the check worth having:
+> the arithmetic that will decide whether this project ships is the same
+> arithmetic that produced the numbers already in this document.
+
+**What is still yours and cannot be automated:** find the judge, and settle the
+pre-registration *before* they start. The recommendation on record is that the
+judge's number is the number — not pooled with the existing one, not averaged,
+and no adjudication round afterwards. 90 records was chosen so that a held point
+estimate moves the lower bound from 52.7% to ~56%; the current margin above the
+50% kill line is **one record**.
+
 **Also worth knowing:** `no-locations` and `no-usable-level` never appear in the
 audit output because `filterArticles` removes those articles first. `all-demonyms`
 runs at 2.6%, which is the demonym filter's visible cost and looks right against
