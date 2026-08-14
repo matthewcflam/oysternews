@@ -40,10 +40,24 @@ does not look for it. Every `minzoom` has been ignored on every archive this
 project has ever published; world zoom serves **1,714 pins on a 390px phone
 against §9's target of 30-60**. **Moving the directive to Feature level, exactly
 as `man tippecanoe` specifies, published an archive with one feature per layer
-per tile at every zoom** — a blank map — so it was reverted within the hour and
-the defect is still open. Both states are measured below under "The density
-budget never ran". **Re-read any overflow number with this in mind**, and read
-that section before touching `worker/tiles.ts`.
+per tile at every zoom** — a blank map — so it was reverted within the hour.
+
+**That revert was right on the evidence and wrong on the cause, and the cause is
+now found: it was never this repo's bug.** tippecanoe **2.49.0** — apt's copy on
+Ubuntu 24.04, which both this machine and CI had — silently discards every
+feature carrying an explicit `minzoom`, so the correct directive placement looks
+like a blank map on it. Upstream fixed it in `bd48ba8`, released in **2.52.0**.
+The fix is three coupled changes (Feature-level directive, a 2.52.0 floor
+enforced by `scripts/tippecanoe-min-version.sh`, CI building 2.79.0 from source),
+**none of which works without the other two**, and it is **verified end to end
+on real data**: 15-16 features per tile at every zoom against tiles holding up to
+408 candidates, country floor 1 -> 162, archive 14.5 MB -> 7.2 MB. Written up
+below under "The density budget never ran". **Every overflow figure taken before
+2026-08-14 counted an intention nothing acted on** — §2.4 has the re-read.
+
+**As of 2026-08-14 18:10 UTC those three changes are in the working tree and not
+yet on `main`, so every 4-hourly run is still publishing a budget-less archive.**
+Landing them is the first thing to do.
 
 **Two things were then deferred by decision, and both are deferred rather than
 cancelled:** the **phone profile** (§9's 4G target stays unverified on real
@@ -116,8 +130,16 @@ measured, not assumed.
 **Phase 6 has started ahead of Phase 4 finishing, deliberately.** Phase 4's
 remaining items were **deferred by decision on 2026-08-14** — the phone profile
 needs hardware, and the accuracy re-measurement was closed as optional once the
-weak-city rule was settled. **`/about` is live.** The one Phase 4 item still
-genuinely open and unblocked is **§2.4's overflow re-read**, below.
+weak-city rule was settled. **`/about` is live.** ~~The one Phase 4 item still
+genuinely open and unblocked is §2.4's overflow re-read~~ — **read 2026-08-14,
+below: 57±1% on a steady pool, unmoved by the weak-city rule, and now backed by
+the first tile-level measurement of what the map actually keeps.** What is left
+of it is a `K` decision that the deferred phone profile gates.
+
+**The one thing open and unblocked is landing the density fix.** The three
+coupled changes in §2.4 are in the working tree, verified end to end on this
+machine against real data, and **not on `main`** — so every scheduled run is
+still publishing an archive with no budget in it.
 
 **Next action: finish Phase 4.** The pipeline is closed end to end — `worker/run.ts`
 runs the §3.2 flow 4-hourly under `.github/workflows/worker.yml` and publishes a
@@ -281,12 +303,20 @@ judged figure — and an interval repeated in every popup would be noise.
    the budget working, and the flattening across the last two readings is the
    first sign of that.
 
-   > **The weak-city DROP moved this number and nobody has re-read it.** ~30% of
-   > pins stop being published, so the pool the budget defers from is smaller and
-   > the overflow share should fall on its own. **Both readings so far are
-   > pre-rule** — the rule landed ~08:14 UTC — so the first informative run is
-   > ~09:46 UTC. Read the *share*, not the count, before deciding anything about
-   > `K`: the count falls either way.
+   > ~~**The weak-city DROP moved this number and nobody has re-read it.**~~
+   > **Re-read 2026-08-14 18:00 UTC, across four post-rule runs: it did not
+   > move.** 57.4 / 57.4 / 58.8 / 56.8% — the rule dropped ~30% of pins and took
+   > the share with it in neither direction. The trend has flattened at ~57±1% on
+   > a full pool, so the trigger is fired on merit rather than on a filling
+   > window. **The one number the tippecanoe fix does not touch is this one**
+   > (`assignMinzoom` runs before tiles); what it changed is that the deferral is
+   > now real, and the map keeps 15-16 per tile at every zoom rather than
+   > everything. Both measurements, and what they leave open, are in §2.4.
+   >
+   > **What is left of this item is a decision, not a measurement**, and it is
+   > blocked on the phone profile above by the same rule that deferred it: `K` is
+   > the only lever, and nothing says how much room `K` has until someone
+   > profiles real hardware.
 4. ~~**Draw a fresh judged sample against the new placement rule.**~~ **Closed
    2026-08-14 — the rule is settled and this is no longer a gate.** The draw was
    taken and is on disk if it is ever wanted (`zcbaks-d7b665-90`: 90 records,
@@ -911,6 +941,43 @@ Two things that run surfaced, neither a bug:
   > > budget exists to protect, so this is a real trade and not a bug fix. **Do
   > > not raise `K` before a phone profile** (the other outstanding Phase 4 item),
   > > because the profile is what says how much room there is.
+  > >
+  > > ### Post-weak-city readings, 2026-08-14: the share did not fall
+  > >
+  > > Four runs on the live rule, from the Action logs:
+  > >
+  > > ```
+  > >   09:21 UTC   18,858 / 32,876   57.4%
+  > >   09:38 UTC   18,861 / 32,835   57.4%
+  > >   13:44 UTC   21,058 / 35,814   58.8%
+  > >   17:12 UTC   17,176 / 30,268   56.8%
+  > > ```
+  > >
+  > > **The prediction above was wrong.** Dropping ~30% of pins was expected to
+  > > shrink the pool the budget defers from and pull the share down on its own;
+  > > it did not move it. The trend is `14% -> 34% -> 56% -> 57.3% -> 57.4 /
+  > > 57.4 / 58.8 / 56.8`, which is the flattening the last note asked for,
+  > > **at ~57±1% on a steady pool, not below the line.** The trigger is
+  > > therefore genuinely fired and stays fired; it was not the window filling.
+  > >
+  > > **What the tippecanoe fix does and does not change here.** It does not
+  > > change this number at all: `overflow` is counted by `assignMinzoom` in
+  > > `budget.ts`, before tiles, and is a pure function of the pool and the
+  > > grouping. What it changes is the number's *meaning* — until the fix, the
+  > > deferral was an intention nothing acted on, so 57% was the share of stories
+  > > the budget wanted hidden while all of them were on screen. **"Re-read it on
+  > > the first corrected archive" was the right instruction for the wrong
+  > > quantity.** The share reads the same either way; the thing that had to be
+  > > re-read is what the map actually shows, and that is measured under §3.1's
+  > > toolchain note: **15-16 features per tile at every zoom, on tiles holding
+  > > up to 408 candidates, with the 162-country floor intact.**
+  > >
+  > > **So the honest reading of the trigger is: the budget is deferring a
+  > > majority of the feed, and what it keeps is exactly at budget rather than
+  > > starved.** That is the trade §2.4 was written to make, now for the first
+  > > time actually made. It is still `K` or nothing, and `K` is still gated on
+  > > the phone profile — which is now the *only* thing standing between this
+  > > trigger and a decision.
 - **`unknown FIPS code TL on 1 stories`.** §8's loud-log path, working. It is
   deliberately NOT fixed: FIPS 10-4 `TL` is **Tokelau**, while ISO `TL` is
   **Timor-Leste**, and guessing which one GDELT meant is exactly the §3.4 trap
@@ -1182,6 +1249,11 @@ how you tell a rendering bug from a data bug.
   rather than a source build, and `scripts/build-fake-tiles.sh` handles the
   Windows→WSL path translation. Decision 8 has the detail. **Installed and used
   2026-08-10**; the Phase 2 archive was built with it and is committed.
+  **The apt half of that is dead as of 2026-08-14**: apt ships 2.49.0, which
+  silently eats every feature carrying a `minzoom` and cost a day (§2.4). The
+  floor is now 2.52.0, enforced by `scripts/tippecanoe-min-version.sh`, so route A
+  still stands but is a source build after all. Route A was still the right call —
+  route B would have hidden this bug behind a toolchain CI did not share.
 - **A green `npm run build` says nothing about whether the map renders.** Phase 2
   passed `build` and `tsc --noEmit` while drawing a completely blank map, for two
   independent reasons (§11, 2026-08-10). Both were invisible to every check that
@@ -1425,7 +1497,7 @@ Strait of Hormuz is never buried by an American election.
 > That last line is the proof it was never consumed: tippecanoe strips the
 > directive when it reads it.
 >
-> ### The fix was shipped, and reverted 40 minutes later
+> ### The fix was shipped, reverted 40 minutes later, and was right all along
 >
 > **Moving the directive to Feature level is what `man tippecanoe` says to do,
 > and it emptied the map.** The 09:46 run published on the fixed code; decoding
@@ -1440,35 +1512,50 @@ Strait of Hormuz is never buried by an American election.
 > ```
 >
 > **Exactly one feature per layer per tile, at every zoom, everywhere.** The
-> archive fell from 46 MB to 8.4 MB. Reverted (`worker/tiles.ts` is back to the
-> wrong-but-populated form) and republished by manual dispatch.
+> archive fell from 46 MB to 8.4 MB. Reverted, and republished by manual dispatch.
 >
-> **Reproduced standalone on tippecanoe 2.49.0**, outside this repo — 218
-> well-spread points, one layer, nothing else changed:
+> **That was not this repo's bug. It was tippecanoe 2.49.0** — which is what
+> `apt-get install tippecanoe` gives you on Ubuntu 24.04, what this dev machine
+> had in WSL, and what CI installed. From `tile.cpp`:
+>
+> ```cpp
+>   if (sf.tippecanoe_minzoom == -1) {
+>       ...            // everything that assigns sf.dropped lives in here
+>   }                  // and there is no else
+> ```
+>
+> A feature that declares a minzoom therefore never has `sf.dropped` assigned at
+> all, so it keeps the struct default — `int dropped = FEATURE_DROPPED` — and is
+> discarded downstream by `if (sf.dropped == FEATURE_DROPPED || drop_rest)`. The
+> single survivor is the *"the first feature of the tile is always kept"* guard,
+> which is why the symptom is **exactly one per tile rather than an empty
+> archive**. That "exactly" was the tell: 1, 4, 16, 51, 135 across z0-z4 tracks
+> the tile count, not any density rule.
+>
+> **Fixed upstream in felt/tippecanoe `bd48ba8`**, *"Fix accidental loss (at all
+> zooms) of features with an explicit minzoom"*, 2024-03-22 — a two-line `else`.
+> First released in **2.52.0**. Ubuntu's 2.49.0 is one release short of it.
+>
+> **Verified by building three versions and running the same input through each**
+> — 218 well-spread points, one layer, nothing else changed:
 >
 > ```
->   "tippecanoe": {"minzoom": 0}   at Feature level  ->    1 feature at z0
->   "tippecanoe": {"minzoom": "0"} (string)          ->  218   (directive ignored)
->   no directive at all                              ->  218
->   same, with n = 10 / 100 / 1000                   ->    1 every time
+>                                   2.49.0    2.52.0    2.79.0
+>   no directive              z0 =     218       218       218
+>   minzoom 0 on every point  z0 =       1       218       218
+>   minzoom = i % 13          z0 =       1        17        17
 > ```
 >
-> **Not a flag interaction.** It survives dropping `--drop-densest-as-needed`,
-> and `-r1`, `-r0`, `-B0`, `-Bg`, `--no-feature-limit --no-tile-size-limit` in
-> every combination tried. It also contradicts the man page, which says a
-> per-feature `minzoom` is *preserved* down to that zoom "even if dot-dropping
-> with `-r` would otherwise have dropped it". **Cause not understood.** Next
-> things to try, in order: a newer tippecanoe than Ubuntu's 2.49.0 (CI installs
-> from apt too, so both sides move together); `--preserve-point-density-threshold`;
-> and failing those, dropping per-feature minzoom entirely in favour of building
-> one layer per zoom band, which is uglier but uses only flags that demonstrably
-> work.
+> The last row is the budget working: 17 of the 218 declare `minzoom: 0`, and a
+> fixed tippecanoe serves exactly those 17 at z0. The string form
+> `{"minzoom": "0"}` is silently ignored on **every** version, so a stringified
+> value still looks like a working one — that hazard is unchanged and tested.
 >
-> **The two known states are "too many pins" and "no pins", and the repo ships
-> the first**, because a busy map beats a blank one. Every unit test and
-> tippecanoe's exit code pass in both. **The only place either failure is visible
-> is a decoded tile or a browser** — which is why the fix looked right for 40
-> minutes.
+> **The two known states were "too many pins" and "no pins", and both were the
+> same missing `else`.** Every unit test and tippecanoe's exit code passed in
+> both. **The only place either failure was visible is a decoded tile or a
+> browser** — which is why the fix looked right for 40 minutes and wrong for a
+> day.
 >
 > **Nothing failed while this was wrong, and that is the lesson.** `budget.ts`
 > produced a sensible minzoom histogram, tippecanoe exited 0, the archive
@@ -1477,21 +1564,39 @@ Strait of Hormuz is never buried by an American election.
 > test file at all.** It has `worker/tiles.test.ts` now, and the first two cases
 > are the nesting, stated in both directions.
 >
-> **The country floor is also starved, and it is a separate bug.** The 05:46 run
-> wrote **220 country-top features**; the tiles serve **1**. So §9's *"every
-> country with news in the window has at least one pin at world zoom"* is false,
-> and the world view is held up entirely by unbudgeted story pins.
+> ### What the corrected build actually serves
 >
-> > **A prediction was made here and it was wrong, which is worth keeping.** The
-> > guess was `--drop-densest-as-needed` evicting the floor because the
-> > overloaded z0 tile blew the size limit, and the prediction was that fixing
-> > the budget would restore the floor to ~200+. **The floor reads 1 in the
-> > pre-fix archive and 1 in the post-fix archive**, so overload was never the
-> > mechanism. It is starved by the same directive behaviour as everything else:
-> > every country-top feature carries `minzoom: 0`, and the standalone repro
-> > above shows a layer of identical-minzoom points collapsing to one. Fix the
-> > directive and this very likely goes with it — but **verify it rather than
-> > predicting it again.**
+> **Measured, not predicted** — the 2026-08-13 run's own two GeoJSON files,
+> rebuilt unchanged except for directive placement, on 2.49.0 and on 2.79.0, and
+> decoded at real coordinates:
+>
+> ```
+>   tile                stories (2.49.0)   floor      stories (2.79.0)   floor
+>   world  0/0/0                    2064       1                    15     162
+>   London 8/127/85                  222       -                    18       -
+>   US     5/8/11                    235       -                    16       -
+>   NY     8/75/96                    44       -                    15       -
+>   Delhi 10/731/427                  40       -                    15       -
+> ```
+>
+> **15-18 stories per tile, inside §2.4's `K ≈ 12-20`**, so 2-4 visible tiles give
+> the 30-60 pins §9 asks for. Archive 14.5 MB -> 7.2 MB. Of the 8,095 groups in
+> that run, 2,922 carried the `minzoom 13` sentinel and are correctly absent from
+> every tile.
+>
+> **The country floor came back with it: 1 -> 162 of 163 written.** §9's *"every
+> country with news in the window has at least one pin at world zoom"* is true
+> for the first time.
+>
+> > **That was predicted here once, wrongly, and then predicted again, rightly —
+> > the difference is which one got measured.** The first guess was
+> > `--drop-densest-as-needed` evicting the floor after the overloaded z0 tile
+> > blew the size limit; the floor read 1 both before and after, so overload was
+> > never the mechanism. The second guess was that every country-top feature
+> > carries `minzoom: 0` and was being eaten by the same missing `else` as
+> > everything else, and that fixing the directive would restore it. **That is
+> > the 162 above.** The note that said *"verify it rather than predicting it
+> > again"* is why this row exists.
 >
 > **What this invalidates.** Every §2.4 overflow reading before 2026-08-14
 > measured what the budget *intended* to defer, not what the map did — nothing
@@ -1504,6 +1609,55 @@ Strait of Hormuz is never buried by an American election.
 > 2.5s targets, and the natural reading of that failure — "no headroom, lower
 > `K`" — is the exact opposite of the fix. Deferring the phone was luckier than it
 > looked.
+>
+> ### What changed, and the new toolchain floor
+>
+> Three things, and **none of them works without the other two**:
+>
+> 1. `worker/tiles.ts` writes the `tippecanoe` object at Feature level.
+> 2. `scripts/tippecanoe-min-version.sh` **refuses to run below 2.52.0**, on both
+>    the native and the WSL path, via `scripts/run-tippecanoe.sh`.
+> 3. CI builds tippecanoe 2.79.0 from source, cached on the version, instead of
+>    `apt-get install tippecanoe`. **This reverses §6 decision 8's "it is one
+>    command rather than a source build"** — apt's copy is below the floor, so the
+>    convenience that decision bought is no longer available at any price.
+>
+> **The version is checked rather than written down** because every failure on
+> this path is silent. Nothing in this project can tell a good archive from a
+> ruined one without decoding a tile, so the tool that ruins it is refused up
+> front. It is a constant, not a probe: a wrong tippecanoe fails the run with the
+> version it found and the reason it is not enough.
+>
+> ~~**This machine cannot build tiles until WSL's tippecanoe is replaced**~~ —
+> **done 2026-08-14 18:10 UTC.** WSL now has **2.79.0 built from source at
+> `/usr/local/bin/tippecanoe`**, ahead of apt's `/usr/bin` copy on `PATH`, and the
+> guard passes. `make install` needs `sudo` for `/usr/local`; `make install
+> PREFIX=$HOME/.local` is the no-sudo form, and Ubuntu's default `~/.profile` puts
+> that on the `PATH` of the login shell `run-tippecanoe.sh` shells into.
+>
+> **Verified through the real entry point, not a hand-run binary.** The
+> 2.49-vs-2.52-vs-2.79 comparison above was run against a source tree in a
+> container; this is `scripts/run-tippecanoe.sh` with §3.1's exact flags, the
+> guard, and the Windows→WSL translation, over the 8,095-group stories layer and
+> 163-feature country-top layer of a real run:
+>
+> ```
+>   archive          7.2 MB          (14.5 MB unbudgeted)
+>   country_top z0   162 features    §9's floor, intact
+>   busiest z10 tiles, source features -> features rendered
+>     731/453        408 -> 15
+>     500/328        327 -> 15
+>     231/388        225 -> 15
+>     292/391        155 -> 16
+>     301/384         17 -> 15
+>   Paris column     15 at every zoom z0-z12
+> ```
+>
+> **K binds at every zoom and nowhere collapses to 1.** A sampled tile that reads
+> `stories=1` is a tile with one story in it — check the input before calling it
+> the old bug: the New York column reads 1 from z10 down because the centroid is
+> in `301/384`, and the tile the naive lon/lat lookup picks (`301/385`) genuinely
+> holds a single story.
 
 **Plus a guaranteed floor.** At z0 the whole planet is one tile, so the budget
 alone would put 12-20 stories on the entire world map. A separate
@@ -2250,7 +2404,7 @@ content model. No topic classification is needed anywhere in this project.
 | 5 | ~~Red-outline precedence when two are lit~~ | **RESOLVED 2026-08-13 — there is never more than one.** Every click clears both outlines and the panel before it establishes anything, so a container click inside a locked region *replaces* the region outline rather than joining it | The row assumed a region lock and a §2.2 container click-reveal could be lit together and proposed distinguishing them by weight. Building it made the simpler answer obvious: one red outline and one panel, or the user cannot say which of the two the map claims is selected. Two lit outlines with a weight difference asks the reader to decode a legend that is not on screen. If two ever do need to co-exist, the brighter-and-thicker treatment is still the right shape — do not introduce a second colour |
 | 6 | ~~Country auto-zoom level~~ | **SUPERSEDED 2026-08-13** | §2.3 no longer moves the camera when a region is selected, so there is no country fit to compute. The Global button is the only camera move left, and its target is fixed (whole planet). Kept as a row because the reasoning — a fixed zoom is wrong for both Monaco and Russia — returns the moment anyone re-proposes auto-zoom |
 | 7 | Blob transfer allowance | **RESOLVED 2026-08-13 by arithmetic — it is not the binding limit, and the exact allowance does not need to be known.** MapTiler binds first, by more than an order of magnitude | Measured on the deployed site: an arrival at world zoom costs **~440 KB from Blob** — `manifest.json` 824 B plus six `206` range requests into the 21.9 MB archive (196 KB, 167 KB, 41 KB, 17 KB, 9.5 KB, 7 KB). Opening a region panel adds the index, 328 KB. So a generous visit is ~0.8 MB. **MapTiler pauses the map at ~330-520 visits/month** (§3.1), and 500 visits × 0.8 MB is **~400 MB** — so Blob transfer would have to be capped below that to bind first, which no Vercel plan is. The dashboard number was never the thing worth knowing; the ratio was. Recheck if the archive grows several-fold or if the basemap moves to OpenFreeMap, which removes the ceiling that is currently doing the limiting |
-| 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Installed and in use since 2026-08-10.** `wsl -d Ubuntu -- which tippecanoe` answers `/usr/bin/tippecanoe`, and it built both the Phase 2 archive and the 2026-08-13 boundaries rebuild. This row read *"still pending the one `sudo` password"* until 2026-08-13, three days after it stopped being true — §0 rule 1. Docker 29.0.1 is installed with its daemon stopped and is the unused fallback |
+| 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Installed and in use since 2026-08-10.** `wsl -d Ubuntu -- which tippecanoe` answers `/usr/bin/tippecanoe`, and it built both the Phase 2 archive and the 2026-08-13 boundaries rebuild. This row read *"still pending the one `sudo` password"* until 2026-08-13, three days after it stopped being true — §0 rule 1. Docker 29.0.1 is installed with its daemon stopped and is the unused fallback. **Amended 2026-08-14: the apt half of this row is dead.** 2.49.0 is *below* the correctness floor §2.4 now enforces — it eats every feature with an explicit `minzoom` — so "one command and not a source build" is no longer available at any price, here or in CI. Both are on **2.79.0 built from source**; locally that is `/usr/local/bin/tippecanoe`, which shadows apt's `/usr/bin` copy on `PATH`. The routing decision (WSL over Docker or a stand-in) is unchanged and still right; only its cheap install is gone |
 | 9 | Tier-1 list membership | **RESOLVED 2026-08-13 — keep all 28, unchanged.** The concern that forced this row does not survive real data | The row was provisional because `newsweek.com` and `latimes.com` — the two members most arguable as papers of record — were **26% of the tier-1 records in the three-hour spike**, so the thinnest part of the list was carrying a quarter of a privileged class. **Measured on the live 24-hour index, they are 4% and 5%.** The class is now led by `independent.co.uk` 16%, `scmp.com` 16%, `theguardian.com` 16%, `bbc.co.uk` 15%, with `aljazeera.com` present at 6% after returning **zero** in the spike. The spike's ranking was a small-sample artifact, and the list now looks like what it was built to be. 15 of 28 domains still return nothing (Reuters, AP, NYT, WaPo, WSJ…) and still cost nothing. Also measured: tier-1 is **1.9% of groups but 6.2% of panel rows** — the §2.5 comparator promoting them roughly threefold, which is the rule working, visible for the first time |
 | 10 | Tier-1 freshness clock | **newest** tier-1 article in the group | "Published in the last 48 hours" against the *oldest* would expire a story that a tier-1 outlet is still actively covering. Newest means a follow-up piece renews the 48 hours, which reads as the same story continuing — matching "unless it is replaced by another tier-1 story" |
 | 11 | Basemap provider and billing unit | **RESOLVED 2026-08-10 — MapLibre GL JS + MapTiler, per-request billing.** Google Maps was investigated and rejected | **Google would work**: the Map Tiles API serves 2D tiles over a `{z}/{x}/{y}` template that drops into a MapLibre `raster` source, third-party renderers are explicitly contemplated in its policies, roadmap tiles are custom-stylable, and it is 100k tiles/mo free then $0.60/1k with *graceful* overflow instead of a pause. Rejected anyway: the tiles are **raster**, which fights §9's <2.5s-on-4G target and needs `scaleFactor2x` for retina (halving the free tier), it requires a **credit card** against §2.6's "free tier everywhere," its logo rules cost real phone screen, and `createSession` turns `basemap()` from a pure function into an async stateful one — losing §3.1's one-line escape hatch. **MapTiler SDK** (per-session, 5,000/mo, ~10-15× the headroom) is the stronger economic option and was also declined: the headroom is theoretical at portfolio traffic, and the SDK is MapTiler-specific, which kills the OpenFreeMap swap that made this whole investigation possible without a key. Deferring is cheap — the SDK wraps MapLibre, so switching stays small. **Revisit above ~200 visits/month.** Evidence and measurements: `spikes/basemap/CASE-STUDY.md`. **2026-08-13: that trigger now has a trigger.** Nothing in the repo measured visits, so "revisit above ~200/month" could only ever fire by accident; `@vercel/analytics` is in `app/layout.tsx` (free on Hobby, one script, no consent banner, §2.6 intact). **Stay on MapTiler until it reads above ~200**, and treat the OpenFreeMap swap as the escape hatch already owned rather than a pre-emptive move: OpenFreeMap draws **state labels only at z5-8** against MapTiler's z2-11, so switching now would quietly cost most of §2.3's state gesture at the zooms visitors arrive at |

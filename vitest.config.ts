@@ -14,7 +14,10 @@ export default defineConfig({
     alias: { "@": path.resolve(import.meta.dirname) },
   },
   test: {
-    include: ["worker/**/*.test.ts", "lib/**/*.test.ts"],
+    // `scripts/` is here for one file: the tippecanoe version guard. It is the
+    // only shell script in the repo whose failure mode is silent corruption of a
+    // published archive (§2.4), so it is the only one worth executing in a test.
+    include: ["worker/**/*.test.ts", "lib/**/*.test.ts", "scripts/**/*.test.ts"],
     environment: "node",
   },
 });

@@ -49,47 +49,50 @@ function featuresOf(groups: StoryGroup[]): any[] {
 
 describe("the tippecanoe directive", () => {
   /**
-   * **These assertions pin a known-wrong state, deliberately.**
+   * **Both known failures of this directive are invisible from here**, so these
+   * assert the shape in both directions rather than the behaviour.
    *
-   * The directive belongs at Feature level per `man tippecanoe`, and it is
-   * inside `properties` instead — so it is ignored and §2.4's budget does not
-   * run. It is written here the wrong way because the right way was tried on
-   * 2026-08-14 and published an archive with **one feature per layer per tile at
-   * every zoom**, which is a worse map than a too-dense one. `tiles.ts` has the
-   * measurements and the standalone repro.
-   *
-   * So this file's job is not "the directive is correct". It is: **the shape
-   * does not change by accident, and whoever changes it on purpose has read
-   * why it is like this.**
+   * Nested inside `properties` it is ignored and the budget never runs (1,714
+   * pins at world zoom). At Feature level on tippecanoe < 2.52.0 it is honoured
+   * by a version that then drops every feature declaring one, leaving exactly
+   * one per tile. tippecanoe exits 0 either way. The version half of that is
+   * enforced in `scripts/run-tippecanoe.sh`; this file holds the placement half.
    */
-  it("currently sits inside properties, which is why the budget does not run", () => {
+  it("sits at Feature level, beside geometry, which is the only place it works", () => {
     const [feature] = featuresOf([group({ minzoom: 7 })]);
-    expect(feature.properties.tippecanoe).toEqual({ minzoom: 7 });
-    expect(feature.tippecanoe).toBeUndefined();
+    expect(feature.tippecanoe).toEqual({ minzoom: 7 });
+  });
+
+  it("is not inside properties, where it is silently ignored", () => {
+    // This is the exact regression that ran for the life of the project. It is
+    // stated separately from the assertion above because the two can both be
+    // true — writing it in both places would ship a real directive and a stray
+    // attribute on every feature in every tile.
+    const [feature] = featuresOf([group({ minzoom: 7 })]);
+    expect(feature.properties.tippecanoe).toBeUndefined();
   });
 
   it("carries the budget's minzoom unchanged, including the do-not-render sentinel", () => {
     // budget.ts assigns MAX_BUDGET_ZOOM + 1 = 13 to groups that never win a
-    // slot. The value has to survive this function intact whether or not
-    // tippecanoe currently acts on it, or the eventual fix inherits a second
-    // bug on top of the first.
+    // slot. Above tippecanoe's -z12 ceiling, so those never render — which is
+    // how overflow leaves the map without leaving the pipeline.
     const features = featuresOf([group({ minzoom: 0 }), group({ minzoom: 13 })]);
-    expect(features.map((f) => f.properties.tippecanoe.minzoom)).toEqual([0, 13]);
+    expect(features.map((f) => f.tippecanoe.minzoom)).toEqual([0, 13]);
   });
 
   it("emits a directive for every feature, never a bare one", () => {
     const features = featuresOf([group({ minzoom: 3 }), group({ minzoom: 9 })]);
     for (const feature of features) {
-      expect(typeof feature.properties.tippecanoe?.minzoom).toBe("number");
+      expect(typeof feature.tippecanoe?.minzoom).toBe("number");
     }
   });
 
   it("keeps minzoom numeric, because the string form is silently ignored", () => {
-    // Measured on tippecanoe 2.49.0: `{"minzoom": "0"}` is discarded outright
-    // rather than erroring. If the eventual fix moves this to Feature level, a
-    // stringified value would look like it worked and change nothing.
+    // Measured across 2.49.0, 2.52.0 and 2.79.0: `{"minzoom": "0"}` is discarded
+    // outright rather than erroring, on every version. A stringified value looks
+    // exactly like a working one and changes nothing.
     const [feature] = featuresOf([group({ minzoom: 4 })]);
-    expect(typeof feature.properties.tippecanoe.minzoom).toBe("number");
+    expect(typeof feature.tippecanoe.minzoom).toBe("number");
   });
 });
 
@@ -98,12 +101,10 @@ describe("the feature payload", () => {
     // The copyright constraint is enforced here rather than reviewed. A new
     // property added upstream must be added to this list deliberately.
     //
-    // `tippecanoe` is in this list under protest: it is the misplaced directive,
-    // and it is riding into every tile as a real attribute on every published
-    // feature. It costs payload on every tile fetch and means nothing to the
-    // browser. **When the directive finally moves to Feature level, delete it
-    // from here** — its presence in this list is a marker for that unfinished
-    // work, not an approved property.
+    // `tippecanoe` is deliberately absent: it is a directive at Feature level,
+    // consumed and stripped by the tile build, so it never reaches the browser.
+    // If it reappears in this list the directive has been nested back inside
+    // `properties`, where it does nothing but cost payload on every tile fetch.
     const [feature] = featuresOf([group()]);
     expect(Object.keys(feature.properties).sort()).toEqual(
       [
@@ -116,7 +117,6 @@ describe("the feature payload", () => {
         "salience",
         "source",
         "tier1",
-        "tippecanoe",
         "title",
         "url",
       ].sort(),
@@ -132,7 +132,7 @@ describe("the feature payload", () => {
   it("rounds salience but does not round the minzoom it is ranked into", () => {
     const [feature] = featuresOf([group({ salience: 1.732912345, minzoom: 11 })]);
     expect(feature.properties.salience).toBe(1.7329);
-    expect(feature.properties.tippecanoe.minzoom).toBe(11);
+    expect(feature.tippecanoe.minzoom).toBe(11);
   });
 
   it("flattens tier1 to 0/1, because vector tiles have no boolean", () => {

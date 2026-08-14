@@ -32,6 +32,12 @@ concurrency:
 permissions:
   contents: read
 
+# The tippecanoe built below. It is not the minimum — the minimum is 2.52.0 and
+# lives in scripts/run-tippecanoe.sh, which is the one place that enforces it.
+# This is just which version above the floor CI happens to pin.
+env:
+  TIPPECANOE_VERSION: "2.79.0"
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -48,11 +54,47 @@ jobs:
           node-version: "24"
           cache: npm
 
-      # Ubuntu 24.04 ships tippecanoe 2.49.0 in apt (§6 decision 8), so this is
-      # a package install and not a source build. `runs-on: ubuntu-latest` must
-      # stay on 24.04 or newer for that to hold.
-      - name: Install tippecanoe
-        run: sudo apt-get update && sudo apt-get install -y tippecanoe
+      # **This was `apt-get install tippecanoe` until 2026-08-14, and that is
+      # what broke the density budget.** Ubuntu 24.04 ships 2.49.0, which
+      # silently drops every feature carrying an explicit `tippecanoe.minzoom` —
+      # i.e. every feature this project publishes — leaving one feature per tile
+      # while still exiting 0. Fixed upstream in 2.52.0; the floor is enforced by
+      # scripts/tippecanoe-min-version.sh, which has the mechanism. So this is a
+      # pinned source build, and it cannot go back to apt until apt catches up.
+      #
+      # The cache key is the version, so a bump rebuilds and a rerun does not.
+      # Cold build is ~2 min on a 4-core runner; warm is a restore.
+      - name: Cache tippecanoe ${{ env.TIPPECANOE_VERSION }}
+        id: tippecanoe-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/bin
+          key: tippecanoe-${{ env.TIPPECANOE_VERSION }}-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Build tippecanoe ${{ env.TIPPECANOE_VERSION }}
+        if: steps.tippecanoe-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev
+          git clone --depth 1 --branch "$TIPPECANOE_VERSION" \
+            https://github.com/felt/tippecanoe /tmp/tippecanoe-src
+          make -C /tmp/tippecanoe-src -j"$(nproc)"
+          mkdir -p ~/.local/bin
+          cp /tmp/tippecanoe-src/tippecanoe \
+             /tmp/tippecanoe-src/tippecanoe-decode \
+             /tmp/tippecanoe-src/tile-join ~/.local/bin/
+
+      # Runs on a cache restore as well as a cold build: a restored binary still
+      # has to find libsqlite3 at runtime, and this is what turns that into a
+      # failed step rather than a confusing archive twenty minutes later.
+      #
+      # Routed through run-tippecanoe.sh rather than calling the guard directly,
+      # so the floor is not written down twice and this exercises the exact entry
+      # point worker/tiles.ts uses.
+      - name: Check the tippecanoe version
+        run: |
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          PATH="$HOME/.local/bin:$PATH" bash scripts/run-tippecanoe.sh --version
 
       - run: npm ci
 
