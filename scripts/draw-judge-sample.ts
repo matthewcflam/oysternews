@@ -45,6 +45,7 @@ import { parseBundle } from "../worker/parse.ts";
 import { type PlacementTrace, explainPlacement } from "../worker/place.ts";
 import { loadRefData } from "../worker/refdata.ts";
 import type { Article } from "../lib/types.ts";
+import { drawFingerprint } from "./judge-draw-id.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SPIKE_DIR = path.join(REPO_ROOT, "spikes", "gdelt");
@@ -339,21 +340,26 @@ async function main(): Promise<void> {
     });
   }
 
-  // Fisher-Yates on a seeded PRNG: reproducible from (seed, bundles) alone.
+  // Fisher-Yates on a seeded PRNG. The shuffle is reproducible from the seed;
+  // the POPULATION is not, because the bundles are whatever GDELT was serving
+  // that hour — which is why the id below carries a fingerprint of the result
+  // and not just the seed. See `judge-draw-id.ts`.
   const rand = mulberry32(seed);
   for (let i = population.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));
     [population[i], population[j]] = [population[j], population[i]];
   }
   const sample = population.slice(0, n);
+  const fingerprint = drawFingerprint(sample.map((r) => r.url));
   sample.forEach((record, i) => {
-    record.id = `${seed.toString(36)}-${i}`;
+    record.id = `${seed.toString(36)}-${fingerprint}-${i}`;
   });
 
-  const drawId = `${seed.toString(36)}-${sample.length}`;
+  const drawId = `${seed.toString(36)}-${fingerprint}-${sample.length}`;
   const meta = {
     drawId,
     seed,
+    fingerprint,
     bundles,
     drawnAt: new Date().toISOString(),
     populationSize: population.length,
