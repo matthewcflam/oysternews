@@ -271,6 +271,70 @@ designed rule H and scored it, which is the weakest link in the evidence.
 > pre-registration exists to prevent, and this project has already honoured one
 > firing criterion — that is most of what makes the evidence worth anything.
 
+**The accuracy percentage is a gate, not the product. `explainPlacement()` is
+the part that makes the map better** — added 2026-08-14. `placeStory()` is eight
+branches over a handful of mention counts, so every placement it has ever made is
+explainable from its inputs; it just did not say so. `{kind, location}` cannot
+distinguish a story with a real dominant place from one where GDELT scattered
+single mentions and the rule confidently picked whichever came first.
+
+**The trace is the implementation and `placeStory()` reads its answer off it.**
+A separate explainer walking the same logic is a second implementation that
+drifts, and it would drift silently because nothing downstream compares them.
+A test asserts they agree on every case in the file.
+
+**Why it was built: the 15 wrong rule-H placements are five mechanisms, not
+two.** The judged files record `failure` as `region` or `noplace`, which is too
+coarse to act on. Read by hand:
+
+```
+  class                                        pins   fixable in place.ts
+  1  story has no place; all locations x1        3    yes — no weak-winner DROP exists
+  2  most-mentioned != what it is about          3    yes — Knockhill lost 4-2 to Thruxton
+  4  GDELT geocoded a non-place                  3    no  — "Dharma", "Black Sea, Oceans"
+  5  headline's location never extracted         1    no
+```
+
+Classes 4 and 5 are upstream of this project and **cap what any rule can reach:
+4 of 10 pin failures are unreachable, so the ceiling is ~88%, not 100%.** The
+other 6 are addressable, and class 1 alone would move pins 69.7% -> ~79% if every
+one of them is genuinely a story with no place.
+
+**`npm run place:audit` sizes each class against the whole feed.** First reading,
+2 bundles / 1,173 filtered articles:
+
+```
+  branch              share      suspicious shape        of pins
+  city-survives       51.2%      lone-mention             29.5%
+  country-dominates   14.7%      tie-broken               15.5%
+  country-only        11.9%      narrow-win               15.5%
+  adm1-dominates      10.8%      margin-near-miss          5.8%
+  adm1-only            8.8%      runaway-country           0.0% (containers only, 4.9%)
+```
+
+> **Frequency is not accuracy, and conflating them is a mistake this project has
+> already made.** The script measures *mechanism* — nothing in it knows whether a
+> placement is right, which only a human reading the headline does (§5.1). Mention
+> count looked like it graded pin confidence on six records (p=0.053) and went
+> flat on 110 (p=0.736), and `lone-mention` is the same signal wearing a
+> different hat. **Do not turn a shape into a DROP rule without a judged sample.**
+>
+> What the two halves do together is size the prize: if `lone-mention` pins really
+> are ~40% correct against ~82% for the rest — the hand-audit reading, on **ten
+> records**, so barely evidence — then a shape carrying **29.5% of all pins** is
+> most of the error budget. That is worth measuring properly and is not worth
+> acting on yet.
+
+**So the independent judge sample should do double duty.** Add one field: when
+the judge marks WRONG, they pick a reason from a fixed list. One extra click,
+and 90 records yield ~35 classified failures against the 15 self-classified ones
+above — enough to say whether class 1 is real before anyone writes the rule.
+
+**Also worth knowing:** `no-locations` and `no-usable-level` never appear in the
+audit output because `filterArticles` removes those articles first. `all-demonyms`
+runs at 2.6%, which is the demonym filter's visible cost and looks right against
+§2.1's measured 11.9% of *mentions*.
+
 ---
 
 ## THE COUNT BAND IS NO LONGER SELF-REFERENTIAL — fixed 2026-08-14
