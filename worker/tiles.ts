@@ -12,10 +12,11 @@
  *   stories       per-tile top-K, minzoom from the budget
  *   country-top   top 1 per country, minzoom 0, exempt from the budget
  *
- * tippecanoe reads a per-feature `tippecanoe` object that is a **sibling of
- * `geometry` and `properties`**, not a member of `properties`. That is how
- * `minzoom` gets from budget.ts into the archive, and getting the nesting wrong
- * fails **silently in the worst direction** — see the note on `featureOf`.
+ * **`minzoom` does NOT currently reach the archive**, so the budget above is
+ * computed and discarded and the map is far denser than §9 allows. This is
+ * known, measured, and not yet fixable — the documented remedy empties the map
+ * instead. The long note on `featureOf` is the whole account; read it before
+ * touching the directive.
  *
  * tippecanoe has no native Windows build (§6 decision 8), so on Windows this
  * shells into WSL. `scripts/build-tiles.sh` already solves that, including the
@@ -66,28 +67,57 @@ const posix = (value: string): string => value.replaceAll("\\", "/");
  * carrying it. §7 critical gap 2 asks for a test that the popup contains title,
  * source and link and nothing else; this is the other half of it.
  *
- * **`tippecanoe` is a sibling of `properties`, and this is load-bearing.** It
- * sat inside `properties` from the first version until 2026-08-14, where
- * tippecanoe does not look for it. The consequences were invisible and total:
- * the directive was carried into the tiles as an ordinary attribute, every
- * per-feature `minzoom` from budget.ts was ignored, and **§2.4's density budget
- * therefore never ran on a single published archive**. World zoom served 1,714
- * pins on a phone against §9's target of 30-60, including seven features
- * assigned `MAX_BUDGET_ZOOM + 1` — the sentinel that explicitly means *do not
- * render this at all*.
+ * ---------------------------------------------------------------------------
+ * **The `tippecanoe` directive is in the WRONG PLACE ON PURPOSE. Read this
+ * before you "fix" it.**
  *
- * Nothing failed. `budget.ts` computed the right values, tippecanoe exited 0,
- * the archive published, the invariants passed, and the map looked busy rather
- * than broken. `tiles.test.ts` now pins the nesting, because this module is I/O
- * and had no test at all — which is exactly how a one-level typo survived every
- * run for the life of the project.
+ * It is inside `properties`, where tippecanoe does not look for it, so **every
+ * per-feature `minzoom` from budget.ts is ignored and §2.4's density budget has
+ * never run.** Measured 2026-08-14: world zoom serves ~1,714 pins on a phone
+ * against §9's target of 30-60, and the country floor is starved to 1 feature.
+ * That is a real, known, unfixed defect.
+ *
+ * **The documented fix was tried the same day and it emptied the map.** Moving
+ * the object to the Feature level — a sibling of `geometry` and `properties`,
+ * exactly as `man tippecanoe` specifies — published an archive containing
+ * **exactly one feature per layer per tile at every zoom, everywhere**:
+ *
+ * ```
+ *   London 8/127/85    before: stories=792     after: stories=1
+ *   Delhi  10/731/427  before: stories=113     after: stories=1
+ *   world  0/0/0       before: stories=3968    after: stories=1
+ * ```
+ *
+ * Reproduced standalone on tippecanoe 2.49.0, away from this repo: 218
+ * well-spread points in one layer, no other change.
+ *
+ * ```
+ *   "tippecanoe": {"minzoom": 0}  at Feature level  ->    1 feature at z0
+ *   "tippecanoe": {"minzoom": "0"} (string)         ->  218   (directive ignored)
+ *   no directive at all                             ->  218
+ * ```
+ *
+ * Not a flag interaction — it survives dropping `--drop-densest-as-needed`,
+ * `-r1`, `-r0`, `-B0`, `-Bg`, and `--no-feature-limit --no-tile-size-limit`. It
+ * contradicts the man page, which says a per-feature `minzoom` is *preserved*
+ * down to that zoom "even if dot-dropping with `-r` would otherwise have dropped
+ * it". **Cause not yet understood.**
+ *
+ * So the two known states are *too many pins* and *no pins*, and this file
+ * currently ships the first, because a busy map beats an empty one. **Do not
+ * move this line without republishing and decoding real tiles at real
+ * coordinates** — every unit test and the tippecanoe exit code pass in both
+ * states, and the browser is the only place either failure is visible.
+ * ---------------------------------------------------------------------------
  */
 function featureOf(group: StoryGroup): unknown {
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: [group.lon, group.lat] },
-    // Sibling of `properties`, never inside it. See the note above.
-    tippecanoe: { minzoom: group.minzoom },
+    // NOTE: the directive is back inside `properties` below, which tippecanoe
+    // ignores. That is deliberate and it is not the end state. See the note
+    // above `featureOf` before changing it — moving it here, which is what the
+    // tippecanoe man page tells you to do, empties the map.
     properties: {
       title: group.title,
       source: group.domain,
@@ -102,6 +132,7 @@ function featureOf(group: StoryGroup): unknown {
       domains: group.distinctDomains,
       tier1: group.tier1Fresh ? 1 : 0,
       date: group.newestArticle,
+      tippecanoe: { minzoom: group.minzoom },
     },
   };
 }

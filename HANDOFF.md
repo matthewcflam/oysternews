@@ -32,14 +32,18 @@ either way). §2.4's overflow was **re-read at 57.3% but is still a pre-weak-cit
 number** — the rule landed after that run, so the trigger has not been read on
 the code that is live.
 
-**Then the density budget turned out never to have run.** §2.4's per-tile top-K
-is implemented correctly in `budget.ts` and was **thrown away at the tiles
-boundary**: `worker/tiles.ts` wrote tippecanoe's per-feature directive *inside*
-`properties`, where tippecanoe does not look for it. Every `minzoom` was ignored
-on every archive this project has ever published. World zoom served **1,714 pins
-on a 390px phone against §9's target of 30-60**. Fixed, tested and proved against
-real tippecanoe — see "The density budget never ran" below, and **re-read any
-overflow number taken before 2026-08-14 with it in mind**.
+**Then the density budget turned out never to have run — and the documented fix
+for it emptied the map.** §2.4's per-tile top-K is implemented correctly in
+`budget.ts` and is **thrown away at the tiles boundary**: `worker/tiles.ts`
+writes tippecanoe's per-feature directive *inside* `properties`, where tippecanoe
+does not look for it. Every `minzoom` has been ignored on every archive this
+project has ever published; world zoom serves **1,714 pins on a 390px phone
+against §9's target of 30-60**. **Moving the directive to Feature level, exactly
+as `man tippecanoe` specifies, published an archive with one feature per layer
+per tile at every zoom** — a blank map — so it was reverted within the hour and
+the defect is still open. Both states are measured below under "The density
+budget never ran". **Re-read any overflow number with this in mind**, and read
+that section before touching `worker/tiles.ts`.
 
 **Two things were then deferred by decision, and both are deferred rather than
 cancelled:** the **phone profile** (§9's 4G target stays unverified on real
@@ -1421,20 +1425,50 @@ Strait of Hormuz is never buried by an American election.
 > That last line is the proof it was never consumed: tippecanoe strips the
 > directive when it reads it.
 >
-> **Confirmed end to end against real tippecanoe v2.49.0**, both shapes, same
-> flags as §3.1 (`-Z0 -z12 -r1 --drop-densest-as-needed`), 14 features declaring
-> minzoom 0-13:
+> ### The fix was shipped, and reverted 40 minutes later
+>
+> **Moving the directive to Feature level is what `man tippecanoe` says to do,
+> and it emptied the map.** The 09:46 run published on the fixed code; decoding
+> that archive against the previous one, at real coordinates:
 >
 > ```
->   directive inside properties   every feature renders at z0, minzoom 13 included
->   directive as a sibling        only minzoom 0 renders at z0; minzoom 13 never renders
+>              tile           before (broken)   after ("fixed")
+>   world      0/0/0          stories=3968      stories=1
+>   London     8/127/85       stories=792       stories=1
+>   New York   8/75/96        stories=224       stories=1
+>   Delhi     10/731/427      stories=113       stories=1
 > ```
 >
-> The sibling form drops the `MAX_BUDGET_ZOOM + 1` sentinel exactly as the design
-> says it should. (Individual first-render zooms in that probe are approximate —
-> `tippecanoe-decode` interleaves its tile headers, so attributing a feature to
-> the right tile is unreliable at row level. The two conclusions above do not
-> depend on that.)
+> **Exactly one feature per layer per tile, at every zoom, everywhere.** The
+> archive fell from 46 MB to 8.4 MB. Reverted (`worker/tiles.ts` is back to the
+> wrong-but-populated form) and republished by manual dispatch.
+>
+> **Reproduced standalone on tippecanoe 2.49.0**, outside this repo — 218
+> well-spread points, one layer, nothing else changed:
+>
+> ```
+>   "tippecanoe": {"minzoom": 0}   at Feature level  ->    1 feature at z0
+>   "tippecanoe": {"minzoom": "0"} (string)          ->  218   (directive ignored)
+>   no directive at all                              ->  218
+>   same, with n = 10 / 100 / 1000                   ->    1 every time
+> ```
+>
+> **Not a flag interaction.** It survives dropping `--drop-densest-as-needed`,
+> and `-r1`, `-r0`, `-B0`, `-Bg`, `--no-feature-limit --no-tile-size-limit` in
+> every combination tried. It also contradicts the man page, which says a
+> per-feature `minzoom` is *preserved* down to that zoom "even if dot-dropping
+> with `-r` would otherwise have dropped it". **Cause not understood.** Next
+> things to try, in order: a newer tippecanoe than Ubuntu's 2.49.0 (CI installs
+> from apt too, so both sides move together); `--preserve-point-density-threshold`;
+> and failing those, dropping per-feature minzoom entirely in favour of building
+> one layer per zoom band, which is uglier but uses only flags that demonstrably
+> work.
+>
+> **The two known states are "too many pins" and "no pins", and the repo ships
+> the first**, because a busy map beats a blank one. Every unit test and
+> tippecanoe's exit code pass in both. **The only place either failure is visible
+> is a decoded tile or a browser** — which is why the fix looked right for 40
+> minutes.
 >
 > **Nothing failed while this was wrong, and that is the lesson.** `budget.ts`
 > produced a sensible minzoom histogram, tippecanoe exited 0, the archive
@@ -1443,27 +1477,21 @@ Strait of Hormuz is never buried by an American election.
 > test file at all.** It has `worker/tiles.test.ts` now, and the first two cases
 > are the nesting, stated in both directions.
 >
-> **It was also starving the country floor, which is the second silent
-> violation.** The 05:46 run wrote **220 country-top features**. The tiles
-> served **6** — `TP, EC, NO, GT, SV, GL`, and 1 of them rendered at z2. So
-> §9's *"every country with news in the window has at least one pin at world
-> zoom"* has been false for as long as the budget has, and the world view was
-> being held up entirely by unbudgeted story pins.
+> **The country floor is also starved, and it is a separate bug.** The 05:46 run
+> wrote **220 country-top features**; the tiles serve **1**. So §9's *"every
+> country with news in the window has at least one pin at world zoom"* is false,
+> and the world view is held up entirely by unbudgeted story pins.
 >
-> **The mechanism is `--drop-densest-as-needed`, doing its job.** `-r1` disables
-> tippecanoe's radial dropping, but not this. With every story landing at z0, the
-> single world tile held ~34,000 features and blew the tile size limit, so
-> tippecanoe evicted the densest — and the country floor, 220 points spread over
-> one tile, went with it. **The floor layer was destroyed by the overflow it
-> exists to protect against.**
->
-> > **Falsifiable prediction, to check on the first archive built after the
-> > fix:** with `minzoom` honoured, the z0 tile holds roughly 15 story features
-> > plus the whole floor, which is far inside the size limit — so
-> > **country-top should come back to ~200+ in the tiles, and world zoom should
-> > read ~30-60 pins rather than 1,714.** If country-top is still starved after
-> > the fix, `--drop-densest-as-needed` is not the mechanism and this paragraph
-> > is wrong; look at the layer's own `maxzoom: 4` next.
+> > **A prediction was made here and it was wrong, which is worth keeping.** The
+> > guess was `--drop-densest-as-needed` evicting the floor because the
+> > overloaded z0 tile blew the size limit, and the prediction was that fixing
+> > the budget would restore the floor to ~200+. **The floor reads 1 in the
+> > pre-fix archive and 1 in the post-fix archive**, so overload was never the
+> > mechanism. It is starved by the same directive behaviour as everything else:
+> > every country-top feature carries `minzoom: 0`, and the standalone repro
+> > above shows a layer of identical-minzoom points collapsing to one. Fix the
+> > directive and this very likely goes with it — but **verify it rather than
+> > predicting it again.**
 >
 > **What this invalidates.** Every §2.4 overflow reading before 2026-08-14
 > measured what the budget *intended* to defer, not what the map did — nothing
