@@ -36,6 +36,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PlacementTrace } from "../worker/place.ts";
+// Wilson lives in lib/ so `lib/accuracy.test.ts` can re-derive the published
+// figures with the SAME arithmetic this script prints. Two copies would let the
+// About page agree with a bug instead of with the judge.
+import { wilson } from "../lib/audit-score.ts";
 import { drawFingerprint, fingerprintOf } from "./judge-draw-id.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -64,22 +68,6 @@ type SampleRecord = {
   placedAt: string;
   trace: PlacementTrace;
 };
-
-/**
- * 95% Wilson score interval.
- *
- * Not the textbook normal approximation, which at n=26 and p=0.81 produces an
- * upper bound above 100% and is simply wrong near the edges. Wilson shrinks
- * toward 0.5 and stays inside [0,1], which is why §5.1 specified it.
- */
-function wilson(correct: number, n: number, z = 1.96): [number, number] {
-  if (n === 0) return [0, 0];
-  const p = correct / n;
-  const d = 1 + (z * z) / n;
-  const centre = (p + (z * z) / (2 * n)) / d;
-  const half = (z / d) * Math.sqrt((p * (1 - p)) / n + (z * z) / (4 * n * n));
-  return [100 * (centre - half), 100 * (centre + half)];
-}
 
 function readJsonl<T>(body: string): T[] {
   return body

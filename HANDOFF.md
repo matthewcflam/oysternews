@@ -903,6 +903,38 @@ Two things that run surfaced, neither a bug:
   > a real record**, which is the rule that made `IN-TN` legal and kept `TL` out.
   > That two of these have now surfaced from live data is the loud-log path
   > earning its keep, not a backlog to clear.
+  >
+  > > **Checked, 2026-08-14, and the rule paid for itself: do NOT add an
+  > > override.** 60 bundles (67,837 articles, ~15 hours) contain **14 locations
+  > > tagged `WQ`**, all one place — `Wake Island, type 1, country WQ`. The
+  > > stories are the finding:
+  > >
+  > > ```
+  > >   12 of 14   "Battlefield 6 Suits Up ... Official Top Gun Collaboration
+  > >               Trailer"  — one syndicated piece across 12 Australian
+  > >               radio domains (5au, 4cc, chillifm, river949, 4bu, lafm, ...)
+  > >    2 of 14   USGS Volcano Notice
+  > > ```
+  > >
+  > > **`Wake Island` is a Battlefield map name.** GDELT's geocoder is resolving
+  > > a video-game level to a real atoll — the code is a *false positive*, not a
+  > > gap, and no FIPS table can fix a story that was never about a place. An
+  > > override would have pinned a games-trailer story to the Pacific and called
+  > > it correct. This is the §3.4 trap the rule exists to catch, and it is the
+  > > first time the rule has caught one rather than merely deferred it.
+  > >
+  > > **A second defect fell out of the same probe: the coordinates are wrong
+  > > even for Wake Island.** GDELT gives `6.27435, -162.554`; Wake Island is at
+  > > roughly `19.28, 166.65`. So the degraded pin does not land on the atoll it
+  > > names either. Nothing here is worth code — it is 14 mentions collapsing to
+  > > ~1 group — but **do not "fix" `WQ` later on the strength of the name
+  > > alone**, and note that syndication is why the count reads 6 stories one run
+  > > and 1 the next.
+  > >
+  > > Reproduce with the scratch probe pattern: fetch N bundles, print every
+  > > location whose `countryCode` or `adm1Code` matches the code, grouped by
+  > > name and coordinates. The count is ~1 in 4,800 articles, so 12 bundles
+  > > finds nothing and is not evidence of absence.
 
 Phase 2.5 left three things Phase 3 inherited rather than reinvented:
 `scripts/build-real-geojson.ts` (fetch, parse, placement in miniature),
@@ -2014,9 +2046,33 @@ nothing per visit.
 > bottom of 96px / 114px, measured in a browser. Re-measure on any masthead
 > change.
 
-**Still open in Phase 6:** the numbers on the page are duplicated by hand from
-this document rather than read from the pipeline, so a rule change updates the
-map and not the prose. Nothing enforces that today.
+**Closed 2026-08-14: the page can no longer disagree with the judge in silence.**
+The figures were hand-copied out of this document, so a re-judged draw would have
+updated the map and the plan while the page kept quoting a measurement of a
+pipeline nobody was running any more — with nothing going red. Now:
+
+- **`lib/accuracy.ts`** is the single source of truth (point, interval, n, draw
+  id, and which rule the figures describe). `app/about/page.tsx` renders from it;
+  the table and the "about 54% to about 80%" sentence are both derived, so
+  neither can drift from the other.
+- **`lib/accuracy.test.ts` re-scores the committed judge files on every run** and
+  fails if the published numbers do not reproduce. It also asserts both lower
+  bounds stay above §5.1's kill lines, and that the pin figure is still inside
+  the **50-70% band that makes the disclosure mandatory** — because rising out of
+  that band silently would leave the page justifying itself by a rule that no
+  longer applies.
+- **Verified by breaking it on purpose**: editing the pin figure to 74.0 fails
+  two tests, the re-score and the band check. A guard nobody has seen fail is not
+  known to work.
+- Wilson moved to **`lib/audit-score.ts`** so `scripts/score-audit.ts` and the
+  test share one implementation. Two copies would let the page agree with a bug
+  instead of with the verdicts.
+
+**If a fresh draw is ever judged**, update `lib/accuracy.ts` and its
+`judgedFile` / `sampleFile` in one commit — the test will say if you got it
+wrong. **Do not relax an assertion to make it pass**; a failure there is a
+decision for a human, and in the case of the 50% line it is §5.1's stop-the-
+project decision.
 
 **Promoted, and given Phase 5's budget.** `FINDINGS.md` is the artifact with the
 strongest claim on a hiring manager's attention: GEO 2.0 dead with structural
