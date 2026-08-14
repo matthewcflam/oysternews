@@ -30,8 +30,10 @@ now fixed at the design level: it is two absolute constants and reads no history
 at all.** See the count band section below for the measurements behind the
 numbers and for the one number that would have made it a permanent outage.
 **The map is live again** — the 02:46 UTC run published 30,316 groups via the
-relax valve, confirming the diagnosis — but **the fix is committed and not yet
-pushed, and until it is on `main` the relax cycle repeats every 8 hours.**
+relax valve, confirming the diagnosis — and **the fix is now on `main`**
+(`2501d21`, pushed 02:51 UTC, five minutes after that run). So the 02:46 run is
+the last one on the old code, and the **next scheduled run (~06:46 UTC) is the
+first test of the absolute band in production**.
 
 **Two things fired on that same run and both want attention before new work:**
 §2.4's overflow passed the ~50% line this document had set as its revisit
@@ -188,10 +190,12 @@ would be noise.
 
 **Phase 4, remaining:**
 
-1. **Push the count band fix.** Committed, tested, not on `main`. Until it is,
-   the pipeline publishes once per 8 hours through the relax valve instead of
-   every 4. This is the cheapest item on the list and the only one blocking
-   service.
+1. ~~**Push the count band fix.**~~ **Done 2026-08-14 02:51 UTC** (`2501d21`,
+   `c81f047`). The relax cycle is broken; the 8-hourly valve is no longer the
+   only path to publication. **Watch the ~06:46 UTC run** — it is the first one
+   the absolute band `[2000, 60000]` actually gates, and the thing to confirm is
+   that it publishes *without* a relax `WARN` in the log. A `WARN` there would
+   mean the band is still refusing and the diagnosis was incomplete.
 2. **Profile on a real mid-tier phone**, not a desktop throttle (§9). It needs
    hardware — nothing in this repo can stand in for it. **It also now gates the
    §2.4 overflow revisit**: `K` is the only lever that surfaces deferred stories,
@@ -370,11 +374,14 @@ GitHub drops scheduled runs under load, so §6 decision 3's 4-hourly cadence is
 **best-effort, not guaranteed**, and a missing run looks nothing like a failing
 one in the Actions list.
 
-> **Without the fix pushed, the relax cycle continues exactly as predicted.**
-> That run appended 30,316 to history, moving the old median to 11,227 and the
-> band to [4490, 28068] — so the *next* run, at ~34,000, is refused again and the
-> map waits another 8 hours. The fix has to be on `main` to break the loop; it is
-> not deployed by anything else.
+> **The loop was one run from repeating, and the push is what broke it.** That
+> run appended 30,316 to history, moving the old median to 11,227 and the band to
+> [4490, 28068] — so the *next* run, at ~34,000, would have been refused again
+> and the map would have waited another 8 hours. The fix landed on `main` at
+> **02:51 UTC**, five minutes after that run and ~4 hours before the next one, so
+> the ~34,000 reading is gated by `[2000, 60000]` instead and should pass
+> outright. **That is a falsifiable prediction; check the 06:46 run's log for the
+> absence of the relax `WARN`.**
 
 **The 30,316 reading validates the ceiling.** It is the first measurement taken
 against the new constants and it lands where the calibration said it would:
