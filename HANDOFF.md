@@ -204,10 +204,11 @@ would be noise.
    Read it on a genuinely full window first (after ~09:11 UTC) — some of the rise
    from 14% -> 34% -> 56% is the pool filling, which is the budget working.
 
-**Then §5.2 decision 4 — the independent judge — which is what actually gates
-shipping Phase 4**, and is the one item on this list no amount of code will
-discharge. Decide what a disagreement means *before* the draw is judged; the
-pins' lower bound is 52.7% against a 50% kill line.
+~~**Then §5.2 decision 4 — the independent judge.**~~ **Done 2026-08-14**
+(`judged-c29ce-90`). It held: pins 68.1% [53.8, 79.6], containers 83.3%
+[68.1, 92.1], no threshold fires, and the pins' lower bound went *up* on the
+bigger sample — 52.7% on n=33 to 53.8% on n=47. Phase 4's gate is open. The
+draw also paid for the weak-city DROP; both are written up below.
 
 **`IN25` is fixed, 2026-08-13, and it was not a missing polygon.** Natural Earth
 writes `fips: IN22` on **Tamil Nadu** — and on **Puducherry**, which is the code
@@ -260,16 +261,11 @@ the three things §2.6 says a row *is*.
 > costs nothing against §9's first-paint target. Revisit when it clears ~500 KB
 > or when a phone profile says the panel is slow to open.
 
-**Still outstanding and only the human can do it:** §5.2 decision 4 — *"Before
-Phase 4 ships, get an independent judge on a fresh rule-H draw."* The same party
-designed rule H and scored it, which is the weakest link in the evidence.
-
-> **Decide what a disagreement means BEFORE the draw is judged.** §5.1's abort
-> criterion is still live and its tie-break is the *lower bound*: pins under 50%
-> stops the project. The pins' lower bound is **52.7% on n=33**, so 2.7 points of
-> margin on a small sample. Deciding after the number arrives is precisely what
-> pre-registration exists to prevent, and this project has already honoured one
-> firing criterion — that is most of what makes the evidence worth anything.
+~~**Still outstanding and only the human can do it:** §5.2 decision 4.~~
+**Discharged 2026-08-14** — see "The independent judge came back" below. The
+weakest link in the evidence is now the strongest: an independent judge, on a
+fresh draw, disjoint from every previously judged URL, reproduced the numbers
+this project has been quoting.
 
 **The accuracy percentage is a gate, not the product. `explainPlacement()` is
 the part that makes the map better** — added 2026-08-14. `placeStory()` is eight
@@ -330,6 +326,11 @@ the judge marks WRONG, they pick a reason from a fixed list. One extra click,
 and 90 records yield ~35 classified failures against the 15 self-classified ones
 above — enough to say whether class 1 is real before anyone writes the rule.
 
+> **It did, and the prediction held: 36.4% against 77.8%**, versus the ~40%/~82%
+> guessed above on ten records. `lone-mention` pins are now DROPped (see below).
+> The table above is the last reading of the old rule; `city-survives` 51.2%
+> splits into 33.9% pins and 14.7% `weak-city` drops under the new one.
+
 ### The judging sheet is built, 2026-08-14 — §5.2 decision 4 is now unblocked
 
 ```
@@ -384,6 +385,146 @@ estimate moves the lower bound from 52.7% to ~56%; the current margin above the
 audit output because `filterArticles` removes those articles first. `all-demonyms`
 runs at 2.6%, which is the demonym filter's visible cost and looks right against
 §2.1's measured 11.9% of *mentions*.
+
+---
+
+## THE INDEPENDENT JUDGE CAME BACK — 2026-08-14, §5.2 decision 4 discharged
+
+**Rule H holds, judged by someone who did not design it, on a draw disjoint from
+every record ever used to build it.** `judged-c29ce-90`, scored by
+`npm run judge:score`:
+
+| level | judgeable | correct | accuracy | 95% Wilson | §5.1 says |
+|---|---|---|---|---|---|
+| **PIN** | 47 | 32 | **68.1%** | [53.8, 79.6] | proceed, About page states the number |
+| **CONTAINER** | 36 | 30 | **83.3%** | [68.1, 92.1] | containers ship as specified (§2.2) |
+
+7 of 90 were UNJUDGEABLE (6 pins, 1 container), excluded from the denominators
+and reported here per §5.1. Nothing fires. Containers clear their 60% line on the
+*lower* bound, so `FINDINGS` §6 path 1 — the container amputation — is off the
+table.
+
+**The number that matters is not 68.1%, it is 53.8%.** §5.1's tie-break is the
+lower bound, the kill line is 50%, and the margin was 2.7 points on n=33 — one
+record either way. On n=47, judged independently, the margin went **up** to 3.8
+points. The margin widening on a bigger sample judged by a different person is
+the outcome that was never guaranteed and is the whole reason decision 4 existed.
+
+**There is no detectable judge effect.** Self-scored was 69.7% / 80.8%;
+independent is 68.1% / 83.3%. Fisher exact on the pins gives p=0.29 — the two
+draws are indistinguishable. The weakest link in the evidence chain, that the
+same party designed rule H and scored it, is now closed.
+
+**The disclosure stays.** 68.1% is in §5.1's 50-70% band, so the About page still
+carries the measured accuracy and its interval (§5.2 decision 3). The weak-city
+rule below projects 77.8% but a projection is not a measurement, and the number
+on the page must be one that was judged.
+
+### The weak-city DROP — the first rule this project bought with a judged sample
+
+**A city mentioned once is not a place, it is noise that arrived first.** The
+judged draw split pins on exactly that:
+
+| pins | n | correct | accuracy |
+|---|---|---|---|
+| city mentioned **once** | 11 | 4 | **36.4%** |
+| city mentioned 2+ | 36 | 28 | **77.8%** [61.9, 88.3] |
+
+Fisher exact **p=0.023**. The hand audit had guessed ~40% against ~82% off ten
+records; this is that prediction confirmed out of sample, which is a thing this
+document has not been able to say before.
+
+`place.ts` now DROPs them, with reason `weak-city`. **Three scoping decisions,
+each measured rather than preferred:**
+
+1. **It fires last, after both dominance margins.** A weak city beside a
+   dominant region or country is still a container, exactly as before. Those
+   placements were judged and liked; a drop rule may only take away pins it has
+   evidence about.
+2. **Cities only.** The identical shape at container level scored **85.7%
+   (n=7)** — *better* than containers overall. `winnerMentions === 1` is a pin
+   pathology, not a general one, and this is the reason the naive version of this
+   rule (drop every lone-mention placement) would have destroyed good data.
+3. **DROP, not fall through to the container.** Fall-through preserves volume and
+   was the obvious alternative, so it was checked against the actual records:
+   it would have produced `Praia, Cape Verde -> Germany x2`,
+   `Dublin -> United Kingdom x2`, `Canberra -> Singapore x2`. A country mentioned
+   twice under a one-mention city is the same noise one level up. Fall-through
+   moves the error from the pin number into the container number rather than
+   removing it, and it would have done so invisibly.
+
+**Measured cost, on 1,397 filtered articles after the change:**
+
+```
+  branch              share        suspicious shape        of pins
+  city-survives       33.9%        lone-mention             0.0%  (was 29.5%)
+  country-dominates   20.7%        tie-broken               3.6%  (was 15.5%)
+  country-only        15.2%        narrow-win              26.4%
+  weak-city           14.7%  <--   margin-near-miss        11.8%
+  adm1-dominates       7.2%        runaway-country          0.0%
+  adm1-only            5.7%
+```
+
+`weak-city` at 14.7% of records is **30.2% of what used to be pins** (205 dropped
+against 473 kept) — the 29.5% `place:audit` predicted before the rule existed.
+Steady state ~40,700 groups/day becomes roughly 34,700, far inside the count
+band's `[2000, 60000]`, so no invariant fires and nothing about this is
+self-concealing.
+
+**`lone-mention`'s pins column must read 0.0% for ever.** The shape is kept in
+`place:audit` as a standing regression check rather than deleted: if it comes
+back, the rule was reordered or bypassed, and that is the cheapest possible
+signal. Its remaining 11.6% are containers, where the shape is fine.
+
+**`tie-broken` was not implemented and mostly evaporated anyway.** It looked
+similar on the same draw (44.4%, n=9) but n=9 is what §5.2 decision 3 looked like
+immediately before it went flat on 110. It also fell from 15.5% of pins to 3.6%
+when weak-city landed — a tie at one mention was the same population seen twice.
+What remains is 17 pins in 1,397 records and it needs its own draw, not a rule.
+
+### The draw ids were a trap, and it very nearly fired — fixed the same day
+
+**Scoring the real verdicts against the stale sample returns KILL CONTAINERS.**
+`audit_sample_judge.jsonl` was committed in `98fac58` and then **re-drawn** before
+the sheet was sent. Record ids were `<seed36>-<index>`, so both draws produced
+`c29ce-0` … `c29ce-89` — identical ids over completely different articles.
+`score-audit.ts` joins on id, matched all 90, warned about nothing, and returns:
+
+| sample | PIN | CONTAINER | verdict |
+|---|---|---|---|
+| stale (committed in `98fac58`) | 82.2% [68.7, 90.7] | 65.8% [49.9, 78.8] | **KILL CONTAINERS** |
+| real (the one judged) | 68.1% [53.8, 79.6] | 83.3% [68.1, 92.1] | ship as specified |
+
+One stale file and this project amputates a feature on a verdict that is pure
+noise — and it would have looked exactly like a clean run.
+
+**The defect: the id was derived from the seed, and the draw is not a function of
+the seed.** `draw-judge-sample.ts` walks back from the newest GDELT bundle, so
+`--seed 12345` means a different population every time it runs. "Reproducible
+from (seed, bundles) alone" was true of the shuffle and false of the thing being
+shuffled.
+
+**The fix is `scripts/judge-draw-id.ts`**: record ids are now
+`<seed36>-<fingerprint>-<index>`, where the fingerprint is a hash of the drawn
+URLs in draw order, and the scorer recomputes it from the sample it was handed.
+Different articles, different id, **hard refusal**. Ids from before today have no
+fingerprint and cannot be verified at all, so they score with a loud WARN rather
+than being rejected — the archived evidence has to stay re-scorable.
+
+> **`judged-c29ce-90` is one of those unverifiable legacy sheets, so here is the
+> provenance by hand.** `build/judge.html` — the file actually sent — is
+> timestamped 2026-08-13 21:26, identical to the working-tree sample, and
+> contains the Sydney Airport headline while containing no trace of the stale
+> draw's `Melbourne, Victoria, Australia`. The verdicts came back at 00:39. The
+> sheet was built from the sample now committed, and 68.1% / 83.3% is the real
+> reading. **`spikes/gdelt/judged-c29ce-90.jsonl` is committed beside it** so the
+> pair can never drift apart again.
+
+**What is owed next: a fresh draw against the new rule.** 77.8% is the old draw
+with a subset removed, not a measurement of the pipeline as it now stands, and
+§5.1's bands are read off measurements. `npm run judge:draw` is built and the
+thresholds are unchanged — this is the same loop, run again, and the
+pre-registration that governs it is already on the page.
 
 ---
 
@@ -912,14 +1053,16 @@ stripped first; then **specificity wins unless it is dominated**:
   if a city exists:
       adm1    >= 2x the city  ->  CONTAINER at the adm1      story is regional
       country >= 3x the city  ->  CONTAINER at the country   story is national
+      city mentioned once     ->  DROP                       story has no place
       otherwise               ->  PIN at the city
   else  adm1 -> CONTAINER,  else country -> CONTAINER,  else DROP
 ```
 
 | Input | Output |
 |---|---|
-| Specific feature (city, park, landmark, valley, sea), not dominated | **PIN at its exact coordinates** |
+| Specific feature (city, park, landmark, valley, sea), not dominated, mentioned 2+ times | **PIN at its exact coordinates** |
 | Specific feature dominated by its region or country | **CONTAINER at that region** |
+| Specific feature mentioned once, undominated | **DROP** |
 | Admin-1 / county / country only | **CONTAINER** |
 | Demonym only ("British", "Danish") | **DROP** |
 | No usable location | **DROP** |
@@ -939,7 +1082,21 @@ coordinates.
 > containers, because a domestic article names its own country constantly. Hence
 > two different margins: countries are structurally over-mentioned, states are not.
 > Rule H scores **69.7%** of pins [52.7, 82.6] and **80.8%** of containers
-> [62.1, 91.5] on a fresh out-of-sample draw. `FINDINGS.md` §9.
+> [62.1, 91.5] on a fresh out-of-sample draw, and **68.1%** [53.8, 79.6] /
+> **83.3%** [68.1, 92.1] when independently judged on a second one.
+> `FINDINGS.md` §9.
+
+> **Why a city mentioned once is dropped, added 2026-08-14.** One mention is not
+> evidence that the story is about that city — it is evidence that GDELT
+> scattered single mentions and the rule took whichever came first. The
+> independent draw measured those pins at **36.4% correct (n=11) against 77.8%
+> (n=36) for the rest**, Fisher exact p=0.023, confirming a prediction the hand
+> audit had made on ten records. It costs **30.2% of pins** and it is deliberately
+> narrow: it fires *after* both margins, so a dominated weak city is still a
+> container; it does not apply to containers, where the same shape scored 85.7%;
+> and it drops rather than falling through to the country, because a country
+> mentioned twice under a one-mention city is the same noise one level up
+> (`Dublin -> United Kingdom x2`). See the decision-4 write-up.
 
 > **The demonym trap.** GDELT writes country demonyms bare (`Americans`) but state
 > demonyms with a suffix (`Texans, United States`). Matching the whole `FullName`
@@ -1169,6 +1326,20 @@ salience; cross-class order is settled by the first key.
 > load-bearing rather than descriptive.** The list was built to *measure* coverage
 > and now *grants* precedence. §6 decision 9.
 
+> **2026-08-13 — the list was expanded from 28 domains to 128.** The passage
+> above describes the old list, which was 91% US/UK outlets: under it, "tier-1
+> outranks everything in its tile" meant a US or UK byline beat local reporting
+> anywhere on Earth. The expansion adds papers of record, independent outlets and
+> investigative consortia for every region — Latin America, Africa, South and
+> East Asia, Eastern Europe, the Middle East, the Pacific — so a tile can be won
+> by an outlet from that place. Measured on the Phase 2.5 maturity sample, this
+> moves tier-1 from 1.04% to 3.62% of article slots and from 1.35% to 4.74% of
+> groups. Precedence is only meaningful while it is scarce; **re-measure after
+> Phase 3, and if group-level tier-1 clears ~15%, demote the flat first-key
+> override to a salience bonus.** Also watch `thehindu.com`: it alone is a third
+> of the tier-1 article slots in that sample. `data/tier1-domains.txt` carries
+> the full rationale.
+
 ### 2.6 Constraints
 
 - **Link-out only.** Title, source, link. **Never reproduce article text.** This
@@ -1336,8 +1507,9 @@ which removes the payoff from zooming in.
 
 Implemented as **two shard families**, both expired by filename per §6 decision 4:
 `run-<ts>.jsonl` holds everything and expires at 24h; `t1-<ts>.jsonl` holds only
-tier-1-touched groups and expires at 48h. Tier-1 is 1.05% of the feed, so the
-second family costs almost nothing — writing 48h of *all* shards would have
+tier-1-touched groups and expires at 48h. Tier-1 is 3.62% of the feed after the
+2026-08-13 list expansion (1.05% before), so the
+second family still costs almost nothing — writing 48h of *all* shards would have
 doubled state storage against the Blob free tier for no benefit. Groups appear in
 both families during their first 24 hours, so `state.ts` **dedupes by
 `(domain, url)`** on load; without that, a carried-over group double-counts its own
@@ -1476,6 +1648,7 @@ that replaced it.** Full evidence in `FINDINGS.md` §9.
 |---|---|---|
 | **Rule S**, specificity-first, as originally specified | 54.1% [41.7, 66.0] | 37.5% [24.2, 53.0] |
 | **Rule H**, specificity unless dominated — now §2.1 | **69.7% [52.7, 82.6]** | **80.8% [62.1, 91.5]** |
+| **Rule H**, independently judged, 2026-08-14 (decision 4) | **68.1% [53.8, 79.6]** | **83.3% [68.1, 92.1]** |
 
 Under rule S: containers fail on the *upper* bound (53.0% < 60%), and pins straddle
 the 50% kill line, which §5.1's lower-bound tie-break resolves as **stop the
@@ -1489,7 +1662,8 @@ thresholds**, both clear.
 2. **Containers ship** (§2.2 unchanged), but only because of the rule change. Under
    the spec's own rule they were dead.
 3. **Pins ship in the "state the measured accuracy" band.** The lower bound is
-   52.7%, not 70%. **Phase 6 must publish 69.7% [52.7, 82.6] and the method**, and
+   53.8%, not 70%. **Phase 6 must publish 68.1% [53.8, 79.6] and the method** —
+   the independently judged figures, superseding 69.7% [52.7, 82.6] — and
    Phase 4's geotag-confidence treatment is not optional garnish.
 
    > **Built 2026-08-13, and it is uniform because grading it was measured and
@@ -1501,12 +1675,24 @@ thresholds**, both clear.
    > table. **Phase 6 still owes the interval and the method** — this line does
    > not discharge that, it just stops the map from making a silent claim in the
    > meantime.
-4. **Before Phase 4 ships, get an independent judge on a fresh rule-H draw.** The
-   same party designed rule H and scored it. That is the weakest link in the
-   evidence and it costs one evening.
+4. ~~**Before Phase 4 ships, get an independent judge on a fresh rule-H draw.**~~
+   **Done 2026-08-14**, `judged-c29ce-90`, 90 records disjoint from all 170
+   previously judged URLs. Both thresholds clear again and the pins' lower bound
+   rose from 52.7% to 53.8%; Fisher exact on the two pin draws is p=0.29, so no
+   judge effect is detectable. Write-up above under "The independent judge came
+   back". **It also bought a rule**: `lone-mention` pins measured 36.4% (n=11)
+   against 77.8% (n=36), p=0.023, and `place.ts` now DROPs them as `weak-city`.
+   That is the first mechanism this project has changed on the strength of an
+   independent judged sample rather than on a reading of its own output.
+
+   > **Decision 3's disclosure is unchanged by it.** The projected 77.8% is the
+   > same draw with a subset removed, not a measurement, and §5.1's bands are read
+   > off measurements. The About page carries 68.1% [53.8, 79.6] until a fresh
+   > draw against the new rule says otherwise.
 
 **Thresholds were not moved at any point.** Only the sample size grew, when the
-unstratified 50 turned out to yield 32 judgeable pins rather than 50.
+unstratified 50 turned out to yield 32 judgeable pins rather than 50, and again
+when decision 4's independent draw was set at 90.
 
 ### Phase 2 — Skeleton and first deploy · 1-2 evenings · *in progress*
 Public Next.js repo. MapLibre ≥5.0 + MapTiler rendering a hand-made PMTiles
@@ -1855,6 +2041,8 @@ the trigger dies, no run happens, so no run fails, so no email is sent.
 | **2026-08-10** | **Basemap decision re-examined and §3.1's free-tier number corrected.** Google Maps was investigated properly — it *would* work with MapLibre — and rejected on raster-vs-vector, a required credit card, and the loss of the one-line escape hatch. The larger finding: **§3.1 said "100k loads/mo free" and the real figure is ~330-520 visits**, because raw `maplibre-gl` is billed per *request*, not per session, and MapTiler documents that switching to sessions is impossible for third-party clients. Measured: 193 requests per phone visit, 304 per desktop visit. Decision 11 added. Also closed a compliance gap — §2.6 requires the MapTiler logo and only the text credit was rendered. `spikes/basemap/CASE-STUDY.md` |
 
 | **2026-08-11** | **Phase 2.5 closed — the live map shows real news.** One GKG bundle through `scripts/build-real-geojson.ts` (fetch, parse, demonym filter, Rule H, city pins only) into the same tippecanoe flags. **Rule H on live data sends 33.5% of rows to pins and 40% to containers, identical across two consecutive bundles**, which is the first out-of-audit confirmation that it neither collapses to countries nor reverts to specificity-first. `data/demonyms.txt` moved to its §3.3 home. No new dependencies: the ZIP reader is thirty lines of `inflateRawSync` and Node runs the TypeScript directly. Two smaller things: the masthead was still advertising fake points, and its longer replacement ran underneath the zoom control at 390px |
+
+| **2026-08-14** | **§5.2 decision 4 discharged — rule H survived an independent judge.** 90 records, disjoint from all 170 previously judged URLs, scored by someone who did not design the rule: **pins 68.1% [53.8, 79.6], containers 83.3% [68.1, 92.1]**, no threshold fires, and the pins' lower bound *rose* from 52.7% (n=33) to 53.8% (n=47) with no detectable judge effect (Fisher p=0.29). The draw also bought the project's first evidence-paid rule change: `lone-mention` pins measured **36.4% (n=11) against 77.8% (n=36)**, p=0.023 — the ~40%/~82% the hand audit had predicted off ten records — and §2.1 gains a **weak-city DROP**, costing 30.2% of pins. Scoped narrowly on measurement rather than taste: after both margins, cities only (the same shape scores 85.7% on containers), and DROP rather than fall-through, which would have moved the error into the container number instead of removing it. `tie-broken` was left alone at n=9 and then fell from 15.5% of pins to 3.6% on its own. **The About page still carries 68.1%**: 77.8% is a projection, and §5.1's bands are read off measurements |
 
 Superseded, retained as archaeology only:
 `~/.gstack/projects/matthewcflam-sonder/matth-main-design-20260807-154947.md`
