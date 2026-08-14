@@ -23,17 +23,30 @@ a stale sample returns KILL CONTAINERS**, silently, because draw ids came from
 the seed. Draws are fingerprinted now. All three are written up below; start at
 "The independent judge came back".
 
+**Then the three inherited items were worked, same night.** The count band's
+first production test **passed** (05:46 UTC, 33,778 groups, no relax `WARN`), a
+fresh judged draw was **taken and is waiting on the judge** (`zcbaks-d7b665-90`),
+and §2.4's overflow was **re-read at 57.3% but is still a pre-weak-city number**
+— the rule landed after that run, so the trigger still has not been read on the
+code that is live. Details in each section; the queue below is current.
+
 **The three things a fresh session should know they are inheriting:**
 
-1. **A fresh judged draw is owed.** 77.8% is a projection — the old draw with a
-   subset removed — and §5.1's bands are read off measurements, so the About page
-   still carries 68.1%. `npm run judge:draw` is built and the thresholds have
-   never moved.
-2. **The absolute count band's first production test was never confirmed here.**
-   The ~06:46 UTC run of 2026-08-14 is the first one it gates; nobody has read
-   that log. A relax `WARN` in it would mean the band is still refusing.
-3. **§2.4's overflow trigger fired at 56% and is still unaddressed**, as is the
-   phone profile that gates it.
+1. **A fresh judged draw is owed, and it is now drawn and waiting on the judge.**
+   77.8% is a projection — the old draw with a subset removed — and §5.1's bands
+   are read off measurements, so the About page still carries 68.1% until a
+   judged sheet comes back. Draw `zcbaks-d7b665-90` was taken 2026-08-14 against
+   the weak-city rule: 90 records, **41 pins / 49 containers**, disjoint from the
+   260 URLs already judged. The sheet is `build/judge.html`; score the returned
+   file with `node scripts/score-audit.ts <judged-zcbaks-d7b665-90.jsonl>`.
+   Thresholds have never moved.
+2. ~~**The absolute count band's first production test was never confirmed.**~~
+   **Done, 2026-08-14.** The 05:46 UTC run published 33,778 groups with **no
+   relax `WARN`** — the band passed on its own bounds. See the count band section.
+3. **§2.4's overflow trigger fired again, at 57.3%** (19,344 of 33,778, 05:46
+   UTC) and is still unaddressed, as is the phone profile that gates it. **That
+   reading is pre-weak-city**, so it does not yet answer the open question — see
+   below.
 
 The earlier part of the same day covered seven other things: a bad Blob token failed the
 first two scheduled runs, the count band was caught one run from wedging the
@@ -225,18 +238,31 @@ judged figure — and an interval repeated in every popup would be noise.
    hardware — nothing in this repo can stand in for it. **It also now gates the
    §2.4 overflow revisit**: `K` is the only lever that surfaces deferred stories,
    and the profile is what says whether there is room to raise it.
-3. **Revisit §2.4's overflow**, whose ~50% trigger fired at 56% on 2026-08-14.
-   Read it on a genuinely full window first (after ~09:11 UTC) — some of the rise
-   from 14% -> 34% -> 56% is the pool filling, which is the budget working.
+3. **Revisit §2.4's overflow**, whose ~50% trigger fired at 56% and read **57.3%
+   again on 2026-08-14 05:46 UTC** (19,344 of 33,778) on a nearly-full window.
+   Some of the rise from 14% -> 34% -> 56% -> 57.3% is the pool filling, which is
+   the budget working, and the flattening across the last two readings is the
+   first sign of that.
 
    > **The weak-city DROP moved this number and nobody has re-read it.** ~30% of
    > pins stop being published, so the pool the budget defers from is smaller and
-   > the overflow share should fall on its own. Read the trigger *after* a full
-   > window on the new rule before deciding anything about `K`.
-4. **Draw a fresh judged sample against the new placement rule.** The pipeline
-   that produced 68.1% no longer exists — `weak-city` changed it — and §5.1's
-   bands are read off measurements, not projections. This is the same loop as
-   decision 4, run again, with thresholds that have never moved.
+   > the overflow share should fall on its own. **Both readings so far are
+   > pre-rule** — the rule landed ~08:14 UTC — so the first informative run is
+   > ~09:46 UTC. Read the *share*, not the count, before deciding anything about
+   > `K`: the count falls either way.
+4. ~~**Draw a fresh judged sample against the new placement rule.**~~ **Drawn
+   2026-08-14, waiting on the judge.** `zcbaks-d7b665-90`: 90 records, 41 pins /
+   49 containers, disjoint from the 260 URLs already judged, and verified to
+   carry the new rule — **0 lone-mention pins**, and tie-broken pins are down to
+   9.8% of pins (4 of 41) from the 15.5% that motivated the rule. The sheet is
+   `build/judge.html`. **The number is not measured until the sheet comes back**,
+   so §5.1's bands and the About page still stand on 68.1%.
+
+   > The previous draw is archived as `audit_sample_judge_c29ce.jsonl` rather
+   > than overwritten, because `draw-judge-sample.ts` writes a fixed filename and
+   > reads every `audit_*.jsonl` to build its exclusion set. Overwriting it would
+   > have silently let a later draw re-sample the 90 URLs already judged. It is
+   > still re-scorable — `--sample` reproduces 68.1% / 83.3% exactly.
 
 ~~**Then §5.2 decision 4 — the independent judge.**~~ **Done 2026-08-14**
 (`judged-c29ce-90`). It held: pins 68.1% [53.8, 79.6], containers 83.3%
@@ -672,6 +698,26 @@ one in the Actions list.
 > outright. **That is a falsifiable prediction; check the 06:46 run's log for the
 > absence of the relax `WARN`.**
 
+**The prediction held. Read 2026-08-14, and this is the band's first production
+test.** The scheduled run was 05:46 UTC, not the 06:46 this document guessed —
+cadence is best-effort, as above — and it published clean:
+
+```
+  groups       33778 groups, 615 tier-1, 220 country-top, 19344 overflow
+  published    archives/stories-c27562b8.pmtiles, pruned 1 archives and 0 shards
+```
+
+No relax `WARN`, so **the band passed the count on its own bounds rather than
+standing down** — which is the whole claim, since a relax line would have meant
+it was still refusing. 33,778 also lands between the 30,316 reading and the
+~38-41k projection, so the deceleration curve above is holding too. The only
+`WARN` in that run is the known `WQ` FIPS code, now down to 1 story.
+
+> **This run is still on the old placement code.** Weak-city landed on `main` at
+> ~08:14 UTC, after it. So 33,778 is a pre-rule count, and the first post-rule
+> run is the next one (~09:46 UTC). Expect the group count to *fall* — do not
+> read that fall as the band drifting.
+
 **The 30,316 reading validates the ceiling.** It is the first measurement taken
 against the new constants and it lands where the calibration said it would:
 
@@ -793,8 +839,19 @@ Two things that run surfaced, neither a bug:
   > > 8) is that a fired criterion gets honoured rather than reasoned away. **This
   > > is the next thing to look at after the band fix lands.**
   > >
-  > > Read the trend before acting on it: 14% -> 34% -> 56% over three
+  > > **Second reading, 05:46 UTC: 19,344 of 33,778 — 57.3%.** Still over the
+  > > line, and now on a nearly-full window, so this is not simply the pool
+  > > filling. But it is **still pre-weak-city** — the rule landed at ~08:14 UTC,
+  > > after this run — so it does not answer the question below. The first
+  > > post-rule run is ~09:46 UTC, and the number to read there is the *share*,
+  > > not the count: fewer published pins shrinks both sides of the fraction, and
+  > > only a falling share means the rule bought the budget any room.
+  > >
+  > > Read the trend before acting on it: 14% -> 34% -> 56% -> 57.3% over four
   > > measurements, while the 24-hour pool went from a third full to nearly full.
+  > > **The flattening between the last two is the signal to watch** — it is the
+  > > first evidence that the rise was the window filling rather than a defect,
+  > > but two readings four hours apart are not a steady state.
   > > **Some of that rise is the window filling and is not a defect** — more
   > > stories competing for the same K slots is the budget working. The question
   > > the revisit has to answer is whether it *keeps* climbing once the pool is
