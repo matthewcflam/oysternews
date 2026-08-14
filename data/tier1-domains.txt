@@ -1,37 +1,71 @@
-# Tier-1 outlets: wire services and national papers of record.
-# Matched against GDELT's SourceCommonName, which is a bare domain.
+# Tier-1 outlets: wire services, papers of record, and the independent /
+# investigative outlets that carry that role in their region.
+# Matched against GDELT's SourceCommonName, which is a bare domain, lowercased,
+# EXACT — no substring or suffix matching. theguardian.com does not match
+# warringtonguardian.co.uk, and dawn.com does not match dawnofthedawg.com; both
+# of those are real domains in the sample feed.
 #
 # THIS LIST IS LOAD-BEARING, not descriptive. HANDOFF.md §2.5: a story with a
 # tier-1 article in the last 48 hours outranks every non-tier-1 story in its
-# tile, whatever their salience. The list was originally built to MEASURE
-# coverage for the blindspot feature; that feature was killed by measurement
-# (tier-1 is 1.05% of the stream, so the flag fired on 98.6% of stories) and the
-# same 28 domains now GRANT precedence instead. Editing this file changes what
-# is on the map.
+# tile, whatever their salience. tier1Fresh is the FIRST key of compareGroups,
+# so precedence is absolute, not weighted. The list was originally built to
+# MEASURE coverage for the blindspot feature; that feature was killed by
+# measurement (tier-1 was 1.05% of the stream, so the flag fired on 98.6% of
+# stories) and the same domains now GRANT precedence instead. Editing this file
+# changes what is on the map.
 #
-# §6 decision 9: keep all 28 as-is and review once real data flows in Phase 3.
-# newsweek.com and latimes.com are 26% of the tier-1 records actually present and
-# are the most arguable entries, but trimming them shrinks an already 1%-thin
-# signal. Absent domains cost nothing — if GDELT ever starts crawling Reuters at
-# volume, it just works.
+# --- 2026-08-13 expansion -------------------------------------------------
+# Expanded from 28 domains to the regional list below. The old list was 91%
+# US/UK outlets (FINDINGS.md §11) — a "tier-1 outranks everything" rule built on
+# it means a US or UK byline beats local reporting anywhere on Earth. The
+# expansion is the fix: every region gets outlets that can win their own tiles.
 #
-# Measured: 91% of tier-1 records are US or UK outlets (cnn 21, bbc 15,
-# newsweek 11, latimes 8, cbsnews 5, nbcnews 3, theguardian 3, independent 1,
-# scmp 4, dw 3 across three hours). Reuters, AP, NYT, WaPo, WSJ, NPR, Bloomberg,
-# Al Jazeera and FT returned ZERO records in that window and are kept anyway.
-# FINDINGS.md §11.
+# The 28 originals are all KEPT, not replaced. cnn/bbc/newsweek/latimes are ~60%
+# of the tier-1 records that actually appear in the feed; dropping the arguable
+# ones would gut a signal this expansion is trying to thicken, not thin.
+#
+# The cost is dilution: precedence is only meaningful while it is scarce. As the
+# tier-1 share of any tile's candidates rises, the first comparator key stops
+# separating and salience silently takes over — the same failure that killed the
+# blindspot flag, in the other direction. Measured on the Phase 2.5 maturity
+# sample (12 bundles, 5,252 groups, 1,447 distinct domains):
+#
+#   article-level tier-1   1.04%  ->  3.62%
+#   group-level tier-1     1.35%  ->  4.74%   (71 groups -> 249)
+#
+# Still scarce, so first-key precedence still separates. Re-measure after
+# Phase 3; if group-level clears ~15%, the flat override should become a
+# salience bonus instead.
+#
+# Only 34 of these 128 domains appear in that sample at all, and thehindu.com
+# alone is 82 of the 250 tier-1 article slots — a third of the whole signal,
+# from one high-volume outlet that blocklist.txt already calls out as sitting
+# at the top of the domain histogram. Watch for Indian city tiles going
+# permanently to The Hindu. Absent domains cost nothing: if GDELT ever starts
+# crawling Reuters or Le Monde at volume, they just work.
+#
+# Domains carrying a known funding or alignment caveat are marked. The caveat is
+# NOT a reason to exclude — it is a reason for a future reader to know why the
+# entry is here before editing it.
 
 # --- wires ---------------------------------------------------------------
 reuters.com
 apnews.com
 afp.com
 bloomberg.com
+kyodonews.net
+ptinews.com
+efe.com
 
-# --- US ------------------------------------------------------------------
+# --- North America -------------------------------------------------------
 nytimes.com
 washingtonpost.com
 wsj.com
 npr.org
+pbs.org
+propublica.org
+theatlantic.com
+newyorker.com
 cnn.com
 nbcnews.com
 cbsnews.com
@@ -41,18 +75,133 @@ latimes.com
 usatoday.com
 time.com
 newsweek.com
+# Canada
+cbc.ca
+theglobeandmail.com
+thestar.com
 
-# --- UK ------------------------------------------------------------------
+# --- UK & Ireland --------------------------------------------------------
 bbc.com
 bbc.co.uk
 theguardian.com
 ft.com
+thetimes.co.uk
+thetimes.com
 economist.com
+channel4.com
 telegraph.co.uk
 independent.co.uk
+irishtimes.com
 
-# --- rest of world -------------------------------------------------------
-aljazeera.com
+# --- Continental Europe --------------------------------------------------
+lemonde.fr
+liberation.fr
+spiegel.de
+sueddeutsche.de
+faz.net
 dw.com
-france24.com
+elpais.com
+corriere.it
+nrc.nl
+nzz.ch
+dn.se
+politico.eu
+euronews.com
+
+# --- Eastern Europe & the former USSR ------------------------------------
+# Much of the best work here is done in exile, so the domain often does not
+# match the country covered: meduza.io files on Russia from Latvia,
+# novayagazeta.eu from Europe after the Russian edition was forced to stop.
+wyborcza.pl
+denikn.cz
+telex.hu
+444.hu
+meduza.io
+novayagazeta.eu
+theins.ru
+istories.media
+kyivindependent.com
+rferl.org        # caveat: US-government-funded (USAGM)
+
+# --- Africa --------------------------------------------------------------
+mg.co.za
+dailymaverick.co.za
+news24.com
+premiumtimesng.com
+guardian.ng
+nation.africa
+standardmedia.co.ke
+madamasr.com
+thecontinent.org
+investigativecenters.org
+
+# --- Middle East ---------------------------------------------------------
+haaretz.com
+haaretz.co.il
+timesofisrael.com
+aljazeera.com        # caveat: Qatari state-funded; shapes Gulf coverage
+thenationalnews.com  # caveat: UAE state-linked; same
+middleeasteye.net
+lorientlejour.com
+amwaj.media
+
+# --- South Asia ----------------------------------------------------------
+thehindu.com
+indianexpress.com
+livemint.com
+scroll.in
+thewire.in
+article-14.com
+dawn.com
+thedailystar.net
+prothomalo.com
+
+# --- East & Southeast Asia -----------------------------------------------
+nikkei.com
+asia.nikkei.com
+asahi.com
+hani.co.kr
+chosun.com
+caixin.com
+caixinglobal.com     # caveat: operates within PRC constraints
+theinitium.com
+hongkongfp.com
+taipeitimes.com
+focustaiwan.tw
+straitstimes.com     # caveat: credible but state-aligned (SG)
+tempo.co
+thejakartapost.com
+rappler.com
+frontiermyanmar.net
 scmp.com
+
+# --- Australia & Pacific -------------------------------------------------
+# Guardian Australia is not a separate entry: it publishes on theguardian.com,
+# already listed under UK & Ireland.
+abc.net.au
+smh.com.au
+theage.com.au
+afr.com
+thesaturdaypaper.com.au
+crikey.com.au
+rnz.co.nz
+nzherald.co.nz
+
+# --- Latin America -------------------------------------------------------
+folha.uol.com.br
+oglobo.globo.com
+apublica.org
+eluniversal.com.mx
+aristeguinoticias.com
+clarin.com
+lanacion.com.ar
+elespectador.com
+lasillavacia.com
+elfaro.net
+efectococuyo.com
+
+# --- cross-border investigative consortia --------------------------------
+icij.org
+occrp.org
+bellingcat.com
+forbiddenstories.org

@@ -19,11 +19,49 @@ describe("data/ loads and is usable", () => {
     expect(data.demonyms.has("americans")).toBe(true);
   });
 
-  it("has all 28 tier-1 domains", () => {
+  it("has all 128 tier-1 domains", () => {
     // §6 decision 9: membership is load-bearing, so the count is asserted.
-    expect(data.tier1.size).toBe(28);
+    // 28 before the 2026-08-13 regional expansion; all 28 originals kept.
+    expect(data.tier1.size).toBe(128);
     expect(data.tier1.has("reuters.com")).toBe(true);
     expect(data.tier1.has("newsweek.com")).toBe(true);
+  });
+
+  it("reaches every region, not just the US and UK", () => {
+    // The point of the expansion: a tile anywhere on Earth can be won by an
+    // outlet from that place, rather than only by whoever in New York or
+    // London happened to cover it.
+    for (const domain of [
+      "thehindu.com",
+      "nation.africa",
+      "folha.uol.com.br",
+      "hani.co.kr",
+      "kyivindependent.com",
+      "lorientlejour.com",
+      "abc.net.au",
+    ]) {
+      expect(data.tier1.has(domain)).toBe(true);
+    }
+  });
+
+  it("strips the inline funding caveats from domains", () => {
+    // Entries like `rferl.org  # caveat: US-government-funded` must load as the
+    // bare domain — a comment left attached would silently never match.
+    expect(data.tier1.has("rferl.org")).toBe(true);
+    expect([...data.tier1].some((d) => d.includes("#") || d !== d.trim())).toBe(false);
+  });
+
+  it("matches domains exactly, never by suffix", () => {
+    // Real domains in the sample feed that must NOT inherit precedence from a
+    // tier-1 entry they happen to end with or contain.
+    for (const impostor of [
+      "warringtonguardian.co.uk",
+      "dawnofthedawg.com",
+      "thestar.com.my",
+      "dailystar.co.uk",
+    ]) {
+      expect(data.tier1.has(impostor)).toBe(false);
+    }
   });
 
   it("keeps the blocklist short and free of legitimate outlets", () => {
