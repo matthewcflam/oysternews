@@ -7,6 +7,8 @@ import {
   ARCHIVE_DIR,
   ARCHIVE_PREFIX,
   BAND_RELAX_AFTER_MS,
+  COUNT_BAND_MAX,
+  COUNT_BAND_MIN,
   REGIONS_PREFIX,
   HISTORY_KEY,
   type ArchiveStore,
@@ -18,7 +20,6 @@ import {
   assertStoreReachable,
   checkInvariants,
   contentHash,
-  median,
   nextHistory,
   pingHealthcheck,
   publish,
@@ -54,8 +55,15 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   };
 }
 
-/** A pool that clears every invariant, so each test only has to break one thing. */
-function healthyGroups(count = 100): StoryGroup[] {
+/**
+ * A pool that clears every invariant, so each test only has to break one thing.
+ *
+ * **The default count is load-bearing as of 2026-08-14.** The count band is
+ * absolute now, so a pool has to sit inside [COUNT_BAND_MIN, COUNT_BAND_MAX] to
+ * be "healthy" at all — the previous default of 100 would fail the floor and
+ * every test here would be asserting against the wrong violation.
+ */
+function healthyGroups(count = 3_000): StoryGroup[] {
   return Array.from({ length: count }, (_, i) =>
     group({
       id: `g${i}`,
@@ -149,80 +157,85 @@ describe("statsOf", () => {
   });
 });
 
-describe("median", () => {
-  it("averages the middle pair on an even count", () => {
-    expect(median([4, 1, 3, 2])).toBe(2.5);
-    expect(median([3, 1, 2])).toBe(2);
-    expect(median([])).toBe(0);
-  });
-});
-
 describe("checkInvariants", () => {
   const healthy = statsOf(healthyGroups());
 
   it("passes a healthy run", () => {
-    expect(checkInvariants(healthy, history([100, 100, 100]))).toEqual([]);
+    expect(checkInvariants(healthy)).toEqual([]);
   });
 
-  it("rejects an empty run even with no history to compare against", () => {
-    const violations = checkInvariants(statsOf([]), []);
+  it("rejects an empty run", () => {
+    const violations = checkInvariants(statsOf([]));
     expect(violations).toHaveLength(1);
     expect(violations[0]).toContain("no groups");
   });
 
-  it("does not apply the count band until there is enough history", () => {
-    // Two entries at 10,000 would put 100 far outside the band if it applied.
-    expect(checkInvariants(healthy, history([10_000, 10_000]))).toEqual([]);
-    expect(checkInvariants(healthy, history([10_000, 10_000, 10_000]))).not.toEqual([]);
+  it("rejects a collapse and a flood against absolute bounds", () => {
+    expect(checkInvariants(statsOf(healthyGroups(COUNT_BAND_MIN - 1)))[0]).toContain("outside");
+    expect(checkInvariants(statsOf(healthyGroups(COUNT_BAND_MAX + 1)))[0]).toContain("outside");
+    // The band is inclusive at both edges.
+    expect(checkInvariants(statsOf(healthyGroups(COUNT_BAND_MIN)))).toEqual([]);
+    expect(checkInvariants(statsOf(healthyGroups(COUNT_BAND_MAX)))).toEqual([]);
   });
 
-  it("rejects a collapse and a flood against the trailing median", () => {
-    const past = history([1000, 1000, 1000, 1000]);
-    expect(checkInvariants(statsOf(healthyGroups(399)), past)[0]).toContain("outside");
-    expect(checkInvariants(statsOf(healthyGroups(2501)), past)[0]).toContain("outside");
-    // The band is inclusive at both edges.
-    expect(checkInvariants(statsOf(healthyGroups(400)), past)).toEqual([]);
-    expect(checkInvariants(statsOf(healthyGroups(2500)), past)).toEqual([]);
+  it("is armed on the very first run, with nothing published before it", () => {
+    // The old ratio band was inert until BAND_MIN_HISTORY entries existed, so a
+    // bootstrap run published whatever it produced. Absolute bounds have no
+    // bootstrap hole — that is half the reason for making them absolute.
+    expect(checkInvariants(statsOf(healthyGroups(200)))[0]).toContain("outside");
+  });
+
+  it("holds the bounds the constants are calibrated to", () => {
+    // These are not arbitrary, and a nudge to make a failing run pass is exactly
+    // the change this catches. The floor sits above a 1-bundle smoke run (1,467,
+    // measured 2026-08-12); the ceiling sits between steady state (~40,700, §4)
+    // and total grouping failure (~75,000). Re-derive from §4, do not nudge.
+    expect(COUNT_BAND_MIN).toBe(2_000);
+    expect(COUNT_BAND_MAX).toBe(60_000);
+    expect(COUNT_BAND_MIN).toBeGreaterThan(1_467);
+    expect(COUNT_BAND_MAX).toBeGreaterThan(40_700);
+    expect(COUNT_BAND_MAX).toBeLessThan(75_000);
   });
 
   it("stands the band down once publication has been blocked past 2x cadence", () => {
-    // The fail-forever wedge, measured 2026-08-13: a refused run does not append
-    // to history, so the median that refused it never moves and the next run is
-    // refused identically, for ever. The band has to be able to give up.
-    const past = history([1000, 1000, 1000]);
-    const flood = statsOf(healthyGroups(5000));
-    expect(checkInvariants(flood, past, BAND_RELAX_AFTER_MS - 1)[0]).toContain("outside");
-    expect(checkInvariants(flood, past, BAND_RELAX_AFTER_MS)).toEqual([]);
+    // The wedge this protects against changed shape on 2026-08-14. It used to be
+    // a self-poisoning median; now it is a stale constant — if real volume
+    // outgrows COUNT_BAND_MAX nothing self-corrects, and this valve is all there
+    // is between that and a dead map.
+    const flood = statsOf(healthyGroups(COUNT_BAND_MAX + 5_000));
+    expect(checkInvariants(flood, BAND_RELAX_AFTER_MS - 1)[0]).toContain("outside");
+    expect(checkInvariants(flood, BAND_RELAX_AFTER_MS)).toEqual([]);
   });
 
   it("keeps the other three invariants armed when the band stands down", () => {
-    // The band is the only one whose reference point is the pipeline's own
-    // history, so it is the only one that can poison itself. The floors catch
-    // actual garbage and must not be relaxed with it.
-    const past = history([1000, 1000, 1000]);
-    const collapsed = statsOf(healthyGroups(5000).map((g) => ({ ...g, countryCode: "US" })));
-    const violations = checkInvariants(collapsed, past, BAND_RELAX_AFTER_MS * 10);
+    // The band is the only one carrying a number that can go out of date without
+    // anything in the pipeline noticing. The floors catch actual garbage and must
+    // not be relaxed with it.
+    const collapsed = statsOf(
+      healthyGroups(COUNT_BAND_MAX + 5_000).map((g) => ({ ...g, countryCode: "US" })),
+    );
+    const violations = checkInvariants(collapsed, BAND_RELAX_AFTER_MS * 10);
     expect(violations).toHaveLength(1);
     expect(violations[0]).toContain("distinct countries");
   });
 
   it("rejects a run whose stories collapsed onto a handful of countries", () => {
-    const oneCountry = Array.from({ length: 100 }, (_, i) => group({ id: `g${i}` }));
-    const violations = checkInvariants(statsOf(oneCountry), history([100, 100, 100]));
+    const oneCountry = Array.from({ length: 3_000 }, (_, i) => group({ id: `g${i}` }));
+    const violations = checkInvariants(statsOf(oneCountry));
     expect(violations).toHaveLength(1);
     expect(violations[0]).toContain("distinct countries");
   });
 
   it("rejects a run that lost its titles", () => {
-    const groups = healthyGroups(100).map((g, i) => (i < 10 ? { ...g, title: "" } : g));
-    const violations = checkInvariants(statsOf(groups), history([100, 100, 100]));
+    const groups = healthyGroups().map((g, i) => (i < 300 ? { ...g, title: "" } : g));
+    const violations = checkInvariants(statsOf(groups));
     expect(violations).toHaveLength(1);
     expect(violations[0]).toContain("title");
   });
 
   it("reports every violation, not the first", () => {
-    const groups = Array.from({ length: 100 }, (_, i) => group({ id: `g${i}`, title: "" }));
-    expect(checkInvariants(statsOf(groups), history([100, 100, 100]))).toHaveLength(2);
+    const groups = Array.from({ length: 3_000 }, (_, i) => group({ id: `g${i}`, title: "" }));
+    expect(checkInvariants(statsOf(groups))).toHaveLength(2);
   });
 });
 
@@ -288,7 +301,7 @@ describe("publish", () => {
     expect(result.manifest.archive).toBe(archiveKey(contentHash(Buffer.from("PMTiles bytes"))));
     expect(result.manifest.generatedAt).toBe("2026-08-12T12:00:00.000Z");
     expect(result.manifest.watermark).toBe("20260812114500");
-    expect(result.manifest.stats).toEqual({ groups: 100, countries: 20, tier1Groups: 5 });
+    expect(result.manifest.stats).toEqual({ groups: 3_000, countries: 20, tier1Groups: 150 });
 
     // §2.6: the manifest is link-out metadata only. No article text reaches it.
     const written = JSON.parse(String(store.data.get(MANIFEST_KEY)));
@@ -306,7 +319,7 @@ describe("publish", () => {
         stamp: "20260812114500",
         archive: result.manifest.archive,
         regions: expect.stringMatching(/^archives\/regions-[0-9a-f]{8}\.json$/),
-        groups: 100,
+        groups: 3_000,
       },
     ]);
   });
@@ -397,6 +410,30 @@ describe("publish", () => {
     expect(result.violations[0]).toContain("outside");
     expect(store.writes).toEqual([]);
     expect(String(store.data.get(MANIFEST_KEY))).toContain("stories-old.pmtiles");
+  });
+
+  it("does not relax the band on the first run of an empty store", async () => {
+    // `staleness` returns Infinity on an empty history — "nothing has published,
+    // so nothing is protecting anything". Handed straight to the relax valve that
+    // reads as "blocked for longer than 8 hours" and stands the band down, so a
+    // fresh store would publish any count at all on its very first run. The old
+    // BAND_MIN_HISTORY gate covered this by accident; `history.length > 0` is now
+    // the condition, and this is the test that keeps it there.
+    const store = memoryStore({});
+
+    const result = await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(200),
+      regions: {},
+      watermark: "20260812114500",
+      now: NOW,
+    });
+
+    expect(result.published).toBe(false);
+    if (result.published) return;
+    expect(result.violations[0]).toContain("outside");
+    expect(store.writes).toEqual([]);
   });
 
   it("prunes only after the manifest has flipped", async () => {
