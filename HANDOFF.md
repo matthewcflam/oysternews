@@ -84,6 +84,12 @@ measured, not assumed.
 
 ## START HERE
 
+**Phase 6 has started ahead of Phase 4 finishing, deliberately.** What is left in
+Phase 4 is blocked on things this session cannot supply — a real phone, and a
+judge working through a sheet — so the About page was built while they are
+outstanding. **`/about` is live.** Phase 4's two open items are the phone profile
+and the overflow re-read, both below.
+
 **Next action: finish Phase 4.** The pipeline is closed end to end — `worker/run.ts`
 runs the §3.2 flow 4-hourly under `.github/workflows/worker.yml` and publishes a
 content-hashed archive to Blob; `components/MapView.tsx` reads `manifest.json` to
@@ -1960,15 +1966,48 @@ judged ≥6 to be genuinely underreported.
 **The 2-3 evenings go to Phase 6**, which was already the phase most likely to be
 cut for time and is probably the stronger portfolio artifact anyway.
 
-### Phase 6 — About / methodology · 3-5 evenings · *now a headline deliverable*
+### Phase 6 — About / methodology · 3-5 evenings · *started 2026-08-14*
+**The page is built and live at `/about`** (`app/about/page.tsx`), reachable from
+the map by a "How this works" link in the masthead — §5.2 decision 3 asks for the
+accuracy to be *reachable from the product*, not merely to exist. Every item on
+the "must state" list below is on the page. It is a static prerender, so it costs
+nothing per visit.
+
+**Two things about it are load-bearing and easy to undo by accident:**
+
+1. **The accuracy section is a pre-registered obligation, not copy.** Landing in
+   §5.1's 50-70% band *requires* the About page to state the measured figure and
+   its interval. Editing that section down to a rounder, friendlier number
+   silently breaks the condition the project shipped under.
+2. **It carries a `.about__pending` note saying the number is being
+   re-measured**, because the 68.1% was judged against the rule that the same
+   judging then changed. **When `zcbaks-d7b665-90` comes back, update the table
+   and delete that note** — a "being re-measured" line left standing after the
+   measurement lands is exactly the §0 rule 1 staleness this document keeps
+   catching itself in.
+
+> **The masthead link cost a measurement, and the next line added there will
+> too.** `.panel` is opaque at z-index 3 and positioned by a hardcoded `top`, so
+> it had been sitting *over* the new link at both widths — the link stayed
+> present and clickable and invisible, which is the failure shape this project
+> keeps finding. The offsets are now 108px / 126px at ≤520px against a masthead
+> bottom of 96px / 114px, measured in a browser. Re-measure on any masthead
+> change.
+
+**Still open in Phase 6:** the numbers on the page are duplicated by hand from
+this document rather than read from the pipeline, so a rule change updates the
+map and not the prose. Nothing enforces that today.
+
 **Promoted, and given Phase 5's budget.** `FINDINGS.md` is the artifact with the
 strongest claim on a hiring manager's attention: GEO 2.0 dead with structural
 proof, 48.5% heuristic disagreement, the demonym discovery, an abort criterion
 written before the data and honoured when it fired, and three features killed by
 the builder's own measurements. That reads better than most portfolio maps.
 
-Must state: the English-only mechanism and its residue, **geotag accuracy as
-69.7% with a [52.7, 82.6] interval and the method behind it**, how containers
+Must state: the English-only mechanism and its residue, **geotag accuracy with
+its interval and the method behind it** — now the independently judged **68.1%
+[53.8, 79.6]**, not the 69.7% [52.7, 82.6] this line carried until 2026-08-14 —
+how containers
 work and where admin-1 coverage has gaps, the 24-hour window and cadence,
 **that tier-1 outlets get ranking priority and a 48-hour window while everything
 else gets 24** (§2.5 — this is an editorial choice made by the builder, not
