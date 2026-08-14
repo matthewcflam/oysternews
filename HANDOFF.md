@@ -8,9 +8,34 @@ now run green in CI. **Phase 4 is in progress**: both layers are styled, the
 §2.2 outline works, **§2.3 is complete on both sides** — the index is published
 and the label gesture, the outline, the panel and the Global button are built and
 verified in a browser — and the **geotag-confidence treatment is complete in both
-halves**. What is left is the phone profile, one missing outline, and one payload
-number to read. Live: https://sonder-drab-eta.vercel.app/ .
-**Last updated:** 2026-08-14, after seven things: a bad Blob token failed the
+halves**. **Its shipping gate, §5.2 decision 4, is discharged as of 2026-08-14.**
+What is left is the phone profile, one missing outline, and one payload number to
+read. Live: https://sonder-drab-eta.vercel.app/ .
+**Last updated:** 2026-08-14 (late), when **§5.2 decision 4 came back and the
+placement rule changed because of it.** An independent judge scored a fresh
+90-record draw: **pins 68.1% [53.8, 79.6], containers 83.3% [68.1, 92.1]**, no
+abort threshold fires, and the pins' lower bound rose against the 50% kill line
+rather than falling. That draw also paid for the first rule this project has
+changed on independent evidence — **§2.1 now DROPs a city mentioned once**
+(`weak-city`, 30.2% of former pins, measured 36.4% correct against 77.8%). And it
+surfaced a live trap in the audit tooling: **the same judged sheet scored against
+a stale sample returns KILL CONTAINERS**, silently, because draw ids came from
+the seed. Draws are fingerprinted now. All three are written up below; start at
+"The independent judge came back".
+
+**The three things a fresh session should know they are inheriting:**
+
+1. **A fresh judged draw is owed.** 77.8% is a projection — the old draw with a
+   subset removed — and §5.1's bands are read off measurements, so the About page
+   still carries 68.1%. `npm run judge:draw` is built and the thresholds have
+   never moved.
+2. **The absolute count band's first production test was never confirmed here.**
+   The ~06:46 UTC run of 2026-08-14 is the first one it gates; nobody has read
+   that log. A relax `WARN` in it would mean the band is still refusing.
+3. **§2.4's overflow trigger fired at 56% and is still unaddressed**, as is the
+   phone profile that gates it.
+
+The earlier part of the same day covered seven other things: a bad Blob token failed the
 first two scheduled runs, the count band was caught one run from wedging the
 pipeline shut for good and then **rebuilt as two absolute constants after it
 refused runs a second time**, §2.3 was redesigned around clicking place labels,
@@ -184,9 +209,9 @@ guesses rather than silently presented as facts.
 That work moved the popup's HTML out of `MapView.tsx` into **`lib/popup.ts`**,
 where §2.6 (title, source, link, never article text) is asserted by
 `popup.test.ts` instead of reviewed — which closes **§7 critical gap 2**. The
-number itself stays Phase 6's job: §5.2 decision 3 puts "publish 69.7% [52.7,
-82.6] and the method" on the About page, and an interval repeated in every popup
-would be noise.
+number itself stays Phase 6's job: §5.2 decision 3 puts "publish the accuracy and
+the method" on the About page — now **68.1% [53.8, 79.6]**, the independently
+judged figure — and an interval repeated in every popup would be noise.
 
 **Phase 4, remaining:**
 
@@ -203,6 +228,15 @@ would be noise.
 3. **Revisit §2.4's overflow**, whose ~50% trigger fired at 56% on 2026-08-14.
    Read it on a genuinely full window first (after ~09:11 UTC) — some of the rise
    from 14% -> 34% -> 56% is the pool filling, which is the budget working.
+
+   > **The weak-city DROP moved this number and nobody has re-read it.** ~30% of
+   > pins stop being published, so the pool the budget defers from is smaller and
+   > the overflow share should fall on its own. Read the trigger *after* a full
+   > window on the new rule before deciding anything about `K`.
+4. **Draw a fresh judged sample against the new placement rule.** The pipeline
+   that produced 68.1% no longer exists — `weak-city` changed it — and §5.1's
+   bands are read off measurements, not projections. This is the same loop as
+   decision 4, run again, with thresholds that have never moved.
 
 ~~**Then §5.2 decision 4 — the independent judge.**~~ **Done 2026-08-14**
 (`judged-c29ce-90`). It held: pins 68.1% [53.8, 79.6], containers 83.3%
