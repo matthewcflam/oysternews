@@ -48,36 +48,48 @@ function featuresOf(groups: StoryGroup[]): any[] {
 }
 
 describe("the tippecanoe directive", () => {
-  it("is a sibling of properties, which is where tippecanoe reads it", () => {
+  /**
+   * **These assertions pin a known-wrong state, deliberately.**
+   *
+   * The directive belongs at Feature level per `man tippecanoe`, and it is
+   * inside `properties` instead — so it is ignored and §2.4's budget does not
+   * run. It is written here the wrong way because the right way was tried on
+   * 2026-08-14 and published an archive with **one feature per layer per tile at
+   * every zoom**, which is a worse map than a too-dense one. `tiles.ts` has the
+   * measurements and the standalone repro.
+   *
+   * So this file's job is not "the directive is correct". It is: **the shape
+   * does not change by accident, and whoever changes it on purpose has read
+   * why it is like this.**
+   */
+  it("currently sits inside properties, which is why the budget does not run", () => {
     const [feature] = featuresOf([group({ minzoom: 7 })]);
-    expect(feature.tippecanoe).toEqual({ minzoom: 7 });
-  });
-
-  it("is NOT inside properties, where it is silently ignored", () => {
-    // The regression, stated as its own case because it is the whole bug. In
-    // `properties` the directive becomes an ordinary attribute: it rides into
-    // the tiles, tippecanoe never applies it, and every feature renders at every
-    // zoom. World zoom served 1,714 pins on a phone against §9's 30-60.
-    const [feature] = featuresOf([group()]);
-    expect(feature.properties).not.toHaveProperty("tippecanoe");
+    expect(feature.properties.tippecanoe).toEqual({ minzoom: 7 });
+    expect(feature.tippecanoe).toBeUndefined();
   });
 
   it("carries the budget's minzoom unchanged, including the do-not-render sentinel", () => {
     // budget.ts assigns MAX_BUDGET_ZOOM + 1 = 13 to groups that never win a
-    // slot. It is above tippecanoe's -z12 ceiling, so the feature is dropped
-    // rather than dumped at the deepest zoom. If this value is ever rounded or
-    // clamped on the way through, the overflow reappears on the map.
+    // slot. The value has to survive this function intact whether or not
+    // tippecanoe currently acts on it, or the eventual fix inherits a second
+    // bug on top of the first.
     const features = featuresOf([group({ minzoom: 0 }), group({ minzoom: 13 })]);
-    expect(features.map((f) => f.tippecanoe.minzoom)).toEqual([0, 13]);
+    expect(features.map((f) => f.properties.tippecanoe.minzoom)).toEqual([0, 13]);
   });
 
   it("emits a directive for every feature, never a bare one", () => {
-    // A feature with no directive defaults to minzoom 0 and is visible
-    // everywhere — the same failure as the nesting bug, one feature at a time.
     const features = featuresOf([group({ minzoom: 3 }), group({ minzoom: 9 })]);
     for (const feature of features) {
-      expect(typeof feature.tippecanoe?.minzoom).toBe("number");
+      expect(typeof feature.properties.tippecanoe?.minzoom).toBe("number");
     }
+  });
+
+  it("keeps minzoom numeric, because the string form is silently ignored", () => {
+    // Measured on tippecanoe 2.49.0: `{"minzoom": "0"}` is discarded outright
+    // rather than erroring. If the eventual fix moves this to Feature level, a
+    // stringified value would look like it worked and change nothing.
+    const [feature] = featuresOf([group({ minzoom: 4 })]);
+    expect(typeof feature.properties.tippecanoe.minzoom).toBe("number");
   });
 });
 
@@ -85,6 +97,13 @@ describe("the feature payload", () => {
   it("carries exactly the §2.6 properties and no article text", () => {
     // The copyright constraint is enforced here rather than reviewed. A new
     // property added upstream must be added to this list deliberately.
+    //
+    // `tippecanoe` is in this list under protest: it is the misplaced directive,
+    // and it is riding into every tile as a real attribute on every published
+    // feature. It costs payload on every tile fetch and means nothing to the
+    // browser. **When the directive finally moves to Feature level, delete it
+    // from here** — its presence in this list is a marker for that unfinished
+    // work, not an approved property.
     const [feature] = featuresOf([group()]);
     expect(Object.keys(feature.properties).sort()).toEqual(
       [
@@ -97,6 +116,7 @@ describe("the feature payload", () => {
         "salience",
         "source",
         "tier1",
+        "tippecanoe",
         "title",
         "url",
       ].sort(),
@@ -112,7 +132,7 @@ describe("the feature payload", () => {
   it("rounds salience but does not round the minzoom it is ranked into", () => {
     const [feature] = featuresOf([group({ salience: 1.732912345, minzoom: 11 })]);
     expect(feature.properties.salience).toBe(1.7329);
-    expect(feature.tippecanoe.minzoom).toBe(11);
+    expect(feature.properties.tippecanoe.minzoom).toBe(11);
   });
 
   it("flattens tier1 to 0/1, because vector tiles have no boolean", () => {
