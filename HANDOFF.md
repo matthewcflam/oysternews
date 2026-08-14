@@ -23,23 +23,39 @@ a stale sample returns KILL CONTAINERS**, silently, because draw ids came from
 the seed. Draws are fingerprinted now. All three are written up below; start at
 "The independent judge came back".
 
-**Then the three inherited items were worked, same night.** The count band's
-first production test **passed** (05:46 UTC, 33,778 groups, no relax `WARN`), a
-fresh judged draw was **taken and is waiting on the judge** (`zcbaks-d7b665-90`),
-and §2.4's overflow was **re-read at 57.3% but is still a pre-weak-city number**
-— the rule landed after that run, so the trigger still has not been read on the
-code that is live. Details in each section; the queue below is current.
+**Then the three inherited items were worked and two were closed, same night.**
+The count band's first production test **passed** (05:46 UTC, 33,778 groups, no
+relax `WARN`). **The weak-city rule was settled by decision** — dropping a city
+mentioned once is final, not on trial, and the re-measurement that was owed
+against it is now **optional rather than a gate** (the draw is taken and on disk
+either way). §2.4's overflow was **re-read at 57.3% but is still a pre-weak-city
+number** — the rule landed after that run, so the trigger has not been read on
+the code that is live.
+
+**Two things were then deferred by decision, and both are deferred rather than
+cancelled:** the **phone profile** (§9's 4G target stays unverified on real
+hardware, and `K` must not move until it is done) and an accuracy number
+measured against the current rule. **Phase 6 was started ahead of Phase 4
+finishing** because of those deferrals — `/about` is live. Details in each
+section; the queue below is current.
 
 **The three things a fresh session should know they are inheriting:**
 
-1. **A fresh judged draw is owed, and it is now drawn and waiting on the judge.**
-   77.8% is a projection — the old draw with a subset removed — and §5.1's bands
-   are read off measurements, so the About page still carries 68.1% until a
-   judged sheet comes back. Draw `zcbaks-d7b665-90` was taken 2026-08-14 against
-   the weak-city rule: 90 records, **41 pins / 49 containers**, disjoint from the
-   260 URLs already judged. The sheet is `build/judge.html`; score the returned
-   file with `node scripts/score-audit.ts <judged-zcbaks-d7b665-90.jsonl>`.
-   Thresholds have never moved.
+1. ~~**A fresh judged draw is owed.**~~ **Closed 2026-08-14 by decision, not by
+   measurement — and the difference matters.** Dropping a city mentioned once is
+   **settled**: `judged-c29ce-90` funded it, §2.1 enforces it, and it is not on
+   trial pending further evidence. What is *not* settled is an accuracy number
+   for the rule as it now stands — **68.1% [53.8, 79.6] was measured on the
+   pipeline before weak-city existed**, so it describes a map that included the
+   least accurate group of pins. That is the honest reading and the About page
+   states it in those words.
+
+   > **Do not quietly promote 77.8% to a measurement.** It is the old draw with a
+   > subset removed — a projection — and §5.1 reads bands off measurements. If a
+   > number for the current rule is ever wanted, draw `zcbaks-d7b665-90` is
+   > already taken and disjoint (90 records, 41 pins / 49 containers, sheet at
+   > `build/judge.html`, score with `node scripts/score-audit.ts`). It is
+   > **optional**, not owed.
 2. ~~**The absolute count band's first production test was never confirmed.**~~
    **Done, 2026-08-14.** The 05:46 UTC run published 33,778 groups with **no
    relax `WARN`** — the band passed on its own bounds. See the count band section.
@@ -84,11 +100,11 @@ measured, not assumed.
 
 ## START HERE
 
-**Phase 6 has started ahead of Phase 4 finishing, deliberately.** What is left in
-Phase 4 is blocked on things this session cannot supply — a real phone, and a
-judge working through a sheet — so the About page was built while they are
-outstanding. **`/about` is live.** Phase 4's two open items are the phone profile
-and the overflow re-read, both below.
+**Phase 6 has started ahead of Phase 4 finishing, deliberately.** Phase 4's
+remaining items were **deferred by decision on 2026-08-14** — the phone profile
+needs hardware, and the accuracy re-measurement was closed as optional once the
+weak-city rule was settled. **`/about` is live.** The one Phase 4 item still
+genuinely open and unblocked is **§2.4's overflow re-read**, below.
 
 **Next action: finish Phase 4.** The pipeline is closed end to end — `worker/run.ts`
 runs the §3.2 flow 4-hourly under `.github/workflows/worker.yml` and publishes a
@@ -240,10 +256,12 @@ judged figure — and an interval repeated in every popup would be noise.
    the absolute band `[2000, 60000]` actually gates, and the thing to confirm is
    that it publishes *without* a relax `WARN` in the log. A `WARN` there would
    mean the band is still refusing and the diagnosis was incomplete.
-2. **Profile on a real mid-tier phone**, not a desktop throttle (§9). It needs
-   hardware — nothing in this repo can stand in for it. **It also now gates the
-   §2.4 overflow revisit**: `K` is the only lever that surfaces deferred stories,
-   and the profile is what says whether there is room to raise it.
+2. **Profile on a real mid-tier phone** — **deferred 2026-08-14, by decision.**
+   It needs hardware nothing in this repo can stand in for, and it was blocking
+   work that does not actually depend on it. It is still the thing that gates
+   raising `K` (below), so **the overflow revisit may look at the number but must
+   not change `K` until this is done.** Deferred is not cancelled: §9's
+   <2.5s-on-4G target is unverified on real hardware until someone runs it.
 3. **Revisit §2.4's overflow**, whose ~50% trigger fired at 56% and read **57.3%
    again on 2026-08-14 05:46 UTC** (19,344 of 33,778) on a nearly-full window.
    Some of the rise from 14% -> 34% -> 56% -> 57.3% is the pool filling, which is
@@ -256,13 +274,14 @@ judged figure — and an interval repeated in every popup would be noise.
    > pre-rule** — the rule landed ~08:14 UTC — so the first informative run is
    > ~09:46 UTC. Read the *share*, not the count, before deciding anything about
    > `K`: the count falls either way.
-4. ~~**Draw a fresh judged sample against the new placement rule.**~~ **Drawn
-   2026-08-14, waiting on the judge.** `zcbaks-d7b665-90`: 90 records, 41 pins /
-   49 containers, disjoint from the 260 URLs already judged, and verified to
-   carry the new rule — **0 lone-mention pins**, and tie-broken pins are down to
-   9.8% of pins (4 of 41) from the 15.5% that motivated the rule. The sheet is
-   `build/judge.html`. **The number is not measured until the sheet comes back**,
-   so §5.1's bands and the About page still stand on 68.1%.
+4. ~~**Draw a fresh judged sample against the new placement rule.**~~ **Closed
+   2026-08-14 — the rule is settled and this is no longer a gate.** The draw was
+   taken and is on disk if it is ever wanted (`zcbaks-d7b665-90`: 90 records,
+   41 pins / 49 containers, disjoint from the 260 already judged, sheet at
+   `build/judge.html`). It verified the rule is live in the published population:
+   **0 lone-mention pins**, and tie-broken pins down to 9.8% (4 of 41) from the
+   15.5% that motivated the rule. §5.1's bands and the About page stand on 68.1%,
+   labelled as measured before the rule.
 
    > The previous draw is archived as `audit_sample_judge_c29ce.jsonl` rather
    > than overwritten, because `draw-judge-sample.ts` writes a fixed filename and
@@ -1979,12 +1998,13 @@ nothing per visit.
    §5.1's 50-70% band *requires* the About page to state the measured figure and
    its interval. Editing that section down to a rounder, friendlier number
    silently breaks the condition the project shipped under.
-2. **It carries a `.about__pending` note saying the number is being
-   re-measured**, because the 68.1% was judged against the rule that the same
-   judging then changed. **When `zcbaks-d7b665-90` comes back, update the table
-   and delete that note** — a "being re-measured" line left standing after the
-   measurement lands is exactly the §0 rule 1 staleness this document keeps
-   catching itself in.
+2. **It carries a `.about__pending` note saying what the number covers** — that
+   68.1% was judged against the rule the same judging then changed, so it
+   describes the map *before* the least accurate pins were dropped. **Dated, not
+   wrong**, and the note says which. It deliberately does not promise a
+   re-measurement, because that decision is closed (item 1 up top). If a fresh
+   draw is ever judged, **replace the table and the note together** — updating
+   one without the other is how the page starts lying.
 
 > **The masthead link cost a measurement, and the next line added there will
 > too.** `.panel` is opaque at z-index 3 and positioned by a hardcoded `top`, so

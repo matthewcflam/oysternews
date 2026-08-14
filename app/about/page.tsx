@@ -17,12 +17,14 @@ import type { Metadata } from "next";
  * "What was cut" section below); a methodology page that rounded those numbers
  * up would undo the only thing that makes them worth reading.
  *
- * One live caveat that will need editing rather than admiring: the 68.1% was
- * judged against the placement rule as it stood on 2026-08-14, and the rule
- * changed *because of* that judging (the weak-city DROP). A fresh sample is
- * drawn and with the judge. **When it comes back, update the accuracy section
- * and delete the pending note** — do not leave a "being re-measured" line
- * standing after it has been.
+ * One caveat the page states rather than hides: the 68.1% was judged against the
+ * placement rule as it stood on 2026-08-14, and the rule changed *because of*
+ * that judging (the weak-city DROP). **That does not make the number wrong, it
+ * makes it dated**, and the boxed note says exactly which. Settled 2026-08-14:
+ * dropping a city mentioned once is a closed decision, not a trial — so this
+ * page does not promise a re-measurement it has no date for. If a fresh draw is
+ * ever judged against the current rule, replace the table and the note together;
+ * do not update one without the other.
  */
 export const metadata: Metadata = {
   title: "How Sonder works — method, accuracy and limits",
@@ -186,13 +188,12 @@ export default function About() {
           wrong city — which was 52% of the errors.
         </p>
         <p className="about__pending">
-          <strong>Currently being re-measured.</strong> That judging is what
-          justified the drop-a-single-mention rule above, which means the numbers
-          were produced by a pipeline that no longer exists. A fresh sample has
-          been drawn against the current rule and is with the judge. Until it
-          comes back, the figures above are the ones on record — they are not
-          adjusted upward on the strength of a change that has not been measured
-          yet.
+          <strong>What these numbers do and do not cover.</strong> This judging is
+          what justified the drop-a-single-mention rule above — the rule was
+          adopted <em>because</em> of it. So the figures describe the map as it
+          was scored, before that rule removed the least accurate group of pins.
+          They are the measurements on record and are not adjusted upward on the
+          strength of a change they predate.
         </p>
 
         <h2>Which stories get shown</h2>
