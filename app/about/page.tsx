@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { PUBLISHED_ACCURACY } from "@/lib/accuracy";
+
 /**
  * Phase 6 — About / methodology.
  *
@@ -167,23 +169,30 @@ export default function About() {
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td>Pins</td>
-              <td>68.1%</td>
-              <td>[53.8, 79.6]</td>
-            </tr>
-            <tr>
-              <td>Containers</td>
-              <td>83.3%</td>
-              <td>[68.1, 92.1]</td>
-            </tr>
+            {(
+              [
+                ["Pins", PUBLISHED_ACCURACY.pin],
+                ["Containers", PUBLISHED_ACCURACY.container],
+              ] as const
+            ).map(([label, level]) => (
+              <tr key={label}>
+                <td>{label}</td>
+                <td>{level.point.toFixed(1)}%</td>
+                <td>
+                  [{level.interval[0].toFixed(1)}, {level.interval[1].toFixed(1)}]
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
         <p>
           <strong>Read the interval, not the headline number.</strong> On a
-          sample this size the pin figure is consistent with anything from about
-          54% to about 80%, and decisions here follow the lower bound rather than
-          the point estimate. About one placement in three is wrong. The most
+          sample this size ({PUBLISHED_ACCURACY.pin.n} judgeable pins) the pin
+          figure is consistent with anything from about{" "}
+          {Math.round(PUBLISHED_ACCURACY.pin.interval[0])}% to about{" "}
+          {Math.round(PUBLISHED_ACCURACY.pin.interval[1])}%, and decisions here
+          follow the lower bound rather than the point estimate. About one
+          placement in three is wrong. The most
           common way it is wrong is a <em>near miss</em> — the right country, the
           wrong city — which was 52% of the errors.
         </p>
