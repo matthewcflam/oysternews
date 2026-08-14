@@ -36,6 +36,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PlacementTrace } from "../worker/place.ts";
+import { drawFingerprint, fingerprintOf } from "./judge-draw-id.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_SAMPLE = path.join(REPO_ROOT, "spikes", "gdelt", "audit_sample_judge.jsonl");
@@ -57,6 +58,7 @@ type Judgement = { id: string; verdict: string; reason: string };
 type SampleRecord = {
   id: string;
   title: string;
+  url: string;
   domain: string;
   kind: "PIN" | "CONTAINER";
   placedAt: string;
@@ -100,10 +102,36 @@ async function main(): Promise<void> {
   }
   const samplePath = args.includes("--sample") ? args[args.indexOf("--sample") + 1] : DEFAULT_SAMPLE;
 
-  const sample = new Map(
-    readJsonl<SampleRecord>(await readFile(samplePath, "utf8")).map((r) => [r.id, r]),
-  );
+  const drawn = readJsonl<SampleRecord>(await readFile(samplePath, "utf8"));
+  const sample = new Map(drawn.map((r) => [r.id, r]));
   const judged = readJsonl<Judgement>(await readFile(judgedPath, "utf8")).filter((j) => j.verdict);
+
+  // --- is this sheet even about this sample? --------------------------------
+  //
+  // Ids alone cannot answer that: they used to be `<seed36>-<index>`, and two
+  // draws with the same seed over different GDELT bundles produce identical
+  // ids over different articles. That happened, and scoring the real verdicts
+  // against the stale sample returned KILL CONTAINERS on a feature measured at
+  // 83.3%. `judge-draw-id.ts` has the full account.
+  const claimed = judged.length ? fingerprintOf(judged[0].id) : null;
+  const actual = drawFingerprint(drawn.map((r) => r.url));
+  if (claimed && claimed !== actual) {
+    console.error(
+      `\n  REFUSING TO SCORE — this sheet was not judged against this sample.` +
+        `\n  sheet says ${claimed}, ${path.basename(samplePath)} fingerprints as ${actual}.` +
+        `\n  The ids will still join, and the answer would be meaningless.` +
+        `\n  Find the sample the sheet was drawn from; do not re-draw it.\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (!claimed) {
+    console.log(
+      `\n  WARN  this sheet predates draw fingerprints (2026-08-14), so it cannot` +
+        `\n        be verified against ${path.basename(samplePath)}. Ids joining is NOT` +
+        `\n        evidence they belong together — see judge-draw-id.ts.`,
+    );
+  }
 
   const rows = judged
     .map((j) => ({ ...j, record: sample.get(j.id) }))
@@ -151,6 +179,10 @@ async function main(): Promise<void> {
   }
 
   // --- do the trace shapes predict wrongness? ------------------------------
+  // `lone-mention` is kept although `place.ts` now DROPs it at city level: on a
+  // draw taken after 2026-08-14 it can only match containers, where it scored
+  // 85.7% and is not a defect. A *pin* matching it means the draw predates the
+  // weak-city rule — or that the rule was bypassed. Both are worth seeing.
   const shapes: { name: string; test: (t: PlacementTrace) => boolean }[] = [
     { name: "lone-mention", test: (t) => t.winnerMentions === 1 },
     { name: "tie-broken", test: (t) => t.tieBroken },
