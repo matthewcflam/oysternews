@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import FreshnessStamp from "@/components/FreshnessStamp";
 import MapView from "@/components/MapView";
 
@@ -15,6 +17,14 @@ export default function Home() {
         */}
         <p>Real stories from the last 24 hours, published every four hours.</p>
         <FreshnessStamp />
+        {/*
+          §5.2 decision 3 requires the measured accuracy to be reachable from the
+          product, not just to exist somewhere. This link is that path — one hop
+          from the map to the number and the method behind it.
+        */}
+        <p className="masthead__about">
+          <Link href="/about">How this works</Link>
+        </p>
       </header>
     </main>
   );
