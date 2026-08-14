@@ -10,6 +10,35 @@
 # Usage:  bash scripts/run-tippecanoe.sh -o out.pmtiles -L layer:in.geojson ...
 set -euo pipefail
 
+# The minimum tippecanoe this project can be built with. Not a preference — a
+# correctness floor, and the one number in this file that must not be relaxed.
+#
+# tippecanoe 2.49.0 (which is what `apt-get install tippecanoe` gives you on
+# Ubuntu 24.04, and what CI installed until 2026-08-14) silently discards every
+# feature that carries an explicit `tippecanoe.minzoom` — which is every feature
+# this project publishes, because that directive is how §2.4's density budget is
+# expressed. In `tile.cpp` the block that assigns `sf.dropped` is guarded by
+# `if (sf.tippecanoe_minzoom == -1)` with no `else`, so a feature with a declared
+# minzoom keeps the struct default `dropped = FEATURE_DROPPED` and is discarded
+# by rate. The sole survivor is the "first feature of the tile is always kept"
+# guard, which is why the symptom is **exactly one feature per layer per tile at
+# every zoom** rather than an empty archive.
+#
+# Upstream fixed it in felt/tippecanoe bd48ba8, "Fix accidental loss (at all
+# zooms) of features with an explicit minzoom", first released in 2.52.0.
+#
+# This is checked rather than documented because both failure modes on this code
+# path are silent: tippecanoe exits 0, the archive publishes, and every unit test
+# and §8 invariant passes whether the budget ran or ate the map. The only place
+# it was ever visible was a decoded tile. A wrong tippecanoe now fails the run.
+MIN_TIPPECANOE=2.52.0
+
+# The check itself is a sibling script, so that the native branch and the WSL
+# branch run identical code. It cannot be inlined here: a multi-line shell
+# fragment does not survive `wsl.exe -- bash -lc`, which is documented where it
+# was measured, in tippecanoe-min-version.sh.
+GUARD="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/tippecanoe-min-version.sh"
+
 # /c/Users/x  ->  /mnt/c/Users/x
 # C:/Users/x  ->  /mnt/c/Users/x
 # C:\Users\x  ->  /mnt/c/Users/x
@@ -55,6 +84,7 @@ for arg in "$@"; do
 done
 
 if command -v tippecanoe >/dev/null 2>&1; then
+  bash "$GUARD" "$MIN_TIPPECANOE"
   exec tippecanoe "${translated[@]}"
 fi
 
@@ -66,8 +96,15 @@ if command -v wsl.exe >/dev/null 2>&1; then
     quoted+="'${arg//\'/\'\\\'\'}' "
   done
 
+  # The guard runs inside WSL, against the tippecanoe that is about to be used —
+  # checking the Windows side would prove nothing, since there is no tippecanoe
+  # there at all. Its path goes through the same translation as every other
+  # argument, and it crosses as one quoted token, which is the only shape that
+  # survives (see tippecanoe-min-version.sh).
+  guard_wsl="$(to_wsl_arg "$GUARD")"
+
   exec wsl.exe -d Ubuntu -- bash -lc \
-    "command -v tippecanoe >/dev/null || { echo 'tippecanoe is not installed in WSL. Run:  wsl -d Ubuntu -- sudo apt-get install -y tippecanoe' >&2; exit 127; }; tippecanoe $quoted"
+    "bash '$guard_wsl' '$MIN_TIPPECANOE' && tippecanoe $quoted"
 fi
 
 echo "tippecanoe not found, and no WSL to fall back to. See HANDOFF.md §6 decision 8." >&2

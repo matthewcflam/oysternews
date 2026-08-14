@@ -35,3 +35,10 @@ next-env.d.ts
 public/maplibre-gl-worker.mjs
 public/maplibre-gl-shared.mjs
 .gstack/
+
+# The felt/tippecanoe source checkout, cloned here on 2026-08-14 to build 2.79.0
+# after apt's 2.49.0 turned out to eat every feature with an explicit minzoom
+# (§2.4). It is a build scratch directory, not a vendored dependency — the floor
+# this project depends on is enforced by scripts/tippecanoe-min-version.sh, and
+# CI builds its own copy from the pinned TIPPECANOE_VERSION.
+tippecanoe/
