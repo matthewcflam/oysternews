@@ -1443,6 +1443,28 @@ Strait of Hormuz is never buried by an American election.
 > test file at all.** It has `worker/tiles.test.ts` now, and the first two cases
 > are the nesting, stated in both directions.
 >
+> **It was also starving the country floor, which is the second silent
+> violation.** The 05:46 run wrote **220 country-top features**. The tiles
+> served **6** — `TP, EC, NO, GT, SV, GL`, and 1 of them rendered at z2. So
+> §9's *"every country with news in the window has at least one pin at world
+> zoom"* has been false for as long as the budget has, and the world view was
+> being held up entirely by unbudgeted story pins.
+>
+> **The mechanism is `--drop-densest-as-needed`, doing its job.** `-r1` disables
+> tippecanoe's radial dropping, but not this. With every story landing at z0, the
+> single world tile held ~34,000 features and blew the tile size limit, so
+> tippecanoe evicted the densest — and the country floor, 220 points spread over
+> one tile, went with it. **The floor layer was destroyed by the overflow it
+> exists to protect against.**
+>
+> > **Falsifiable prediction, to check on the first archive built after the
+> > fix:** with `minzoom` honoured, the z0 tile holds roughly 15 story features
+> > plus the whole floor, which is far inside the size limit — so
+> > **country-top should come back to ~200+ in the tiles, and world zoom should
+> > read ~30-60 pins rather than 1,714.** If country-top is still starved after
+> > the fix, `--drop-densest-as-needed` is not the mechanism and this paragraph
+> > is wrong; look at the layer's own `maxzoom: 4` next.
+>
 > **What this invalidates.** Every §2.4 overflow reading before 2026-08-14
 > measured what the budget *intended* to defer, not what the map did — nothing
 > was deferred, so those stories were all still on screen. **The 56% and 57.3%
