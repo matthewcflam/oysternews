@@ -10,10 +10,11 @@ and the label gesture, the outline, the panel and the Global button are built an
 verified in a browser — and the **geotag-confidence treatment is complete in both
 halves**. What is left is the phone profile, one missing outline, and one payload
 number to read. Live: https://sonder-drab-eta.vercel.app/ .
-**Last updated:** 2026-08-13, after six things: a bad Blob token failed the
+**Last updated:** 2026-08-14, after seven things: a bad Blob token failed the
 first two scheduled runs, the count band was caught one run from wedging the
-pipeline shut for good, §2.3 was redesigned around clicking place labels, its
-per-region index was built and verified published, its client half was built
+pipeline shut for good and then **rebuilt as two absolute constants after it
+refused runs a second time**, §2.3 was redesigned around clicking place labels,
+its per-region index was built and verified published, its client half was built
 against the live archive, and the pin half of the geotag-confidence treatment was
 built after a measurement refused the graded version of it.
 
@@ -21,9 +22,21 @@ built after a measurement refused the graded version of it.
 including the placement line — clicking a pin on the live site reads
 *"Chippewa Falls, Wisconsin, United States · placed automatically"*. Three
 decisions closed the same day against real data (§6 decisions 7, 9 and 11's
-trigger, plus §2.4's overflow), `IN25` turned out to be a mislabel rather than a
-gap and took a silent second bug with it, and **one incident is open: the count
-band is refusing runs — see below.**
+trigger, plus §2.4's overflow), and `IN25` turned out to be a mislabel rather
+than a gap and took a silent second bug with it.
+
+**The count band refused runs twice on 2026-08-13, once on each bound, and is
+now fixed at the design level: it is two absolute constants and reads no history
+at all.** See the count band section below for the measurements behind the
+numbers and for the one number that would have made it a permanent outage.
+**The map is live again** — the 02:46 UTC run published 30,316 groups via the
+relax valve, confirming the diagnosis — but **the fix is committed and not yet
+pushed, and until it is on `main` the relax cycle repeats every 8 hours.**
+
+**Two things fired on that same run and both want attention before new work:**
+§2.4's overflow passed the ~50% line this document had set as its revisit
+trigger (**56%**, 16,951 of 30,316), and a second unknown FIPS code appeared
+(`WQ`, 6 stories). Both are written up where the rule that governs them lives.
 **Evidence base:** `spikes/gdelt/FINDINGS.md` — every number in this document is
 measured, not assumed.
 
@@ -175,8 +188,22 @@ would be noise.
 
 **Phase 4, remaining:**
 
-1. **Profile on a real mid-tier phone**, not a desktop throttle (§9). This is the
-   last item, and it needs hardware — nothing in this repo can stand in for it.
+1. **Push the count band fix.** Committed, tested, not on `main`. Until it is,
+   the pipeline publishes once per 8 hours through the relax valve instead of
+   every 4. This is the cheapest item on the list and the only one blocking
+   service.
+2. **Profile on a real mid-tier phone**, not a desktop throttle (§9). It needs
+   hardware — nothing in this repo can stand in for it. **It also now gates the
+   §2.4 overflow revisit**: `K` is the only lever that surfaces deferred stories,
+   and the profile is what says whether there is room to raise it.
+3. **Revisit §2.4's overflow**, whose ~50% trigger fired at 56% on 2026-08-14.
+   Read it on a genuinely full window first (after ~09:11 UTC) — some of the rise
+   from 14% -> 34% -> 56% is the pool filling, which is the budget working.
+
+**Then §5.2 decision 4 — the independent judge — which is what actually gates
+shipping Phase 4**, and is the one item on this list no amount of code will
+discharge. Decide what a disagreement means *before* the draw is judged; the
+pins' lower bound is 52.7% against a 50% kill line.
 
 **`IN25` is fixed, 2026-08-13, and it was not a missing polygon.** Natural Earth
 writes `fips: IN22` on **Tamil Nadu** — and on **Puducherry**, which is the code
@@ -242,50 +269,128 @@ designed rule H and scored it, which is the weakest link in the evidence.
 
 ---
 
-## OPEN INCIDENT — the count band is refusing runs again, 2026-08-13
+## THE COUNT BAND IS NO LONGER SELF-REFERENTIAL — fixed 2026-08-14
 
-**The 17:13 UTC scheduled run failed and the map has not moved since 13:48 UTC.**
-Runs #4 and #5 succeeded, so this is not the Blob token. Diagnosed from the
-public store rather than the Action log (which needs auth):
+**The band is now two absolute constants, `[2000, 60000]` group counts, and
+reads no history at all.** That is the durable fix to a guard that refused runs
+twice in one day, once on each bound. The incident that forced it, and then the
+fix:
 
 ```
   publish history   6718, 7145, 8095, 14360      median 7620
-  count band        [3048, 19050]                 = [0.4x, 2.5x] of the median
+  old count band    [3048, 19050]                 = [0.4x, 2.5x] of the median
   growth rate       8095 (10:15) -> 14360 (13:45) = ~1,790 groups/hour
-  projected 17:13   14360 + ~6,200  =  ~20,500    > 19,050, so the band refuses
+  projected 17:13   14360 + ~6,200  =  ~20,500    > 19,050, so the band refused
 ```
 
-`run.ts` sets `process.exitCode = 1` when nothing is published, which is exactly
-the shape of the failure (`Run the pipeline`, with the archive uploaded by the
-on-failure step — so the pipeline got as far as building tiles).
+Two scheduled runs failed on that (17:13 and 21:03 UTC) and the map stopped at
+13:48 UTC. `run.ts` sets `process.exitCode = 1` when nothing is published, which
+is the shape of both failures.
 
-**This is the trap of 2026-08-13 morning wearing its other face.** That one was
-the *lower* bound: a median from smoke runs refusing real ones. This is the
-*upper* bound, and the cause is the same — **the band's reference set has to be
-runs comparable to this one, and a pool that is still filling makes every earlier
-run incomparable.** A refused run does not append to history, so the median
-cannot catch up on its own.
+**It was the morning's trap wearing its other face.** That one was the *lower*
+bound — a median from two 1-bundle smoke runs (846, 1467) refusing a real 6,718.
+This was the *upper* bound. Same defect: **a median is a lagging statistic and
+the 24-hour pool has a trend in it**, so the reference set described a past that
+was not comparable to the present. And a refused run does not append to history
+(`publish` returns before the history write), so the median that refused a run
+never moves and the next run is refused identically. **Fail-closed becomes
+fail-forever.**
 
-**It self-heals, slowly and repeatedly.** `BAND_RELAX_AFTER_MS` stands the band
-down 8 hours after the last success, so the run at/after **21:48 UTC** should
-publish with a loud `WARN`. Then the median moves to 8095, the band becomes
-[3238, 20238], and a ~22k run **refuses again**. Expect roughly two more
-relax-publish-refuse cycles — call it 16-24 hours of a map that moves once per 8
-hours — until the pool stabilises and `HISTORY_LIMIT = 24` ages the three
-bootstrap entries out. **That prediction is falsifiable: if the next success is
-not stamped `bandRelaxed`, this diagnosis is wrong.**
+**Why absolute rather than a better relative statistic.** Banding against the
+most recent successful run instead of the median was the obvious repair and it
+was rejected: it tracks growth, but it is still a feedback loop, and it would
+*still* have refused the morning's 6,718 against a 1,467 smoke run. Absolute
+bounds have no feedback loop to reason about at all, and they arm on the **first
+run of a fresh store**, where the old band was inert for want of
+`BAND_MIN_HISTORY` entries — the exact moment a bootstrap mistake ships
+unguarded.
 
-**Two fixes, and the second is the one that matters:**
+> **Both ends are measured, and the interval between them is narrow on purpose.**
+>
+> ```
+>   1,467   a 1-bundle smoke run (2026-08-12, BUNDLE_CAP=1)
+>   2,000   FLOOR
+>  40,700   steady state: §4's distinct city stories after dedup, per day
+>  60,000   CEILING              = 1.47x steady state
+>  75,000   grouping stops merging: ~112,500 records/day (§4)
+>                                  x ~67% placed (measured: 1411 rows -> 949)
+> ```
+>
+> The floor sits above a single-bundle run and 20x below steady state, so it
+> catches a collapse and an accidental `BUNDLE_CAP` and can never false-fire.
+> **The ceiling has to sit between steady state and total grouping failure or it
+> is not informative**: above ~75,000 it stops catching the one failure it exists
+> for, below ~50,000 it refuses ordinary days. That leaves very little room, which
+> is why 60,000 rather than a rounder, safer-feeling number.
+>
+> **25,000 was proposed and would have been a permanent outage.** It is *below*
+> steady state, and a hardcoded ceiling under steady state has no self-healing
+> path whatsoever — every run refused for ever, with the 8-hour relax valve
+> publishing three times a day as the only sign of life. The number that made it
+> look reasonable was 14,360, which is a **mid-fill reading**, not steady state.
+> Anchoring a constant on a partial window is the same mistake as banding on a
+> lagging median, just frozen in place.
 
-1. **Reset the history** to the single most recent entry, as on 2026-08-13
-   morning. Restores service in one run. It is a write to the live store, so it
-   needs a human.
-2. **Band against the most recent successful run rather than the trailing
-   median.** A median is the wrong statistic for a quantity with a trend in it —
-   it lags by design, which is the whole defect. The most recent run tracks
-   growth while still catching a sudden 2.5× jump or collapse, which is all the
-   band was ever for. **This is a change to a guard that has now bitten twice, so
-   it wants a decision and a test, not a quiet edit.**
+**The relax valve stays, and its job changed.** It was built for a
+self-poisoning median. Absolute bounds cannot poison themselves, so what it now
+guards is a **stale constant**: if real volume outgrows `COUNT_BAND_MAX`, nothing
+self-corrects and every run is refused until a human intervenes. Same wedge,
+slower fuse. So `BAND_RELAX_AFTER_MS` is the only thing between that and a dead
+map, and the `WARN` it prints now says *re-derive the constants against a fresh
+§4 measurement* rather than merely reporting itself.
+
+> **These are calibration constants with a shelf life, and nothing in the
+> pipeline can tell you they have expired.** A looser grouping key, GDELT raising
+> its crawl rate, or widening the window past 24 hours all invalidate them
+> silently. The relax `WARN` is the only tripwire. **Re-derive; do not nudge the
+> ceiling up until runs pass** — that converts a guard into a formality, and
+> `publish.test.ts` asserts the exact values to make the nudge visible in a diff.
+
+**One trap found while making the change, and it was invisible.** `staleness()`
+returns `Infinity` on an empty history — correct on its own terms, "nothing has
+published, so nothing is protecting anything". Handed straight to the relax valve
+that reads as *blocked for over 8 hours*, so **the first run of a fresh store
+would have stood the band down and published any count at all.** The old
+`BAND_MIN_HISTORY >= 3` gate had been covering this by accident. `publish` now
+gates on `history.length > 0` and a test holds it there.
+
+**The diagnosis was confirmed by the 02:46 UTC run, on the old code.** It
+published 30,316 groups and logged exactly the predicted line:
+
+```
+  WARN   count band stood down — publication had been blocked past 2× cadence
+  published archives/stories-ca70b455.pmtiles, pruned 1 archives and 3 shards
+```
+
+30,316 is far outside the old band's [3048, 19050], so nothing but the relax
+valve could have let it through — the prediction was falsifiable and it held.
+Worth keeping as evidence that the reasoning about this guard was sound, not
+lucky. **The 00:20 UTC run never fired at all**, which is its own finding:
+GitHub drops scheduled runs under load, so §6 decision 3's 4-hourly cadence is
+**best-effort, not guaranteed**, and a missing run looks nothing like a failing
+one in the Actions list.
+
+> **Without the fix pushed, the relax cycle continues exactly as predicted.**
+> That run appended 30,316 to history, moving the old median to 11,227 and the
+> band to [4490, 28068] — so the *next* run, at ~34,000, is refused again and the
+> map waits another 8 hours. The fix has to be on `main` to break the loop; it is
+> not deployed by anything else.
+
+**The 30,316 reading validates the ceiling.** It is the first measurement taken
+against the new constants and it lands where the calibration said it would:
+
+```
+  14,360  (13:45)  ->  30,316  (02:45)   = ~1,227 groups/hour
+  decelerating from ~1,790/hour earlier, as the oldest shards begin expiring
+  window fills ~09:11 UTC  ->  projects to ~38,000
+  §4's independent measurement            ~40,700
+  COUNT_BAND_MAX                           60,000   = ~1.5x steady state
+```
+
+Two independent routes to ~38-41k against a 60,000 ceiling. **That is the margin
+the constant was chosen for, and it is now measured rather than projected.**
+Re-check on the first genuinely full-window run (after ~09:11 UTC): if it reads
+above ~50,000 the ceiling wants re-deriving, not nudging.
 
 **3G, verified in a browser on 2026-08-12.** Four checks, all against the live
 Blob archive rather than a build:
@@ -386,11 +491,40 @@ Two things that run surfaced, neither a bug:
   > excuse a *broken* budget — but "a third of the feed is not on the map" is
   > not by itself evidence of one. **Revisit if overflow passes ~50%**, which
   > would mean the budget is deferring stories a reader would call top-of-mind.
+  >
+  > > **IT PASSED 50%, 2026-08-14 02:46 UTC: 16,951 of 30,316 — 56%.** The
+  > > trigger this document set one day earlier has fired, and the rule (§0 rule
+  > > 8) is that a fired criterion gets honoured rather than reasoned away. **This
+  > > is the next thing to look at after the band fix lands.**
+  > >
+  > > Read the trend before acting on it: 14% -> 34% -> 56% over three
+  > > measurements, while the 24-hour pool went from a third full to nearly full.
+  > > **Some of that rise is the window filling and is not a defect** — more
+  > > stories competing for the same K slots is the budget working. The question
+  > > the revisit has to answer is whether it *keeps* climbing once the pool is
+  > > genuinely steady (after ~09:11 UTC), because a majority-deferred feed at
+  > > steady state is what the 50% line was drawn to catch.
+  > >
+  > > **The lever is `K`, and the ceiling still cannot help** — that half of the
+  > > decision was settled by measurement and does not need redoing: GDELT gives
+  > > city centroids, so deferred stories at one coordinate do not separate at any
+  > > zoom. Raising `K` costs the ~30-60 pins §9 requires and the readability the
+  > > budget exists to protect, so this is a real trade and not a bug fix. **Do
+  > > not raise `K` before a phone profile** (the other outstanding Phase 4 item),
+  > > because the profile is what says how much room there is.
 - **`unknown FIPS code TL on 1 stories`.** §8's loud-log path, working. It is
   deliberately NOT fixed: FIPS 10-4 `TL` is **Tokelau**, while ISO `TL` is
   **Timor-Leste**, and guessing which one GDELT meant is exactly the §3.4 trap
   that put Russian news in Serbia. One story is not worth a wrong override;
   check a real GDELT record before adding one to `data/fips-overrides.json`.
+
+  > **A second one appeared on 2026-08-14: `unknown FIPS code WQ on 6 stories`.**
+  > Same treatment, same reasoning — FIPS 10-4 `WQ` is **Wake Island**, which
+  > plausibly has no news at all, so six stories pointing at it is more likely a
+  > GDELT quirk than a missing polygon. **Do not add an override without checking
+  > a real record**, which is the rule that made `IN-TN` legal and kept `TL` out.
+  > That two of these have now surfaced from live data is the loud-log path
+  > earning its keep, not a backlog to clear.
 
 Phase 2.5 left three things Phase 3 inherited rather than reinvented:
 `scripts/build-real-geojson.ts` (fetch, parse, placement in miniature),
@@ -463,19 +597,27 @@ climbs further as the 24-hour pool fills.
 That would have refused the next run, and **a refused run does not append to
 history** — so the median never moves and the refusal repeats for ever.
 Fail-closed becomes fail-forever, with the dead-man switch as the only symptom.
-Two fixes, both landed:
+Two fixes landed that day, and **the first is now obsolete**:
 
 1. **The history was reset** to the single full-window entry, so the band
    re-bootstraps from comparable runs. **Never seed the band with a smoke run**:
    a 1-bundle run and a 12-bundle run are not the same measurement, and the band
-   cannot tell them apart.
+   could not tell them apart. *(Superseded 2026-08-14 — the band no longer reads
+   history, so a smoke run cannot poison it and there is nothing to reset. Kept
+   because the reasoning returns the moment anyone proposes a relative band
+   again: the reference set has to be runs comparable to this one, and nothing in
+   the pipeline knows which runs those are.)*
 2. **`BAND_RELAX_AFTER_MS`** — past 8 hours (§8's 2× cadence) without a
    successful publish, the count band stands down and the run publishes, logging
    a loud `WARN`. **Only the count band relaxes.** `MIN_GROUPS`, the country
    floor and the title rate stay armed, and they are the ones that catch real
-   garbage; the band is the only invariant whose reference point is the
-   pipeline's own history, which is what makes it the only one that can poison
-   itself.
+   garbage. *(Still live, guarding a different failure — see the count band
+   section above.)*
+
+**Both of that day's refusals came from the same design mistake**, and it took
+two outages in twelve hours to see it: the band's reference point was the
+pipeline's own history, which made it the only invariant that could poison
+itself. It is now two constants. See the count band section above.
 
 **A third Blob trap, measured while doing that: the CDN serves a stale copy of a
 key you just overwrote, even at `max-age=0, s-maxage=0`.** An overwrite of
