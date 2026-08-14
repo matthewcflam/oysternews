@@ -12,8 +12,10 @@
  *   stories       per-tile top-K, minzoom from the budget
  *   country-top   top 1 per country, minzoom 0, exempt from the budget
  *
- * tippecanoe reads a per-feature `tippecanoe` property object, which is how
- * `minzoom` gets from budget.ts into the archive.
+ * tippecanoe reads a per-feature `tippecanoe` object that is a **sibling of
+ * `geometry` and `properties`**, not a member of `properties`. That is how
+ * `minzoom` gets from budget.ts into the archive, and getting the nesting wrong
+ * fails **silently in the worst direction** — see the note on `featureOf`.
  *
  * tippecanoe has no native Windows build (§6 decision 8), so on Windows this
  * shells into WSL. `scripts/build-tiles.sh` already solves that, including the
@@ -63,11 +65,29 @@ const posix = (value: string): string => value.replaceAll("\\", "/");
  * which body text could reach the browser even if something upstream started
  * carrying it. §7 critical gap 2 asks for a test that the popup contains title,
  * source and link and nothing else; this is the other half of it.
+ *
+ * **`tippecanoe` is a sibling of `properties`, and this is load-bearing.** It
+ * sat inside `properties` from the first version until 2026-08-14, where
+ * tippecanoe does not look for it. The consequences were invisible and total:
+ * the directive was carried into the tiles as an ordinary attribute, every
+ * per-feature `minzoom` from budget.ts was ignored, and **§2.4's density budget
+ * therefore never ran on a single published archive**. World zoom served 1,714
+ * pins on a phone against §9's target of 30-60, including seven features
+ * assigned `MAX_BUDGET_ZOOM + 1` — the sentinel that explicitly means *do not
+ * render this at all*.
+ *
+ * Nothing failed. `budget.ts` computed the right values, tippecanoe exited 0,
+ * the archive published, the invariants passed, and the map looked busy rather
+ * than broken. `tiles.test.ts` now pins the nesting, because this module is I/O
+ * and had no test at all — which is exactly how a one-level typo survived every
+ * run for the life of the project.
  */
 function featureOf(group: StoryGroup): unknown {
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: [group.lon, group.lat] },
+    // Sibling of `properties`, never inside it. See the note above.
+    tippecanoe: { minzoom: group.minzoom },
     properties: {
       title: group.title,
       source: group.domain,
@@ -82,7 +102,6 @@ function featureOf(group: StoryGroup): unknown {
       domains: group.distinctDomains,
       tier1: group.tier1Fresh ? 1 : 0,
       date: group.newestArticle,
-      tippecanoe: { minzoom: group.minzoom },
     },
   };
 }

@@ -32,6 +32,15 @@ either way). §2.4's overflow was **re-read at 57.3% but is still a pre-weak-cit
 number** — the rule landed after that run, so the trigger has not been read on
 the code that is live.
 
+**Then the density budget turned out never to have run.** §2.4's per-tile top-K
+is implemented correctly in `budget.ts` and was **thrown away at the tiles
+boundary**: `worker/tiles.ts` wrote tippecanoe's per-feature directive *inside*
+`properties`, where tippecanoe does not look for it. Every `minzoom` was ignored
+on every archive this project has ever published. World zoom served **1,714 pins
+on a 390px phone against §9's target of 30-60**. Fixed, tested and proved against
+real tippecanoe — see "The density budget never ran" below, and **re-read any
+overflow number taken before 2026-08-14 with it in mind**.
+
 **Two things were then deferred by decision, and both are deferred rather than
 cancelled:** the **phone profile** (§9's 4G target stays unverified on real
 hardware, and `K` must not move until it is done) and an accuracy number
@@ -864,6 +873,14 @@ Two things that run surfaced, neither a bug:
   > > 8) is that a fired criterion gets honoured rather than reasoned away. **This
   > > is the next thing to look at after the band fix lands.**
   > >
+  > > **Every reading below predates the density fix and none of them measured
+  > > the map.** The budget's `minzoom` was never applied to a published archive
+  > > until 2026-08-14 (see §2.4), so "overflow" counted stories the budget meant
+  > > to defer while every one of them stayed on screen. **Do not act on these
+  > > numbers.** The first archive built after the fix is the first real reading,
+  > > and it is also the first run on the weak-city rule — two changes at once, so
+  > > attribute carefully.
+  > >
   > > **Second reading, 05:46 UTC: 19,344 of 33,778 — 57.3%.** Still over the
   > > line, and now on a nearly-full window, so this is not simply the pool
   > > filling. But it is **still pre-weak-city** — the rule landed at ~08:14 UTC,
@@ -1376,6 +1393,67 @@ Strait of Hormuz is never buried by an American election.
 > 11,800, India 4,900, UK 2,700, Canada 1,750), 67 sit between 10 and 99, and 28
 > get fewer than ten. Tune K against the US and India; everywhere else the floor is
 > what does the work. `FINDINGS.md` §12.
+
+> ### The density budget never ran, 2026-08-14
+>
+> **Everything above was computed correctly and then discarded.**
+> `worker/tiles.ts` wrote tippecanoe's per-feature directive **inside
+> `properties`**:
+>
+> ```ts
+>   properties: { ..., tippecanoe: { minzoom: group.minzoom } }   // ignored
+> ```
+>
+> tippecanoe reads a `tippecanoe` object that is a **sibling of `geometry` and
+> `properties`**. Nested one level deeper it is just an attribute, so it rode
+> into the tiles as data and **every `minzoom` this project ever computed was
+> ignored, on every archive it ever published.**
+>
+> **Measured on the live archive at 390x844, world zoom:**
+>
+> ```
+>   1,714 story pins rendered at z2      §9's target is 30-60
+>      25 of them declared minzoom <= 2  the other 1,689 should have been deferred
+>       7 declared minzoom 13            budget.ts's "never render" sentinel
+>   1,714 of 1,714 still carried `tippecanoe` as a visible attribute
+> ```
+>
+> That last line is the proof it was never consumed: tippecanoe strips the
+> directive when it reads it.
+>
+> **Confirmed end to end against real tippecanoe v2.49.0**, both shapes, same
+> flags as §3.1 (`-Z0 -z12 -r1 --drop-densest-as-needed`), 14 features declaring
+> minzoom 0-13:
+>
+> ```
+>   directive inside properties   every feature renders at z0, minzoom 13 included
+>   directive as a sibling        only minzoom 0 renders at z0; minzoom 13 never renders
+> ```
+>
+> The sibling form drops the `MAX_BUDGET_ZOOM + 1` sentinel exactly as the design
+> says it should. (Individual first-render zooms in that probe are approximate —
+> `tippecanoe-decode` interleaves its tile headers, so attributing a feature to
+> the right tile is unreliable at row level. The two conclusions above do not
+> depend on that.)
+>
+> **Nothing failed while this was wrong, and that is the lesson.** `budget.ts`
+> produced a sensible minzoom histogram, tippecanoe exited 0, the archive
+> published, §8's invariants passed, and the map looked busy rather than broken.
+> The one module without a test was the one that was wrong: **`tiles.ts` had no
+> test file at all.** It has `worker/tiles.test.ts` now, and the first two cases
+> are the nesting, stated in both directions.
+>
+> **What this invalidates.** Every §2.4 overflow reading before 2026-08-14
+> measured what the budget *intended* to defer, not what the map did — nothing
+> was deferred, so those stories were all still on screen. **The 56% and 57.3%
+> figures are counts of an intention.** Re-read the trigger on the first archive
+> built after this fix before drawing any conclusion about `K`.
+>
+> **It also nearly cost the phone profile twice over.** Profiling would have run
+> against ~28x the intended feature count, almost certainly missed §9's 30fps and
+> 2.5s targets, and the natural reading of that failure — "no headroom, lower
+> `K`" — is the exact opposite of the fix. Deferring the phone was luckier than it
+> looked.
 
 **Plus a guaranteed floor.** At z0 the whole planet is one tile, so the budget
 alone would put 12-20 stories on the entire world map. A separate
