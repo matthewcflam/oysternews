@@ -133,8 +133,13 @@ describe("Rule H — specificity unless dominated", () => {
   });
 
   it("breaks a tie on the earliest mention in the article", () => {
+    // Two mentions each, not one: at x1 the weak-city rule drops this before the
+    // tie-break is reachable, and the tie-break still has to work above it.
     const placement = placeStory(
-      article([loc(4, "Later", { offset: 900 }), loc(4, "Earlier", { offset: 10 })]),
+      article([
+        ...repeat(2, 4, "Later", { offset: 900 }),
+        ...repeat(2, 4, "Earlier", { offset: 10 }),
+      ]),
       refdata,
     );
     expect(placement.location?.name).toBe("Earlier");
@@ -159,6 +164,75 @@ describe("Rule H — specificity unless dominated", () => {
   });
 });
 
+/**
+ * Added 2026-08-14, from the independent judging draw (§5.2 decision 4). This is
+ * the first rule in the project that DROPs a placement it was capable of making,
+ * so the tests are mostly about where it must NOT fire — a drop rule that creeps
+ * outward loses volume silently, and nothing downstream would report it.
+ */
+describe("the weak-city DROP", () => {
+  it("drops a city mentioned once", () => {
+    expect(placeStory(article([loc(4, "Vatva"), loc(4, "Rajkot")]), refdata).kind).toBe("DROP");
+  });
+
+  it("pins the same city at two mentions", () => {
+    // The threshold is "more than once" and nothing else. If this test and the
+    // one above ever disagree about where the line sits, the constant was tuned.
+    const placement = placeStory(article([...repeat(2, 4, "Vatva"), loc(4, "Rajkot")]), refdata);
+    expect(placement.kind).toBe("PIN");
+    expect(placement.location?.name).toBe("Vatva");
+  });
+
+  it("still containers a weak city that a region dominates", () => {
+    // Fires after both margins, so a story with a real regional signal keeps it.
+    // Reversing the order would rewrite placements the audit judged and liked.
+    const placement = placeStory(
+      article([loc(4, "Springfield"), ...repeat(2, 5, "Region")]),
+      refdata,
+    );
+    expect(placement.kind).toBe("CONTAINER");
+    expect(placement.location?.name).toBe("Region");
+  });
+
+  it("still containers a weak city that a country dominates", () => {
+    const placement = placeStory(
+      article([loc(4, "Seoul"), ...repeat(3, 1, "India")]),
+      refdata,
+    );
+    expect(placement.kind).toBe("CONTAINER");
+    expect(placement.location?.name).toBe("India");
+  });
+
+  it("does not touch containers, which the same shape does not harm", () => {
+    // A country mentioned once scored 85.7% on the draw — better than containers
+    // overall. `winnerMentions === 1` is a pin pathology, not a general one.
+    expect(placeStory(article([loc(1, "Country")]), refdata).kind).toBe("CONTAINER");
+    expect(placeStory(article([loc(5, "Region")]), refdata).kind).toBe("CONTAINER");
+  });
+
+  it("does not fall through to a country mentioned twice", () => {
+    // The rejected alternative, and the reason it was rejected: on the draw this
+    // shape produced Dublin -> United Kingdom x2 and Canberra -> Singapore x2.
+    // Fall-through would move the error into the container number, not remove it.
+    const trace = explainPlacement(
+      article([loc(4, "Dublin, Dublin, Ireland"), ...repeat(2, 1, "United Kingdom")]),
+      refdata,
+    );
+    expect(trace.placement.kind).toBe("DROP");
+    expect(trace.reason).toBe("weak-city");
+    expect(trace.country?.mentions).toBe(2);
+  });
+
+  it("separates a weak-city drop from the two upstream drops", () => {
+    // The three DROPs cost different things: only weak-city discards a placement
+    // the rule could have made, so only its share measures what the rule costs.
+    const reason = (a: Article) => explainPlacement(a, refdata).reason;
+    expect(reason(article([]))).toBe("no-locations");
+    expect(reason(article([loc(1, "British")]))).toBe("all-demonyms");
+    expect(reason(article([loc(4, "Vatva"), loc(4, "Rajkot")]))).toBe("weak-city");
+  });
+});
+
 describe("the why trace", () => {
   /**
    * The trace's whole value is that it cannot disagree with the rule, so the
@@ -173,6 +247,7 @@ describe("the why trace", () => {
       article([loc(4, "Springfield"), ...repeat(4, 5, "Region"), ...repeat(9, 1, "Country")]),
       article([loc(5, "Region"), loc(1, "Country")]),
       article([loc(1, "British"), loc(1, "Danish")]),
+      article([loc(4, "Vatva"), loc(4, "Rajkot")]),
       article([]),
     ];
     for (const a of cases) {
@@ -208,7 +283,10 @@ describe("the why trace", () => {
    * mechanical signature of a story that has no place at all — the largest
    * addressable failure class, and invisible in `{kind, location}`.
    */
-  it("flags a winner that was mentioned once and won on offset alone", () => {
+  it("drops the Windsor Machines pin instead of placing it at Vatva", () => {
+    // Until 2026-08-14 this was a confident PIN at Vatva, and the trace's job was
+    // only to say so. The judged draw made it a DROP: pins whose city was
+    // mentioned once scored 36.4% against 77.8% for the rest.
     const trace = explainPlacement(
       article([
         loc(1, "Italy", { offset: 40 }),
@@ -218,9 +296,14 @@ describe("the why trace", () => {
       ]),
       refdata,
     );
-    expect(trace.placement.location?.name).toBe("Vatva, Gujarat, India");
-    expect(trace.winnerMentions).toBe(1);
-    expect(trace.tieBroken).toBe(true);
+    expect(trace.placement.kind).toBe("DROP");
+    expect(trace.reason).toBe("weak-city");
+
+    // The evidence that caused the drop survives on the trace: winnerMentions is
+    // 0 because nothing was chosen, but the contest it lost is still readable.
+    expect(trace.winnerMentions).toBe(0);
+    expect(trace.city?.name).toBe("Vatva, Gujarat, India");
+    expect(trace.city?.mentions).toBe(1);
     expect(trace.city?.tiedAtTop).toBe(3);
     expect(trace.distinctLocations).toBe(4);
   });

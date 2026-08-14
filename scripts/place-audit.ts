@@ -45,11 +45,19 @@ const DEFAULT_BUNDLES = 4;
  * appeared once, pinned confidently at whichever came first); `narrow-win` is
  * the BTCC shape (the article previews Knockhill and recaps Thruxton, so the
  * subject loses 4-2 to the background). A story can carry several.
+ *
+ * **`lone-mention` changed meaning on 2026-08-14 and is kept for that reason.**
+ * It was 29.5% of pins; the judged draw found those pins 36.4% correct, and
+ * `place.ts` now DROPs them, so its **pins column must read 0.0%**. Left in as a
+ * standing regression check rather than deleted: a shape that reappears here is
+ * the cheapest possible signal that the rule was bypassed or reordered. The
+ * remaining hits are containers, where the same shape scored 85.7% and is fine.
+ * Read `weak-city`'s share in the branch table above for what the DROP costs.
  */
 const SHAPES: { name: string; note: string; test: (t: PlacementTrace) => boolean }[] = [
   {
     name: "lone-mention",
-    note: "winner mentioned once — the story may have no place at all",
+    note: "winner mentioned once — containers only now; ANY pin here is a bug",
     test: (t) => t.placement.kind !== "DROP" && t.winnerMentions === 1,
   },
   {
