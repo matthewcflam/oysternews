@@ -181,6 +181,28 @@ describe("spiderData", () => {
     ]);
   });
 
+  it("hands the selection to the leaf the same way", () => {
+    // A displaced story is drawn as its leaf, so the leaf is the disc the
+    // selection wedge points at — and the fill has to reach it through data for
+    // the same reason the ring does.
+    const data = spiderData(stacks, flat(), [], "weak");
+    const flags = data.features
+      .filter((f) => f.geometry.type === "Point")
+      .map((f) => [f.properties?.url, f.properties?.selected]);
+    expect(flags).toEqual([
+      ["mid", 0],
+      ["weak", 1],
+    ]);
+  });
+
+  it("marks nothing selected when nothing is open", () => {
+    // The default has to be 0 rather than absent: `lib/layers.ts` compares the
+    // property to 1, and an undefined that read as selected would paint a leaf
+    // MARK with no panel open and no wedge over it.
+    const [leaf] = spiderData(stacks, flat()).features.filter((f) => f.geometry.type === "Point");
+    expect(leaf.properties?.selected).toBe(0);
+  });
+
   it("keeps the spider the same size in PIXELS at any zoom", () => {
     // The offsets are pixel distances put back through the live camera. If they
     // were geographic, a spider would balloon on zoom-out and vanish on zoom-in.

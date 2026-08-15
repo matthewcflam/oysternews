@@ -6,6 +6,13 @@ import { freshnessLabel, isStale, loadManifest } from "@/lib/manifest";
 /**
  * §2.3's freshness stamp, and §8's explicit notice past 2× cadence.
  *
+ * **It no longer positions itself (2026-08-14).** It used to be absolutely
+ * placed in the map's top-right corner, as the last survivor of the deleted
+ * masthead. That corner now holds the brand block, and this is the second line
+ * of it — so the component renders a plain paragraph and `BrandMark` decides
+ * where the block goes. One element owning both its content and its corner is
+ * what made the corner impossible to reuse.
+ *
  * **Renders nothing until the effect runs**, on purpose. The label is a function
  * of `Date.now()`, so a server render and the hydration that follows it disagree
  * by exactly the network latency between them — the textbook hydration mismatch.

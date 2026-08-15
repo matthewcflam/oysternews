@@ -1,27 +1,30 @@
-import FreshnessStamp from "@/components/FreshnessStamp";
+import BrandMark from "@/components/BrandMark";
 import MapView from "@/components/MapView";
+import SearchBar from "@/components/SearchBar";
 
 /**
- * The map, and one line of chrome over it.
+ * The map, and two small pieces of chrome over it.
  *
- * **The masthead is gone (2026-08-14).** The wordmark, the subtitle and the
- * plate they sat on took the top ~100px of every screen and pushed the panels
- * down to clear them; the map is the product, so the page now starts at the top
- * edge. What survived is the freshness stamp — a claim of freshness with no
- * timestamp is one a visitor cannot check — and it moved to the top-right corner
- * that MapLibre's zoom control vacated (see `MapView`, which now docks it
- * bottom-right).
+ * **The masthead came back small (2026-08-14).** The original was a band across
+ * the top that pushed the panels down to clear it, and deleting it gave the map
+ * its top edge — at the cost of the product's name and of /about, which had to
+ * hide inside the story panel where it was reachable only with a story open.
  *
- * "How this works" moved into the story panel rather than being deleted: §5.2
- * decision 3 requires the measured accuracy to be reachable from the product,
- * and the panel is the only surface with room for a link that is not covering
- * map. It is therefore reachable only with a story open — the deliberate trade.
+ * What replaced it takes two corners instead of a band: `BrandMark` top-right
+ * (wordmark, freshness stamp, About Us) and `SearchBar` top-centre. Both float
+ * over the map with no plate and no reserved height, so the map still starts at
+ * the top edge and the panels still start at 0.
+ *
+ * Both sit UNDER the panels (`z-index: 2` against 3). Below 520px the story
+ * panel is the full viewport width and would otherwise collide with both; it
+ * covers them instead, and they are still there when it closes.
  */
 export default function Home() {
   return (
     <main>
       <MapView />
-      <FreshnessStamp />
+      <SearchBar />
+      <BrandMark />
     </main>
   );
 }
