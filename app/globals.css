@@ -44,47 +44,359 @@ main .map {
   inset: 0;
 }
 
-/* §2.3's freshness stamp — the only survivor of the masthead, which was deleted
-   on 2026-08-14 along with its wordmark, its subtitle and the dark plate they
-   sat on.
+/* ==========================================================================
+   Browse mode: the top-5 speech bubbles (2026-08-15)
+   ========================================================================== */
 
-   **Top-right, and it is only free because the zoom control moved.** MapLibre's
-   NavigationControl held this corner until the same change docked it
-   bottom-right (`MapView.tsx`); putting the stamp here before that would have
-   run it under the +/- buttons.
+/* A sibling of `.map`, not a child of it. MapLibre owns its container's children
+   and reorders them; a React subtree in there is one both libraries believe they
+   are managing.
 
-   No plate of its own. The band it used to sit on is what the user asked to
-   remove, so legibility over a light basemap comes from the text-shadow instead
-   — the stamp is one short line, so a shadow can do what a 100px-tall gradient
-   was doing.
+   z-index 1 — above the canvas, below the chrome (2) and the panels (3). An open
+   story panel covering the bubbles is the same, correct behaviour the brand block
+   already has.
 
-   `pointer-events: none` because it is a label, not a control: it overlaps the
-   map, and a drag started on it must reach the map underneath.
-
-   **z-index 2 — UNDER the panels (3), and that is the mobile case.** Below
-   520px the story panel is 100vw, so its close button lands in this exact
-   corner; at equal z-index the stamp wins on DOM order and prints over the hero
-   photo, on top of the ×. Letting the panel cover it costs nothing — the stamp
-   is still there when the panel closes — and on desktop the panel is 340px wide
-   and never reaches this corner at all. */
-.freshness {
+   `overflow: hidden` because an anchor is translated to a pin's pixel and a pin
+   can be just off screen: without the clip a bubble hanging past the right edge
+   would extend `main`'s scrollable area on a page whose whole premise is that it
+   never scrolls. */
+main .bubbles {
   position: absolute;
-  top: 10px;
-  right: 16px;
-  z-index: 2;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* A zero-size point, translated onto its pin by `StoryBubbles` on every rendered
+   frame. Everything else is positioned against it, so the JavaScript writes one
+   transform and never a width or a height. */
+.bubble-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+
+/* The body. Its width is fixed and its height is whatever four lines of a
+   variable-width serif turn out to need, which is why nothing measures it: it is
+   laid out from the corner NEAREST the pin, so the tail's point stays put no
+   matter how tall the box grows away from it.
+
+   Which corner that is comes from the two orientation classes below. 52px and
+   12px are the mockup's tail apex, offset from the body's near corner — the same
+   `TAIL_DROP` and `TAIL_INSET` that `lib/bubble.ts` reserves space with, and they
+   have to stay in step by hand. */
+.bubble {
+  --bubble-bg: #d24f39;
+  position: absolute;
+  width: 135px;
   margin: 0;
-  max-width: min(60vw, 340px);
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  text-align: right;
-  opacity: 0.9;
+  padding: 6px 1.5px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bubble-bg);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* The four orientations, as two independent flags.
+
+   `--flip-x` and `--flip-y` are read by `.bubble__tail` below, so two
+   declarations cover all four combinations instead of four selectors — and a
+   fifth orientation would be unrepresentable, which is correct. Each mirror is
+   about the wedge's own centre (`transform-origin` defaults there), so flipping
+   moves the shape without moving the box it sits in. */
+.bubble--left {
+  right: 8px;
+}
+
+.bubble--right {
+  left: 8px;
+  --flip-x: -1;
+}
+
+/* Body above the pin, tail falling onto it — the mockup's original. */
+.bubble--up {
+  bottom: 52px;
+}
+
+/* Body below the pin, tail climbing to it. Worth one flag: with only the first
+   orientation, a story whose place above its pin was taken had nowhere to go,
+   and a pin in the top ~200px of the map could not be captioned at all. */
+.bubble--down {
+  top: 52px;
+  --flip-y: -1;
+}
+
+.bubble:hover {
+  filter: brightness(1.08);
+}
+
+.bubble:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* Four lines at most, then the browser's own ellipsis. `-webkit-line-clamp` is
+   the whole of the "maximum size" rule — the alternative is measuring the text in
+   JavaScript and truncating it by hand, which gets the break wrong on every
+   headline whose glyphs are not all the same width. */
+.bubble__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 16px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  /* A headline can carry an unbroken 40-character token; without this it would
+     push past the 135px body rather than wrap inside it. */
+  overflow-wrap: anywhere;
+}
+
+/* The part of the tail beyond the body — a fixed wedge, because the two edges of
+   the mockup's polygon are straight and the body's border is where they are
+   clipped. Same 32x52 at one line and at four, in all four orientations.
+
+   The 8px overhang is `TAIL_REACH`: the wedge's outer edge lands exactly on the
+   body's corner (svg x=24 of 32) and continues past it to the point at x=32,
+   which is the pin. Anchored the other way round — the wedge inset from the
+   corner — the body ended and the tail restarted a few pixels in, and the step
+   between them was the first thing you saw. */
+.bubble__tail {
+  position: absolute;
+  right: -8px;
+  display: block;
+  overflow: visible;
+  transform: scale(var(--flip-x, 1), var(--flip-y, 1));
+}
+
+.bubble__tail path {
+  fill: var(--bubble-bg);
+}
+
+.bubble--right .bubble__tail {
+  right: auto;
+  left: -8px;
+}
+
+.bubble--up .bubble__tail {
+  bottom: -52px;
+}
+
+.bubble--down .bubble__tail {
+  top: -52px;
+}
+
+/* ==========================================================================
+   The brand block, top-right of the map (2026-08-14)
+   ========================================================================== */
+
+/* The wordmark, the freshness stamp and the way into /about, stacked and
+   centred on each other.
+
+   **This corner is only free because the zoom control moved.** MapLibre's
+   NavigationControl held it until `MapView.tsx` docked the control bottom-right;
+   anything here before that ran under the +/- buttons.
+
+   No plate. The masthead's dark band is exactly what was deleted to give the map
+   its top edge back, so legibility over a light basemap comes from a text-shadow
+   — three short lines, so a shadow does what a 100px gradient was doing.
+
+   `pointer-events: none` on the block, back on for the link alone: this overlaps
+   the map, and a drag started in the corner must reach the map underneath. Only
+   the one actual control opts back in.
+
+   **z-index 2 — UNDER the panels (3), and that is the mobile case.** Below 520px
+   the story panel is 100vw, so its close button lands in this exact corner; at
+   equal z-index the block wins on DOM order and prints over the hero photo, on
+   top of the ×. Letting the panel cover it costs nothing — it is all still there
+   when the panel closes — and on desktop the panel is 420px wide and never
+   reaches this corner at all. */
+.brand {
+  position: absolute;
+  top: 30px;
+  right: 24px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
   text-shadow: 0 1px 6px rgba(13, 15, 18, 0.9);
   pointer-events: none;
+}
+
+/* Bold as of mode 1. The mockup's box grows 106 → 117px at 40px, which is what
+   the weight change costs and is why the measurement moved with it. */
+.brand__word {
+  position: relative;
+  margin: 0;
+  color: #ffffff;
+  font-size: 50px;
+  line-height: 40px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+/* THE mark, at whatever size it is asked for: the sphere beside the search field
+   and the bead in the counter of the "O" are one object, declared once.
+
+   The gradient's stops and its centre are percentages of the element box, so the
+   small copy is the large one to scale by construction — which is what "a
+   minimised version" has to mean if the two are not to drift apart the first time
+   either is touched. The matrix is Figma's serialisation of the shape's rotation;
+   on a circle it does nothing but move the light, which is the point.
+
+   Size and position stay with each element below. */
+.search__mark,
+.brand__dot {
+  border-radius: 50%;
+  background: radial-gradient(57.36% 51.69% at 67.53% 61.97%, #e0aaa1 2.88%, #b339d2 100%);
+  transform: matrix(0.97, -0.25, -0.25, -0.97, 0, 0);
+}
+
+/* The bead sits in the counter of the "O".
+
+   It was the map's orange with a white highlight, which made it a shrunken story
+   pin — the one thing on this screen the brand is not, and confusing next to a
+   map that draws real stories in that exact colour. It is the brand's own mark
+   now, at a fifth of the sphere's size.
+
+   Positioned against the glyph rather than drawn into it, because the alternative
+   is an SVG wordmark and this project has no image assets by policy (see
+   `lib/pin.ts`). **In `em`, so it tracks the wordmark**: the offsets were pixels
+   measured against Newsreader Bold at 40px and were left behind the first time
+   the type grew. The ratios are that measurement — 12/40, 11/40, 8/40. */
+.brand__dot {
+  position: absolute;
+  left: 0.3em;
+  top: 0.275em;
+  width: 0.2em;
+  height: 0.2em;
+}
+
+/* §2.3's freshness stamp, and §8's explicit notice past 2× cadence. It no longer
+   positions itself — `.brand` does — because this corner now holds three things
+   and the stamp is only the middle one. */
+.freshness {
+  margin: 0;
+  /* The stale case appends a full sentence to a 12px line; without a ceiling it
+     would drag the whole block across the top of the map rather than wrap. */
+  max-width: min(60vw, 260px);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  opacity: 0.9;
 }
 
 .freshness--stale {
   color: #ff9ea1;
   opacity: 1;
+}
+
+/* §5.2 decision 3's path from the map to the measured accuracy — and as of
+   2026-08-14 it is reachable with nothing selected, which is what it always
+   needed to be. Underlined because it is the one navigation on this screen. */
+.brand__about {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 12px;
+  letter-spacing: -0.02em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.9;
+  pointer-events: auto;
+}
+
+.brand__about:hover {
+  opacity: 1;
+}
+
+.brand__info {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  /* The glyph is stroked with `currentColor`, so it inherits the hover above
+     and cannot drift from the text beside it. */
+  vector-effect: non-scaling-stroke;
+}
+
+/* ==========================================================================
+   The favicon and search field, top-centre (2026-08-14)
+   ========================================================================== */
+
+/* Inert — see `components/SearchBar.tsx` for why this is a div and not an input.
+   `pointer-events: none` throughout, because nothing here is clickable yet and a
+   dead 194px block sitting on the map would swallow drags for no reason. */
+.search {
+  position: absolute;
+  top: 31px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  /* 17px, from the mockup's 637 → 669 sphere and 686 pill. That group spans 201px
+     and its centre is 737.5 on a 1482 frame, 3.5px left of the frame's own centre
+     — the sphere grew without the group being re-centred. Centring is kept; a
+     3.5px asymmetry is not worth a magic offset. */
+  gap: 14px;
+  pointer-events: none;
+}
+
+/* No longer the map's own pin (2026-08-15). The mockup makes it a purple-to-pink
+   sphere with no ring and no highlight — the mark stopped claiming to be a story
+   at the moment mode 1 started drawing real stories in that same orange, two
+   inches below it, with headlines attached.
+
+   The paint lives with `.brand__dot` up in the brand block, because the bead in
+   the wordmark is this same sphere at a fifth of the size. Only the size is here. */
+.search__mark {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+
+.search__field {
+  display: flex;
+  align-items: center;
+  width: 250px;
+  height: 40px;
+  /* 17px in from the left and 10px from the right, which puts the 19px glyph's
+     left edge at exactly the mockup's 123px from the pill's own left edge. */
+  padding: 0 10px 0 17px;
+  border-radius: 20px;
+  background: #4e4d8f;
+}
+
+.search__placeholder {
+  flex: 1;
+  min-width: 0;
+  color: #AFAFAF;
+  font-size: 16px;
+  line-height: 22px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.search__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: #AFAFAF;
 }
 
 /* §2.6 / MapTiler Free plan: the logo sits bottom-left, opposite MapLibre's own
@@ -103,7 +415,7 @@ main .map {
    here: the panel now carries its own copy in its footer
    (`.maptiler-logo--panel`), which is what the mark is supposed to look like
    when the panel is up, so this one goes back UNDER the panel at 2. Both are the
-   same component — see components/MapTilerLogo.tsx for why that matters. */
+   same component — see components/MapTilerLogo.tsx for why that matters.
 .maptiler-logo {
   position: absolute;
   left: 10px;
@@ -115,6 +427,7 @@ main .map {
   border-radius: 5px;
   background: rgba(13, 15, 18, 0.55);
 }
+*/
 
 .maptiler-logo img {
   display: block;
@@ -295,6 +608,43 @@ main .map {
   .panel__tab {
     right: 0;
     border-radius: 6px 0 0 6px;
+  }
+
+  /* **The two chrome blocks stop sharing the top edge on a phone.** The mockup
+     is a ~1482px frame, where a 194px search group centred at 741 and a
+     wordmark ending at 1459 are nowhere near each other. At 390px they are: the
+     centred group runs to 292 and the brand block starts at 260, so "Oyster"
+     prints through the search pill.
+
+     The search stops being centred and goes hard left, which is the only place
+     it fits beside a right-anchored block. Centring it and dropping the brand to
+     a second row was the alternative, and it costs a row of map for a control
+     that does not work yet. */
+  .search {
+    top: 14px;
+    left: 12px;
+    transform: none;
+  }
+
+  .brand {
+    top: 10px;
+    right: 12px;
+  }
+
+  /* **No wordmark on a phone.** At 40px it is 106px of the 390px width, and it
+     is the one thing in this corner a reader does not need: the stamp answers
+     "is this current" and About Us answers "how does this work", while the
+     wordmark answers a question nobody asks twice. `display: none` rather than a
+     smaller size — shrinking it to fit made it small enough to read as a caption
+     next to the two captions under it, which is worse than absent. */
+  .brand__word {
+    display: none;
+  }
+
+  /* The stale notice is a full sentence, and at the desktop ceiling it would
+     wrap wide enough to reach the search bar beside it. */
+  .freshness {
+    max-width: 150px;
   }
 }
 
@@ -522,14 +872,13 @@ main .map {
   opacity: 0.75;
 }
 
-/* **A button in one panel, an anchor in the other, and they must look the same.**
-   Selecting a NEARBY story swaps the panel in place rather than navigating, and a
-   control that does not navigate must not be an anchor; a country's TOP story
-   goes straight out to the publisher (§2.6, link-out only), and a control that
-   does navigate must not be a button. The element follows what the click does;
-   this rule is what stops that correctness from showing up as two different
-   looking lists. Reset to look like the text they both are. */
-.panel__list button,
+/* **Both panels' rows are anchors now (2026-08-14).** "Stories Nearby" used to
+   be a `button`, because selecting a neighbour swapped the panel in place rather
+   than navigating — two elements, one appearance, and this rule existed to stop
+   that correctness from reading as two different looking lists. A neighbour
+   click now goes straight out to the publisher exactly like a region's top
+   story does (§2.6, link-out only), so there is one element and one behaviour.
+   The reset stays: they still have to look like the text they are. */
 .panel__list a {
   display: block;
   width: 100%;
@@ -545,7 +894,6 @@ main .map {
   cursor: pointer;
 }
 
-.panel__list button:hover,
 .panel__list a:hover {
   text-decoration: underline;
 }
@@ -556,8 +904,8 @@ main .map {
   opacity: 0.7;
 }
 
-/* The panel footer: MapTiler's mark at the left end, "How does this work?" at
-   the right.
+/* The panel footer: MapTiler's mark, alone since "How does this work?" moved to
+   the brand block on 2026-08-14.
 
    `margin-top: auto` pins it to the bottom of a SHORT panel (the flex column has
    spare height when a story has one neighbour); `flex: none` keeps it from being
@@ -595,22 +943,6 @@ main .map {
      Nothing in CSS can move that bubble; the only fix is to sit above it. */
   padding: 12px 18px 30px;
   background: #373666;
-}
-
-/* §5.2 decision 3's path from the map to the measured accuracy. Underlined
-   because it is the one navigation on this screen, and an unmarked link in a
-   panel of headlines that are also links would be indistinguishable from body
-   text. */
-.panel__about {
-  color: #ffffff;
-  font-size: 15px;
-  opacity: 0.85;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.panel__about:hover {
-  opacity: 1;
 }
 
 .notice {

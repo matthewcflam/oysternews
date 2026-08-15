@@ -212,6 +212,7 @@ export function spiderData(
   stacks: readonly Stack[],
   projection: Projection,
   topUrls: readonly string[] = [],
+  selectedUrl: string | null = null,
 ): SpiderData {
   const top = new Set(topUrls);
   const legs: Feature[] = [];
@@ -247,6 +248,10 @@ export function spiderData(
           // a different source cannot inherit — so it travels as a property and
           // `lib/layers.ts` reads either.
           top: top.has(asString(properties.url)) ? 1 : 0,
+          // The open story's `MARK` fill, carried the same way and for the same
+          // reason. A leaf is where a displaced story is drawn, so it is the disc
+          // the selection wedge is pointing at.
+          selected: selectedUrl !== null && asString(properties.url) === selectedUrl ? 1 : 0,
         },
       });
     });

@@ -29,7 +29,7 @@ import { PUBLISHED_ACCURACY } from "@/lib/accuracy";
  * do not update one without the other.
  */
 export const metadata: Metadata = {
-  title: "How Sonder works — method, accuracy and limits",
+  title: "How Oyster works — method, accuracy and limits",
   description:
     "Where the stories come from, how each one is placed on the map, how accurate that placement was measured to be, and what was cut.",
 };
@@ -44,7 +44,7 @@ export default function About() {
 
         <h1>How this works</h1>
         <p className="about__lede">
-          Sonder plots current news stories where they happen. Everything below
+          Oyster plots current news stories where they happen. Everything below
           is measured against real data rather than assumed, including the parts
           that do not flatter it.
         </p>
@@ -57,7 +57,7 @@ export default function About() {
           </a>
           &apos;s Global Knowledge Graph, which publishes a fresh batch of news
           articles every 15 minutes with the places each one mentions already
-          extracted. Sonder reads a rolling <strong>24-hour window</strong> of
+          extracted. Oyster reads a rolling <strong>24-hour window</strong> of
           that feed and republishes the map <strong>every four hours</strong>.
           The timestamp under the title on the map says when the current data was
           built, because a claim of freshness you cannot check is not one.
@@ -73,7 +73,7 @@ export default function About() {
         <h2>English only, approximately</h2>
         <p>
           GDELT publishes two streams: original-language articles and
-          machine-translated ones. Sonder consumes only the first, which is the
+          machine-translated ones. Oyster consumes only the first, which is the
           entire language mechanism — there is no language detection anywhere in
           the pipeline.
         </p>
