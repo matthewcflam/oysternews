@@ -36,7 +36,7 @@ function loc(type: number, name: string, extra: Partial<GdeltLocation> = {}): Gd
 }
 
 function article(locations: GdeltLocation[]): Article {
-  return { date: "20260812050000", domain: "example.com", url: "u", title: "t", themes: [], locations };
+  return { date: "20260812050000", domain: "example.com", url: "u", title: "t", image: "", themes: [], locations };
 }
 
 /** `n` mentions of the same place, as GDELT emits them: one entry per mention. */

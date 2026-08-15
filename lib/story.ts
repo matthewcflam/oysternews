@@ -28,9 +28,21 @@ import { ago } from "./age";
 /**
  * The only fields a story panel may read. There is no field for article text.
  *
- * `image` is deliberately absent: the thumbnail is not story content, it is
- * fetched separately by `lib/og.ts` and keyed by url. Keeping it out of this type
- * means the §2.6 assertion below stays an assertion about the *story*.
+ * **`image` joined this list on 2026-08-14, and the reasoning matters more than
+ * the field.** It was deliberately absent while the thumbnail came from
+ * `lib/og.ts`, which fetched it per url at click time — keeping it out of the
+ * type meant this stayed an assertion about the *story*. The thumbnail now
+ * arrives on the tile feature with everything else, because GDELT hands it to
+ * the pipeline (`V2.1SHARINGIMAGE`) and re-deriving it cost a server-side fetch
+ * of the article page.
+ *
+ * So the field list grew from six names to seven, and **that is the assertion
+ * loosening by exactly one field** — worth saying out loud, because the list is
+ * the §2.6 enforcement point and a list that grows quietly enforces nothing. An
+ * image URL is not article text: it is a pointer to the publisher's own CDN, the
+ * same class of thing as `url`. `story.test.ts` pins the seven names and still
+ * drops `salience`, `domains`, `tier1`, `region`, `country` and an injected
+ * `body`.
  */
 export type PanelStory = {
   title: string;
@@ -42,6 +54,16 @@ export type PanelStory = {
   kind: string;
   /** GKG stamp of the newest article in the group, YYYYMMDDHHMMSS, UTC. */
   date: string;
+  /**
+   * The article's own sharing image, or "" — most often "" because 12.2% of
+   * records declare none, in which case the panel draws its flat accent header.
+   *
+   * **Validated in `worker/parse.ts`, not here.** The archive is the boundary:
+   * a URL that is not http/https never reaches a tile. The panel's own guards —
+   * `onError` and the minimum-width check — exist for images that break or turn
+   * out to be tracking pixels, which is a different problem.
+   */
+  image: string;
 };
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
@@ -53,6 +75,10 @@ const text = (value: unknown) => (typeof value === "string" ? value.trim() : "")
  * publishes `salience`, `domains`, `tier1`, `region` and `country`; none of them
  * are read, `tier1` least of all — §2.3 says the preference is invisible, and a
  * badge is precisely what that forbids.
+ *
+ * `image` is read but never trusted to be present: it is "" for the 12.2% of
+ * records GDELT has no sharing image for, and the panel has a designed state for
+ * that rather than a broken one.
  *
  * `null` when there is no url, because the url is the story's identity
  * everywhere else in the client: it is the promoted feature id (`MapView.tsx`),
@@ -72,6 +98,7 @@ export function panelStory(properties: unknown): PanelStory | null {
     place: text(source.place),
     kind: text(source.kind),
     date: text(source.date),
+    image: text(source.image),
   };
 }
 

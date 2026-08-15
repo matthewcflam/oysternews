@@ -26,6 +26,7 @@ function article(patch: Partial<PlacedArticle> = {}): PlacedArticle {
     domain: "example.com",
     url: `https://example.com/${Math.random()}`,
     title: "t",
+    image: "",
     themes: [],
     lat: 0,
     lon: 0,
@@ -44,6 +45,7 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   return {
     id: "id",
     title: "t",
+    image: "",
     url: "u",
     domain: "d",
     lat: 0,

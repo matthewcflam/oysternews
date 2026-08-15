@@ -13,6 +13,7 @@ function article(patch: Partial<PlacedArticle> = {}): PlacedArticle {
     domain: `outlet${counter}.com`,
     url: `https://outlet${counter}.com/${counter}`,
     title: "t",
+    image: "",
     themes: [],
     lat: 40,
     lon: -74,

@@ -52,6 +52,15 @@ export type Article = {
   url: string;
   /** From V2EXTRASXML PAGE_TITLE, HTML-entity-unescaped. Present on 99.7% of records (§4). */
   title: string;
+  /**
+   * V2.1SHARINGIMAGE — the publisher's own `og:image`, validated to http/https
+   * by `parseSharingImage` or "". Present on 87.8% of records (measured 2026-08-14).
+   *
+   * **A URL, never bytes.** §2.6 is unchanged by this field: the project still
+   * reproduces no article content, and the reader's browser loads the picture
+   * from the publisher's own CDN.
+   */
+  image: string;
   /** V2EnhancedThemes, offsets stripped. */
   themes: string[];
   locations: GdeltLocation[];
@@ -75,6 +84,8 @@ export type PlacedArticle = {
   domain: string;
   url: string;
   title: string;
+  /** The article's own sharing image, or "". See Article.image. */
+  image: string;
   themes: string[];
   lat: number;
   lon: number;
@@ -116,6 +127,15 @@ export type StoryGroup = {
   title: string;
   url: string;
   domain: string;
+  /**
+   * The representative article's sharing image, or "".
+   *
+   * **Taken from the representative only, never from whichever member happens to
+   * have one.** Borrowing an image across members would raise coverage and pair
+   * the panel's headline with a picture from a different article — a caption
+   * error the reader has no way to detect, in exchange for a few percent.
+   */
+  image: string;
   lat: number;
   lon: number;
   kind: "PIN" | "CONTAINER";

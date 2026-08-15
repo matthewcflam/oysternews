@@ -90,6 +90,7 @@ export function toPlaced(
     domain: article.domain,
     url: article.url,
     title: article.title,
+    image: article.image,
     themes: article.themes,
     lat: location.lat,
     lon: location.lon,

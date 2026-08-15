@@ -24,9 +24,27 @@ const C_SOURCE = 3;
 const C_DOCID = 4;
 const C_THEMES = 8;
 const C_LOC = 10;
+/**
+ * `V2.1SHARINGIMAGE` — the image the publisher declared for social sharing,
+ * which is the `og:image` tag GDELT already read off the page.
+ *
+ * **Added 2026-08-14, and it deleted a whole endpoint.** The story panel's
+ * thumbnail used to come from `/api/og`, which fetched the article page itself,
+ * server-side, per story opened — an SSRF primitive guarded by a scheme
+ * allowlist, DNS checks and hand-followed redirects. All of that existed to
+ * re-derive a field that was sitting in the row this parser was already reading,
+ * eleven columns to the left of the one it took the title from.
+ *
+ * Measured on two committed bundles, 1,085 rows: **87.8% non-empty**, 8 of 8
+ * sampled URLs live, 6 of 8 byte-identical to what the page declares today (the
+ * other two are CDN rewrites that still serve). `V2.1RELATEDIMAGES` (17.2%) and
+ * `V2.1SOCIALIMAGEEMBEDS` (6.0%) are the neighbouring columns and are not worth
+ * the bytes.
+ */
+const C_IMAGE = 18;
 const C_EXTRAS = 26;
 
-const WANTED = [C_DATE, C_SOURCE, C_DOCID, C_THEMES, C_LOC, C_EXTRAS];
+const WANTED = [C_DATE, C_SOURCE, C_DOCID, C_THEMES, C_LOC, C_IMAGE, C_EXTRAS];
 
 export const MIN_COLS = 27;
 
@@ -124,6 +142,41 @@ export function parseLocations(field: string): GdeltLocation[] {
   return out;
 }
 
+/**
+ * The sharing image, or "" — and this is the only place it is ever validated.
+ *
+ * **It ends up in an `<img src>` in the browser, so it is untrusted input from
+ * GDELT to the DOM.** Sanitising here rather than in the panel means a bad value
+ * cannot reach a tile at all: the archive is the boundary, and a URL that fails
+ * this check is simply not published. The client keeps its own fallbacks —
+ * `onError` and the minimum-width check that rejects tracking pixels — but they
+ * guard against images that *break*, not against schemes that should never have
+ * been rendered.
+ *
+ * **`https:` and `http:` only.** `javascript:` is the reason a scheme allowlist
+ * beats every other kind of check, and `data:` would let a row carry an
+ * arbitrarily large payload into a tile.
+ *
+ * GDELT writes at most one image here in practice, but the field is documented
+ * as multi-valued and 6 rows in the sample carried a `;`. The first valid one
+ * wins, which matches how the publisher ordered them.
+ */
+export function parseSharingImage(field: string): string {
+  for (const chunk of field.split(";")) {
+    const candidate = chunk.trim();
+    if (!candidate) continue;
+    let url: URL;
+    try {
+      url = new URL(candidate);
+    } catch {
+      continue;
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") continue;
+    return url.href;
+  }
+  return "";
+}
+
 /** V2EnhancedThemes is `THEME,offset;THEME,offset;...` — the offsets are unused. */
 export function parseThemes(field: string): string[] {
   const out: string[] = [];
@@ -140,7 +193,7 @@ export function parseRow(row: string): { article: Article | null; short: boolean
   const cols = columns(row);
   if (!cols) return { article: null, short: true };
 
-  const [date, source, url, themeField, locationField, extras] = cols;
+  const [date, source, url, themeField, locationField, imageField, extras] = cols;
 
   const match = TITLE_RE.exec(extras);
   const title = match ? unescapeEntities(match[1]).trim() : "";
@@ -152,6 +205,7 @@ export function parseRow(row: string): { article: Article | null; short: boolean
       domain: source.trim().toLowerCase(),
       url,
       title,
+      image: parseSharingImage(imageField),
       themes: parseThemes(themeField),
       locations: parseLocations(locationField),
     },

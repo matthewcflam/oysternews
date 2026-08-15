@@ -18,6 +18,7 @@ function article(domain: string, types: number[]): Article {
     domain,
     url: "u",
     title: "t",
+    image: "",
     themes: [],
     locations: types.map((type, index) => ({
       type,

@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import MapTilerLogo from "./MapTilerLogo";
 import PanelTab from "./PanelTab";
-import { loadOgImage } from "@/lib/og";
 import { placeHeading, placementLine, publishedAt, type PanelStory } from "@/lib/story";
 
 /**
@@ -17,14 +16,16 @@ import { placeHeading, placementLine, publishedAt, type PanelStory } from "@/lib
  *
  * **Presentational only**, for the same reason `RegionPanel` is: the gesture, the
  * radius query and the outline all live in `MapView.tsx`, so the §2.6 constraint
- * can be checked by reading one short file. The one exception is the thumbnail —
- * it is fetched here because it is keyed by the story on screen and by nothing
- * else, and threading it through the map effect would put a network call in the
- * middle of a click handler.
+ * can be checked by reading one short file. **It has no exceptions as of
+ * 2026-08-14** — the thumbnail used to be fetched here, from `/api/og`, and that
+ * was the one network call in the component. GDELT carries the publisher's
+ * `og:image` (`V2.1SHARINGIMAGE`), so it now rides the tile feature like every
+ * other field and this component fetches nothing at all.
  *
  * **§2.6 is enforced by `PanelStory`, not by care.** Title, source, url, place,
- * kind and date. There is no article text to render because there is no field for
- * it, and `panelStory()` is the only constructor — see `lib/story.ts`.
+ * kind, date and image. There is no article text to render because there is no
+ * field for it, and `panelStory()` is the only constructor — see `lib/story.ts`,
+ * which explains why `image` is on that list and why it is not article content.
  */
 
 export type StoryPanelProps = {
@@ -52,33 +53,41 @@ export default function StoryPanel({
   onToggleCollapse,
 }: StoryPanelProps) {
   /**
-   * `undefined` while the lookup is in flight, `null` once it has come back with
-   * nothing. The two are distinct so the header does not flash the fallback
-   * before settling on the image.
+   * **The thumbnail arrives on the tile feature now (2026-08-14), so there is no
+   * lookup to be in flight.** It used to be an async fetch of `/api/og`, which
+   * read the article page server-side; GDELT already carries the publisher's
+   * `og:image` in `V2.1SHARINGIMAGE`, so the pipeline carries it too and this
+   * component just reads `story.image`.
+   *
+   * That deleted the three-state `undefined | null | string` this held. What is
+   * left is the one thing the browser can still discover at render time: the
+   * image was published and then turned out to be unusable — a 404, or a
+   * tracking pixel wearing a thumbnail's clothes.
+   *
+   * **The rejection is stored as the url it applies to, not as a boolean**, for
+   * the same reason `lib/flag.ts` stores failures rather than successes: a
+   * boolean has to be cleared by an effect, and an effect runs *after* the
+   * render that already used the stale value — so switching from a rejected
+   * story to a good one flashed the flat header for a frame. Comparing urls
+   * needs no effect and cannot be stale.
    */
-  const [image, setImage] = useState<string | null | undefined>(undefined);
-
-  useEffect(() => {
-    let cancelled = false;
-    setImage(undefined);
-    loadOgImage(story.url).then((found) => {
-      if (!cancelled) setImage(found ?? null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [story.url]);
+  const [rejectedUrl, setRejectedUrl] = useState("");
+  const image = rejectedUrl === story.url ? "" : story.image;
 
   /**
    * The smallest image worth showing, in natural pixels.
    *
    * **Not a guess — measured.** A container story out of Kazakhstan declared its
-   * `og:image` as `globenewswire.com/newsroom/ti?nf=...`, which is a 1x1 tracking
-   * beacon. It loads successfully, so `onError` never fires; it just paints one
-   * stretched pixel across the hero. Worse, rendering it makes the reader's
-   * browser hit a beacon on their behalf, which is not a thing a thumbnail should
-   * do. A real preview image is 600-1200px wide, so anything under 200 is either
-   * a beacon or a favicon and neither belongs in the hero.
+   * sharing image as `globenewswire.com/newsroom/ti?nf=...`, which is a 1x1
+   * tracking beacon. It loads successfully, so `onError` never fires; it just
+   * paints one stretched pixel across the hero. Worse, rendering it makes the
+   * reader's browser hit a beacon on their behalf, which is not a thing a
+   * thumbnail should do. A real preview image is 600-1200px wide, so anything
+   * under 200 is either a beacon or a favicon and neither belongs in the hero.
+   *
+   * **This check survived the move to GDELT and had to.** The field is the same
+   * `og:image` either way, so it carries the same beacons; changing where the
+   * project reads it changed nothing about what publishers put there.
    */
   const MIN_IMAGE_WIDTH = 200;
 
@@ -109,9 +118,12 @@ export default function StoryPanel({
             /*
              * The publisher's own CDN serves this, so it is a plain <img> rather
              * than next/image: optimizing it would mean proxying their bytes
-             * through Vercel, which is the one thing the /api/og route is careful
-             * not to do. `onError` falls back to the flat header — a hotlinked
-             * image can 403 or vanish, and a broken-image icon is worse than none.
+             * through Vercel, and the point of taking the URL from GDELT was to
+             * stop this project touching the publisher's server at all. `onError`
+             * falls back to the flat header — a hotlinked image can 403 or
+             * vanish, and a broken-image icon is worse than none. That matters
+             * slightly more now: the URL was current when GDELT crawled the page,
+             * not necessarily when the reader opens the panel.
              *
              * eslint-disable-next-line @next/next/no-img-element
              */
@@ -119,10 +131,10 @@ export default function StoryPanel({
               className="panel__image"
               src={image}
               alt=""
-              onError={() => setImage(null)}
+              onError={() => setRejectedUrl(story.url)}
               onLoad={(event) => {
                 const loaded = event.currentTarget;
-                if (loaded.naturalWidth < MIN_IMAGE_WIDTH) setImage(null);
+                if (loaded.naturalWidth < MIN_IMAGE_WIDTH) setRejectedUrl(story.url);
               }}
               referrerPolicy="no-referrer"
             />
