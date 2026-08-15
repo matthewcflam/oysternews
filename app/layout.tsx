@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { Newsreader } from "next/font/google";
+import { Instrument_Serif, Newsreader } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 /**
- * The one typeface on the site (2026-08-14). Self-hosted by `next/font`, so
- * there is no request to Google at runtime and no FOUT to design around.
+ * The site's typeface. Self-hosted by `next/font`, so there is no request to
+ * Google at runtime and no FOUT to design around.
  *
  * The **variable** axis is loaded rather than a fixed set of weights: the map
  * chrome runs from 11px labels to a 26px place heading, and one variable file is
@@ -21,8 +21,28 @@ const newsreader = Newsreader({
   variable: "--font-newsreader",
 });
 
+/**
+ * The second typeface, and it earns its place on exactly one string: the search
+ * field's "Where to next?".
+ *
+ * That is a deliberate exception to the one-typeface rule above, not an
+ * oversight. The search bar is the only white-on-white surface on the page — it
+ * is a light pill floating on a dark map — and Newsreader at 16px on white reads
+ * as body copy, which is what a placeholder must not do. Instrument Serif's
+ * higher contrast and tighter fit make it read as an invitation.
+ *
+ * It is a single 400 weight rather than a variable axis, because one 13-character
+ * string needs no range.
+ */
+const instrumentSerif = Instrument_Serif({
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+  variable: "--font-instrument-serif",
+});
+
 export const metadata: Metadata = {
-  title: "Sonder — a map of current world news",
+  title: "Oyster — a map of current world news",
   description:
     "A 2D web map of current world news. Stories are plotted where they happen.",
 };
@@ -44,7 +64,7 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={newsreader.variable}>
+    <html lang="en" className={`${newsreader.variable} ${instrumentSerif.variable}`}>
       <body>
         {children}
         <Analytics />

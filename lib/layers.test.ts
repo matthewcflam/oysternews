@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ACCENT,
   CLICKABLE_LAYER_IDS,
   COUNTRIES_SOURCE_LAYER,
   COUNTRY_HIT_ID,
@@ -10,11 +11,17 @@ import {
   HIT_LAYER_FOR,
   LABELS_LAYER_ID,
   LABEL_FONT,
+  MARK,
   MATCH_NOTHING,
+  NOT_CONTAINER,
   OUTLINE_LAYER_FOR,
+  PIN_IMAGE_ID,
   REGIONS_SOURCE_LAYER,
   REGION_HIT_ID,
   REGION_OUTLINE_ID,
+  SELECTED_LAYER_ID,
+  SELECTED_SOURCE_ID,
+  SELECTED_STATE_KEY,
   STORIES_LAYER_ID,
   STORIES_SOURCE_LAYER,
   TOP_LAYER_ID,
@@ -24,6 +31,7 @@ import {
   hitLayers,
   matchId,
   outlineFor,
+  selectedPinLayer,
   spiderLayers,
   storyLayers,
   topFilter,
@@ -88,28 +96,67 @@ describe("storyLayers", () => {
     expect(layout["symbol-sort-key"]).toEqual(["-", 0, ["get", "salience"]]);
   });
 
-  it("distinguishes containers from pins in both fill and ring", () => {
-    // §2.1 measured containers and pins at different accuracies. Drawing them
-    // identically would claim a precision the placement rule does not have.
-    // Since the 2026-08-14 identity the ring is the pin's mark, so the stroke
-    // WIDTH carries the distinction and the stroke colour is a constant white.
+  it("draws every unselected story in one orange, and the open one in MARK", () => {
+    // The 2026-08-14 collapse took a `case` over `kind` out of here — a
+    // container used to be painted white — and the fill became a bare literal.
+    // The one case that came back (2026-08-15) is the selection: the wedge points
+    // down at this disc, and the two have to read as one mark.
+    //
+    // **The condition is the whole of what may be asserted here.** A branch on
+    // `kind`, `salience` or `tier1` would be a second visual identity, which is
+    // what the collapse removed.
     for (const layer of [stories, country]) {
-      expect(propertiesRead(layer.paint?.["circle-color"])).toContain("kind");
-      expect(propertiesRead(layer.paint?.["circle-stroke-width"])).toContain("kind");
+      const fill = layer.paint?.["circle-color"] as unknown[];
+      expect(fill[0]).toBe("case");
+      expect(fill).toHaveLength(4);
+      expect(fill[2]).toBe(MARK);
+      expect(fill[3]).toBe(ACCENT);
+      expect(propertiesRead(fill)).toEqual([SELECTED_STATE_KEY]);
       expect(layer.paint?.["circle-stroke-color"]).toBe("#ffffff");
     }
   });
 
-  it("gives a container no ring and a pin nothing else", () => {
-    // The container is a solid white disc: a ring on it would read as a pin,
-    // and a ring is the one thing that means "this exact point".
+  it("reads the selection both ways, so a spider leaf can wear it too", () => {
+    // Feature state does not cross sources and a leaf lives in the overlay's
+    // own GeoJSON source, so the flag travels as a property there — the same
+    // split the top-5 ring makes. Losing either arm loses the fill in exactly
+    // one place: the vector arm at every ordinary pin, the property arm at every
+    // displaced story, which is the case the map is busiest in.
+    const json = JSON.stringify(stories.paint?.["circle-color"]);
+    expect(json).toContain(`["boolean",["feature-state","${SELECTED_STATE_KEY}"],false]`);
+    expect(json).toContain(`["==",["get","${SELECTED_STATE_KEY}"],1]`);
+  });
+
+  it("gives the ring to the top 5 and to nothing else", () => {
+    // The ring changed sides on 2026-08-14: it used to mean "an exact place"
+    // and marked every PIN. It now means "one of the five best on screen", so
+    // the stroke width must be gated on the top-5 test and zero by default.
     for (const layer of [stories, country]) {
       const width = layer.paint?.["circle-stroke-width"] as unknown[];
       // ["interpolate", ["linear"], ["zoom"], 1, <case>, 8, <case>]
       for (const branch of [width[4], width[6]] as unknown[][]) {
         expect(branch[0]).toBe("case");
-        // The zero branch is the one guarded by the top/container test.
-        expect(branch[2]).toBe(0);
+        expect(JSON.stringify(branch[1])).toContain("feature-state");
+        // The fallback — an ordinary pin — has no ring at all.
+        expect(branch[3]).toBe(0);
+      }
+      // Nothing about the ring may depend on how the story was placed.
+      expect(propertiesRead(width)).not.toContain("kind");
+    }
+  });
+
+  it("keeps one footprint, so the ring never makes a pin bigger", () => {
+    // MapLibre grows a stroke OUTWARD, so a marked disc is inset by exactly the
+    // ring it gains and the two outer edges land on each other. If the top-5
+    // branch stopped shrinking the core, the five marked pins would swell.
+    for (const layer of [stories, country]) {
+      const radius = layer.paint?.["circle-radius"] as unknown[];
+      for (const branch of [radius[4], radius[6]] as unknown[][]) {
+        expect(branch[0]).toBe("case");
+        // ["*", <footprint>, 0.68] for the marked case, bare <footprint> after.
+        expect((branch[2] as unknown[])[0]).toBe("*");
+        expect((branch[2] as unknown[])[2]).toBeCloseTo(0.68);
+        expect(JSON.stringify(branch[3])).toBe(JSON.stringify((branch[2] as unknown[])[1]));
       }
     }
   });
@@ -137,7 +184,9 @@ describe("storyLayers", () => {
     // "On screen" is a fact about the camera, so no tile can carry it. It also
     // must default to false: a tile that has just loaded has no state yet, and
     // an undefined flag rendering as top-5 would flash the whole viewport.
-    for (const key of ["circle-radius", "circle-color", "circle-stroke-width"] as const) {
+    // `circle-color` is not on this list: since 2026-08-14 the ring carries the
+    // whole top-5 highlight, and the fill's one case is about the selection.
+    for (const key of ["circle-radius", "circle-stroke-width"] as const) {
       const json = JSON.stringify(stories.paint?.[key]);
       expect(json).toContain(`["feature-state","${TOP_STATE_KEY}"]`);
       expect(json).toContain(`["boolean",["feature-state","${TOP_STATE_KEY}"],false]`);
@@ -145,13 +194,23 @@ describe("storyLayers", () => {
   });
 
   it("draws every state solid — no partial-alpha fills", () => {
-    // The old identity made a container 22% opaque, which reads as "less
+    // An early identity made a container 22% opaque, which reads as "less
     // important" rather than "less precisely placed", and disappears entirely
     // at the 3px end of the salience scale.
     for (const layer of [stories, country]) {
       expect(JSON.stringify(layer.paint?.["circle-color"])).not.toContain("rgba");
       expect(layer.paint?.["circle-opacity"]).toBeUndefined();
     }
+  });
+
+  it("filters containers off every layer that draws a story", () => {
+    // §2.1 places a container at a region's centroid, which puts a point on a
+    // coastline and asserts a story happened there. Since 2026-08-14 they are
+    // not drawn at all — the region panel says "somewhere in" in words instead.
+    for (const layer of [stories, country, labels]) {
+      expect(layer.filter).toEqual(NOT_CONTAINER);
+    }
+    expect(NOT_CONTAINER).toEqual(["!=", ["get", "kind"], "CONTAINER"]);
   });
 
   it("never reads tier1 — the preference is invisible by design", () => {
@@ -185,7 +244,18 @@ describe("the top-5 layer and the leaves' sort key", () => {
   });
 
   it("selects by url, the one property unique per group", () => {
-    expect(topFilter(["a", "b"])).toEqual(["in", ["get", "url"], ["literal", ["a", "b"]]]);
+    expect(topFilter(["a", "b"])).toEqual([
+      "all",
+      NOT_CONTAINER,
+      ["in", ["get", "url"], ["literal", ["a", "b"]]],
+    ]);
+  });
+
+  it("cannot resurrect a container that ranked into the top 5", () => {
+    // This layer reads the same source as `stories-pins` and is drawn ABOVE it,
+    // so without the same container filter a ranked container would appear here
+    // and nowhere else — one white-ringed dot on a map that draws no containers.
+    expect(JSON.stringify(topFilter(["a"]))).toContain(JSON.stringify(NOT_CONTAINER));
   });
 
   it("orders the leaves by the top flag, which must be a PROPERTY", () => {
@@ -202,6 +272,30 @@ describe("the top-5 layer and the leaves' sort key", () => {
       CLICKABLE_LAYER_IDS.indexOf(STORIES_LAYER_ID),
     );
     expect(CLICKABLE_LAYER_IDS).not.toContain(LABELS_LAYER_ID);
+  });
+});
+
+describe("selectedPinLayer", () => {
+  const pin = selectedPinLayer();
+
+  it("anchors the triangle's point on the coordinate", () => {
+    // `lib/pin.ts` pads the wedge so its point lands at the middle of the
+    // image's bottom edge, so this is the one anchor that puts the point on the
+    // story's own circle. Any other value floats the mark near the story rather
+    // than on it.
+    expect(pin.layout?.["icon-anchor"]).toBe("bottom");
+    expect(pin.layout?.["icon-image"]).toBe(PIN_IMAGE_ID);
+    expect(pin.source).toBe(SELECTED_SOURCE_ID);
+    expect(pin.id).toBe(SELECTED_LAYER_ID);
+  });
+
+  it("never yields to a symbol collision, and never causes one", () => {
+    // It marks the one thing the reader explicitly asked for: dropping it
+    // because a headline claimed the space would make the click look like it
+    // failed. `ignore-placement` is the other half — without it the triangle
+    // acts as an obstacle and erases the labels around it.
+    expect(pin.layout?.["icon-allow-overlap"]).toBe(true);
+    expect(pin.layout?.["icon-ignore-placement"]).toBe(true);
   });
 });
 

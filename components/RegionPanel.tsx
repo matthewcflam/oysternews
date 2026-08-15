@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import MapTilerLogo from "./MapTilerLogo";
 import PanelTab from "./PanelTab";
@@ -160,14 +159,12 @@ export default function RegionPanel({
           )}
         </section>
 
-        {/* The same footer the story panel renders, for the same two reasons — see
-          `StoryPanel`. §2.6's logo must survive this panel covering the map's
-          bottom-left corner, and /about has to stay reachable from it. */}
+        {/* The same footer the story panel renders, and now for one reason
+          rather than two — see `StoryPanel`. §2.6's logo must survive this panel
+          covering the map's bottom-left corner; /about moved to the brand block
+          on 2026-08-14 and is reachable with no panel open at all. */}
         <footer className="panel__footer">
           <MapTilerLogo className="maptiler-logo--panel" />
-          <Link className="panel__about" href="/about">
-            How does this work?
-          </Link>
         </footer>
       </div>
 
