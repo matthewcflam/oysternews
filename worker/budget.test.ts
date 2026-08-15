@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SPIDERFY_ZOOM } from "../lib/spiderfy.ts";
 import type { StoryGroup } from "../lib/types.ts";
 import { assignMinzoom, countryTopGroups, tileOf } from "./budget.ts";
 import { salienceOf } from "./rank.ts";
@@ -27,10 +28,29 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   };
 }
 
-/** `count` groups at the same coordinate, descending in salience. */
+/** `count` groups at the SAME coordinate, descending in salience — one city. */
 function crowd(count: number, lat = 40, lon = -74): StoryGroup[] {
   return Array.from({ length: count }, (_, i) =>
     group({ id: `g${String(i).padStart(3, "0")}`, lat, lon, salience: count - i }),
+  );
+}
+
+/**
+ * `count` groups at DISTINCT coordinates close enough to share a tile.
+ *
+ * The distinction matters since the 2026-08-14 coordinate cap: below
+ * `SPIDERFY_ZOOM` a coordinate holds one story, so `crowd` now exercises that
+ * rule and `spread` is what exercises the per-tile budget on its own. 0.001° is
+ * ~80m and a z12 tile is ~0.088° wide, so these stay in one tile everywhere.
+ */
+function spread(count: number, lat = 40, lon = -74): StoryGroup[] {
+  return Array.from({ length: count }, (_, i) =>
+    group({
+      id: `g${String(i).padStart(3, "0")}`,
+      lat,
+      lon: lon + i * 0.001,
+      salience: count - i,
+    }),
   );
 }
 
@@ -54,7 +74,7 @@ describe("tileOf", () => {
 
 describe("the per-tile budget", () => {
   it("keeps everything in a sparse tile — the budget is a floor too", () => {
-    const { groups } = assignMinzoom(crowd(3), { k: 15 });
+    const { groups } = assignMinzoom(spread(3), { k: 15 });
     expect(groups.every((g) => g.minzoom === 0)).toBe(true);
   });
 
@@ -112,10 +132,55 @@ describe("the per-tile budget", () => {
     // really is global there — which is exactly the hole the §2.4 country-top
     // floor layer exists to fill, not something the budget is meant to fix.
     const { groups } = assignMinzoom(
-      [...crowd(50, 40, -74), group({ id: "hormuz", lat: 26.6, lon: 56.3, salience: 0.01 })],
+      [...spread(50, 40, -74), group({ id: "hormuz", lat: 26.6, lon: 56.3, salience: 0.01 })],
       { k: 5 },
     );
     expect(groups.find((g) => g.id === "hormuz")?.minzoom).toBe(1);
+  });
+
+  it("admits ONE story per coordinate below the spiderfy zoom", () => {
+    // §6 decision 1's coordinate cap. GDELT gives city centroids, so a second
+    // story at the same coordinate is drawn exactly underneath the first — it
+    // was invisible and it was holding a budget slot. Measured on the live
+    // archive, two thirds of every visible story was in such a stack.
+    const { groups } = assignMinzoom(crowd(12), { k: 15 });
+    const shallow = groups.filter((g) => g.minzoom < SPIDERFY_ZOOM);
+    expect(shallow.map((g) => g.id)).toEqual(["g000"]); // the most salient
+    expect(groups.filter((g) => g.minzoom === SPIDERFY_ZOOM)).toHaveLength(11);
+  });
+
+  it("lifts the cap exactly where the client can spread the stack", () => {
+    // The deferral is not a drop: at SPIDERFY_ZOOM the whole stack is in the
+    // tiles, which is the moment lib/spiderfy.ts spreads it into legs and
+    // leaves. One number, imported by both halves.
+    const { groups, overflow } = assignMinzoom(crowd(12), { k: 15 });
+    expect(overflow).toBe(0);
+    expect(groups.every((g) => g.minzoom <= SPIDERFY_ZOOM)).toBe(true);
+  });
+
+  it("frees the slots a stack used to hold, so other places get in", () => {
+    // The point of the cap, stated as a measurement: 50 co-located New York
+    // stories used to consume five of z0's five slots and show one dot. Now
+    // they consume one, and the rest of the world fits at z0.
+    const { groups } = assignMinzoom(
+      [...crowd(50, 40, -74), group({ id: "hormuz", lat: 26.6, lon: 56.3, salience: 0.01 })],
+      { k: 5 },
+    );
+    expect(groups.find((g) => g.id === "hormuz")?.minzoom).toBe(0);
+  });
+
+  it("keeps minzoom monotonic across the cap boundary", () => {
+    // The cap defers rather than drops, and assignment stays permanent, so the
+    // §5 trap ("wins its z5 tile, loses its z6 tile") cannot reappear at z9.
+    const { groups } = assignMinzoom([...crowd(20), ...crowd(20, 51.5, -0.12)], {
+      k: 4,
+      maxZoom: 11,
+    });
+    for (let zoom = 0; zoom <= 11; zoom++) {
+      const visible = groups.filter((g) => g.minzoom <= zoom).map((g) => g.id);
+      const deeper = new Set(groups.filter((g) => g.minzoom <= zoom + 1).map((g) => g.id));
+      for (const id of visible) expect(deeper.has(id)).toBe(true);
+    }
   });
 
   it("reports the overflow rather than dumping it at the deepest zoom", () => {

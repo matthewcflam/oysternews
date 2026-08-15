@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import {
   MapLibreMap,
   NavigationControl,
-  Popup,
   addProtocol,
   removeProtocol,
   setWorkerUrl,
   type ErrorEvent,
+  type GeoJSONSource,
   type MapMouseEvent,
 } from "maplibre-gl";
 import { Protocol } from "pmtiles";
@@ -19,24 +19,47 @@ import {
   BOUNDARIES_ARCHIVE,
   BOUNDARIES_SOURCE_ID,
   CLICKABLE_LAYER_IDS,
+  COUNTRY_LAYER_ID,
   COUNTRY_OUTLINE_ID,
+  COUNTRY_SOURCE_LAYER,
   HIT_LAYER_FOR,
   MATCH_NOTHING,
   OUTLINE_LAYER_FOR,
   REGION_OUTLINE_ID,
   SOURCE_ID,
+  SPIDER_SOURCE_ID,
+  STORIES_LAYER_ID,
+  STORIES_SOURCE_LAYER,
+  TOP_LAYER_ID,
+  TOP_STATE_KEY,
   boundaryLayers,
   firstPlaceLabelLayerId,
   hitLayers,
   matchId,
   outlineFor,
+  spiderLayers,
   storyLayers,
+  topFilter,
+  topPinLayer,
 } from "@/lib/layers";
 import { loadManifest } from "@/lib/manifest";
-import { storyPopupHtml } from "@/lib/popup";
+import { nearbyBox, nearbyStories } from "@/lib/nearby";
 import { loadRegionIndex, storiesFor } from "@/lib/regions";
+import { panelStory, type PanelStory } from "@/lib/story";
+import {
+  EMPTY_SPIDER,
+  SPIDERFY_ZOOM,
+  displacedUrls,
+  sameStacks,
+  spiderData,
+  stacksFrom,
+  type Stack,
+} from "@/lib/spiderfy";
+import { sameKeys, topKeys } from "@/lib/top";
 import type { RegionIndex } from "@/lib/types";
+import MapTilerLogo from "./MapTilerLogo";
 import RegionPanel from "./RegionPanel";
+import StoryPanel from "./StoryPanel";
 
 /**
  * The map (HANDOFF.md §4). This component owns wiring only — the source, the
@@ -67,13 +90,41 @@ type Selection = { id: string; name: string };
 export default function MapView() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  /**
-   * The story popup, held outside the map effect so the Global button can close
-   * it. There is only ever one — the single click handler below guarantees it.
-   */
-  const popupRef = useRef<Popup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const provider = basemap().provider;
+
+  /**
+   * The selected story and its neighbours.
+   *
+   * **This is what the map popup used to be.** A click no longer anchors a box to
+   * the dot it hit; it opens the left panel, which is the same slot §2.3's region
+   * panel uses. Holding the selection in React state rather than in a MapLibre
+   * `Popup` is what lets the panel be a component with a testable content model
+   * (`lib/story.ts`) instead of an HTML string.
+   *
+   * `nearby` is captured at click time, not recomputed as the camera moves. The
+   * list answers "what was around the story when you opened it", and a list that
+   * reshuffled under a pan would be a moving target in a panel the reader is
+   * reading.
+   */
+  const [story, setStory] = useState<PanelStory | null>(null);
+  const [nearby, setNearby] = useState<PanelStory[]>([]);
+
+  /**
+   * The panel, slid off the left edge but still selected.
+   *
+   * **Held here rather than inside the panels**, because `StoryPanel` and
+   * `RegionPanel` are two components sharing one slot: state owned by either of
+   * them would reset the moment the reader went from a pin to a country label,
+   * and the tab would spring back open for no reason the reader could name.
+   *
+   * It is deliberately NOT the same thing as "no selection". Collapsed keeps the
+   * story, the outline and the top-5 highlight exactly as they were and only
+   * moves the column out of the way; closing throws all of that away. The tab and
+   * the × are different controls because they answer different questions — "let
+   * me see the map" and "I'm done with this story".
+   */
+  const [collapsed, setCollapsed] = useState(false);
 
   /**
    * §2.3's region panel. `regionsUrl` is optional on the manifest — one
@@ -94,24 +145,16 @@ export default function MapView() {
   };
 
   /**
-   * §2.3's Global button — the only camera move in the feature, and therefore
-   * the only place `prefers-reduced-motion` applies (§2.6).
+   * Close the story panel and drop the container outline it drew.
    *
-   * **Checked at call time, not at mount.** The OS setting can change while the
-   * page is open, and a value read once at mount would honour a preference the
-   * user has since turned off — or, worse, animate for someone who turned it on.
+   * Shares `clearRegion`'s outline clearing rather than duplicating it: §2.2
+   * allows exactly one outline on the map, so "no story selected" and "no region
+   * selected" have to mean the same thing about the outline layers.
    */
-  const resetCamera = () => {
-    // §2.3's table: Global is Default's camera with no outline and no panel.
-    // Leaving a story popup open would land the user in a state the table does
-    // not describe — a selected story with nothing selected on the map.
-    popupRef.current?.remove();
-    popupRef.current = null;
+  const clearStory = () => {
+    setStory(null);
+    setNearby([]);
     clearRegion();
-    const camera = { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
-    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) mapRef.current?.jumpTo(camera);
-    else mapRef.current?.flyTo({ ...camera, speed: 0.8 });
   };
 
   /**
@@ -159,7 +202,9 @@ export default function MapView() {
       attributionControl: { compact: false },
     });
 
-    map.addControl(new NavigationControl({ showCompass: false }), "top-right");
+    // Bottom-right (2026-08-14), not top-right: the freshness stamp took that
+    // corner when the masthead was removed, and the two would overlap there.
+    map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
 
     /**
@@ -199,6 +244,20 @@ export default function MapView() {
         map.addSource(SOURCE_ID, {
           type: "vector",
           url: `pmtiles://${manifest.url}`,
+          /**
+           * Gives every story feature a stable id, which is what makes
+           * `setFeatureState` — and therefore the top-5 highlight — possible at
+           * all. Tippecanoe writes no feature ids, and without one MapLibre has
+           * nothing to key state by.
+           *
+           * `url` is the only property unique per group (`worker/tiles.ts` does
+           * not serialise the group id), and it is promoted for BOTH source
+           * layers so a story keeps one identity across §2.4's overlap.
+           */
+          promoteId: {
+            [STORIES_SOURCE_LAYER]: "url",
+            [COUNTRY_SOURCE_LAYER]: "url",
+          },
         });
 
         // §2.2's outline archive is static and committed, so it is addressed
@@ -207,6 +266,13 @@ export default function MapView() {
           type: "vector",
           url: `pmtiles://${new URL(BOUNDARIES_ARCHIVE, window.location.href).href}`,
         });
+
+        /**
+         * The spider overlay: legs and leaves, computed on the client from what
+         * is rendered. It cannot come from the archive — a leaf's position is a
+         * pixel offset from its anchor, so it depends on the current camera.
+         */
+        map.addSource(SPIDER_SOURCE_ID, { type: "geojson", data: EMPTY_SPIDER });
 
         setRegionsUrl(manifest.regionsUrl ?? null);
 
@@ -224,9 +290,148 @@ export default function MapView() {
          * at z5 — see `firstPlaceLabelLayerId`.
          */
         const [countryPins, storyPins, headlines] = storyLayers();
+        // The legs go UNDER the pins — a leg is a pointer, and one drawn across
+        // a neighbouring story's pin would hide data behind decoration. The
+        // leaves go over them, because a leaf IS data and it must win the click.
+        const [spiderLegs, spiderLeaves] = spiderLayers();
+        map.addLayer(spiderLegs);
         map.addLayer(countryPins);
         map.addLayer(storyPins);
+        map.addLayer(spiderLeaves);
+        // The five best stories, drawn again above every other disc. See
+        // `topPinLayer` — draw order inside a circle layer is tile order, and
+        // the highlight is feature state, which a `circle-sort-key` cannot read.
+        map.addLayer(topPinLayer());
         map.addLayer(headlines, firstPlaceLabelLayerId(map.getStyle().layers));
+
+        /* ------------------------------------------------------------------ */
+        /* The top-5-on-screen highlight                                       */
+        /* ------------------------------------------------------------------ */
+
+        /**
+         * The keys currently carrying the flag. Held here rather than read back
+         * off the map because `removeFeatureState` needs to know what to clear,
+         * and MapLibre offers no way to enumerate the states it holds.
+         */
+        let marked: string[] = [];
+
+        /**
+         * Those of `marked` that are actually flagged on the vector source —
+         * every one that a spider has NOT displaced. A displaced story is drawn
+         * twice: covered at its anchor, and again as a leaf. Flagging it would
+         * scale the covered copy by `TOP_SCALE` and push it out from behind the
+         * pin on top of it, which is the overlap this split exists to remove.
+         * Its highlight travels on the leaf instead, as a property.
+         */
+        let flagged: string[] = [];
+        let displaced = new Set<string>();
+
+        const setTop = (key: string, top: boolean) => {
+          // Both source layers, so the highlight survives the z4 handover from
+          // the country floor to the stories layer without a repaint gap.
+          for (const sourceLayer of [STORIES_SOURCE_LAYER, COUNTRY_SOURCE_LAYER]) {
+            const feature = { source: SOURCE_ID, sourceLayer, id: key };
+            if (top) map.setFeatureState(feature, { [TOP_STATE_KEY]: true });
+            else map.removeFeatureState(feature, TOP_STATE_KEY);
+          }
+        };
+
+        /**
+         * **On `idle`, not on `moveend`.** "Top 5 on screen" is a question about
+         * what is *rendered*, and a move ends before the tiles it uncovered have
+         * loaded — ranking there would score the new viewport against the old
+         * viewport's features and then never correct itself. `idle` fires once
+         * the map has finished loading and drawing everything, which is the
+         * first moment the query can answer truthfully.
+         *
+         * Writing feature state repaints, which produces another `idle`; the
+         * `sameKeys` guard is what stops that from being a loop.
+         */
+        const applyTop = () => {
+          const visible = marked.filter((key) => !displaced.has(key));
+          if (sameKeys(visible, flagged)) return;
+
+          for (const key of flagged) if (!visible.includes(key)) setTop(key, false);
+          for (const key of visible) setTop(key, true);
+          flagged = visible;
+          // The layer that draws them above every other disc. Its filter and the
+          // feature state are set together, always, so the copy on top can never
+          // be painted as an ordinary pin or an ordinary pin painted as a copy.
+          map.setFilter(TOP_LAYER_ID, topFilter(visible));
+        };
+
+        /* ------------------------------------------------------------------ */
+        /* Spiderfy                                                            */
+        /* ------------------------------------------------------------------ */
+
+        /**
+         * The stacks found at the last `idle`. Membership changes only when the
+         * rendered features change; POSITIONS change on every camera move,
+         * because a leaf is a pixel offset. Keeping the two apart is what lets
+         * the expensive half run on idle and the cheap half run on every frame.
+         */
+        let stacks: Stack[] = [];
+
+        const drawSpider = () => {
+          const source = map.getSource<GeoJSONSource>(SPIDER_SOURCE_ID);
+          if (!source) return;
+          // Below the threshold the budget guarantees one story per coordinate,
+          // so there is nothing to spread and the overlay must be empty rather
+          // than stale.
+          const data =
+            map.getZoom() < SPIDERFY_ZOOM || !stacks.length
+              ? EMPTY_SPIDER
+              : spiderData(stacks, map, marked);
+          source.setData(data);
+        };
+
+        /**
+         * **On `idle`, not on `moveend`.** Both halves of this ask what is
+         * *rendered*, and a move ends before the tiles it uncovered have loaded —
+         * ranking or grouping there scores the new viewport against the old
+         * viewport's features and never corrects itself. `idle` fires once the
+         * map has finished loading and drawing, which is the first moment the
+         * query can answer truthfully.
+         *
+         * Writing feature state or overlay data repaints, which produces another
+         * `idle`; the `sameKeys` and `sameStacks` guards are what stop that from
+         * being a loop.
+         */
+        const refresh = () => {
+          const layers = [STORIES_LAYER_ID, COUNTRY_LAYER_ID].filter((id) => map.getLayer(id));
+          if (!layers.length) return;
+          // The pin layers only — never the leaves. A leaf is a copy of a story
+          // that is already in this list, and feeding the overlay back into its
+          // own input is how a spider grows a spider.
+          const features = map.queryRenderedFeatures({ layers });
+
+          marked = topKeys(features);
+
+          // The stacks are read BEFORE the highlight is applied: which stories a
+          // spider has displaced decides which of the five may be flagged on the
+          // vector source at all.
+          const found = map.getZoom() < SPIDERFY_ZOOM ? [] : stacksFrom(features);
+          if (!sameStacks(found, stacks)) {
+            stacks = found;
+            displaced = displacedUrls(found);
+          }
+
+          applyTop();
+          // Membership may be unchanged while the top-5 flags on the leaves are
+          // not, and those live in the overlay's data rather than in state.
+          drawSpider();
+        };
+
+        map.on("idle", refresh);
+        /**
+         * **`zoom`, not `move`.** A leaf's position is its anchor plus a pixel
+         * offset, and under a pan the anchor and the leaf translate together —
+         * the geography does not need recomputing and the spider is already
+         * correct. Only a zoom changes what a pixel is worth. Rebuilding on
+         * `move` instead would hand the source worker a fresh FeatureCollection
+         * on every frame of every drag, to redraw the identical picture.
+         */
+        map.on("zoom", drawSpider);
 
         /** §2.2: one outline at a time, and none by default. */
         const clearOutline = () => {
@@ -295,7 +500,7 @@ export default function MapView() {
          * Hit-testing once gives a single deterministic answer, in the layer
          * priority order `CLICKABLE_LAYER_IDS` states.
          *
-         * It also gives the map a dismiss: clicking empty ocean closes the popup
+         * It also gives the map a dismiss: clicking empty ocean closes the panel
          * and clears the outline, which §2.2's "click-reveal only" implies.
          *
          * Note that the top-most feature wins, and at world zoom that is often a
@@ -303,12 +508,9 @@ export default function MapView() {
          * pin overlaps it selects the pin, and correctly draws no outline.
          */
         map.on("click", (event: MapMouseEvent) => {
-          const [feature] = map.queryRenderedFeatures(event.point, {
-            layers: CLICKABLE_LAYER_IDS.filter((id) => map.getLayer(id)),
-          });
+          const layers = CLICKABLE_LAYER_IDS.filter((id) => map.getLayer(id));
+          const [feature] = map.queryRenderedFeatures(event.point, { layers });
 
-          popupRef.current?.remove();
-          popupRef.current = null;
           /**
            * **Every click starts from a clean slate**, which settles the one
            * question §2.3 left open: a container click clears a region lock.
@@ -316,8 +518,17 @@ export default function MapView() {
            * drawn while a region outline is still up would leave the user
            * unable to say which of the two the map is claiming is selected.
            */
+          setStory(null);
+          setNearby([]);
           clearRegion();
           clearOutline();
+          /**
+           * A click always re-opens the panel. Leaving it collapsed would make
+           * the click produce NO visible response at all — the panel is off
+           * screen, so a new story would swap in where nobody can see it, and
+           * the map would look broken rather than busy.
+           */
+          setCollapsed(false);
 
           // A pin is hit-tested FIRST and wins the tap, even where it sits over
           // a country label. The pin is the smaller, more deliberate target.
@@ -325,6 +536,9 @@ export default function MapView() {
             selectRegionAt(event);
             return;
           }
+
+          const selected = panelStory(feature.properties);
+          if (!selected) return;
 
           // §2.2: "Clicking any container story outlines its container in red."
           // A PIN gets none — it is at an exact place, and drawing a region
@@ -334,17 +548,20 @@ export default function MapView() {
             map.setFilter(outline.layerId, ["==", ["get", "id"], outline.id]);
           }
 
+          /**
+           * "Stories Nearby": a second query over the same layers, this time
+           * across a box rather than a point. Run here, once per click, rather
+           * than on `idle` with everything else — the neighbours of a story are
+           * a property of the click, not of the viewport, and recomputing them
+           * on every camera settle would rewrite a list the reader is reading.
+           */
+          const around = map.queryRenderedFeatures(nearbyBox(event.point), { layers });
+
           // §2.6 (link-out only) and §5.2 decision 3 (the pin half of the
-          // geotag-confidence treatment) both live in `lib/popup.ts`, where they
+          // geotag-confidence treatment) both live in `lib/story.ts`, where they
           // are tested rather than reviewed.
-          const popup = new Popup({ closeButton: true, maxWidth: "280px" })
-            .setLngLat(event.lngLat)
-            .setHTML(storyPopupHtml(feature.properties));
-          // MapLibre 6's `on` returns a Subscription rather than the emitter, so
-          // this cannot be chained onto the builder above.
-          popup.on("close", clearOutline);
-          popup.addTo(map);
-          popupRef.current = popup;
+          setStory(selected);
+          setNearby(nearbyStories(around, selected.url));
         });
 
         for (const layer of CLICKABLE_LAYER_IDS) {
@@ -396,46 +613,50 @@ export default function MapView() {
       <div ref={container} className="map" />
 
       {/*
-        §2.3's Global button: a preset of Default, not a structural state. It
-        returns the camera to whole-planet zoom and closes the panel, and it is
-        the only camera move in the feature.
+        The story panel and the region panel share one slot, and the click
+        handler guarantees at most one selection at a time — a story click clears
+        the region and a region click can only happen where no story was hit.
+        The story is rendered first so that guarantee is visible here too.
       */}
-      <button type="button" className="global-button" onClick={resetCamera}>
-        Global
-      </button>
+      {story && (
+        <StoryPanel
+          story={story}
+          nearby={nearby}
+          /*
+            Selecting a neighbour swaps the panel without going back to the map.
+            The list itself is left alone: every story in it is near every other,
+            so re-querying would produce the same neighbourhood minus one, and
+            would cost the reader the list they were part-way through.
+          */
+          onSelect={(next) => {
+            setStory(next);
+            setNearby([story, ...nearby].filter((other) => other.url !== next.url));
+          }}
+          onClose={clearStory}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((open) => !open)}
+        />
+      )}
 
-      {selection && (
+      {!story && selection && (
         <RegionPanel
           name={selection.name}
           regionId={selection.id}
           stories={storiesFor(index, selection.id)}
           status={panelStatus}
           onClose={clearRegion}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed((open) => !open)}
         />
       )}
       {/*
-        §2.6: "MapTiler attribution and logo stay visible." MapTiler's Free plan
-        requires the logo, not just the text credit, and MapLibre's
-        AttributionControl only renders text — the MapTiler SDK is what would
-        normally add this. Rendered only for the MapTiler provider: showing their
-        logo over an OpenFreeMap basemap would credit the wrong source.
+        §2.6's logo, bottom-left of the MAP. The story panel is full-bleed and
+        covers this corner, so it renders a second copy of the same component in
+        its own footer — see `MapTilerLogo`. This one no longer sits above the
+        panel (its z-index dropped from 4 to 2 on 2026-08-14); the panel's copy
+        is what keeps the requirement met while a story is open.
       */}
-      {provider === "maptiler" && (
-        <a
-          className="maptiler-logo"
-          href="https://www.maptiler.com"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="https://api.maptiler.com/resources/logo.svg"
-            alt="MapTiler"
-            width={110}
-            height={30}
-          />
-        </a>
-      )}
+      <MapTilerLogo />
       {provider === "openfreemap" && (
         <div className="notice notice--info">
           Keyless basemap (OpenFreeMap escape hatch). Set{" "}

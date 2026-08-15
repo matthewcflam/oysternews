@@ -16,6 +16,7 @@
  * ~3× the cost of the Blob Data Transfer the same bytes cost when served direct.
  */
 
+import { ago } from "./age";
 import type { Manifest } from "./types";
 
 /**
@@ -62,22 +63,18 @@ export function resetManifestCache(): void {
  * Deliberately coarse. The underlying data is a rolling 24-hour window assembled
  * every 4 hours, so minute-level precision would imply a currency the pipeline
  * does not have.
+ *
+ * **The ladder moved to `lib/age.ts` and is now shared with the story stamps**
+ * (2026-08-14), which went relative in the same change. This keeps only what is
+ * its own: the ISO parse, the "Updated " framing, and the unknown-time fallback —
+ * a *missing* timestamp is a different statement from an old one, and `ago`
+ * returns "" for it because a panel row with no date should render nothing.
  */
 export function freshnessLabel(generatedAt: string, now: number): string {
   const at = Date.parse(generatedAt);
   if (Number.isNaN(at)) return "Updated at an unknown time";
 
-  const minutes = Math.floor((now - at) / 60_000);
-  if (minutes < 0) return "Updated just now";
-  if (minutes < 2) return "Updated just now";
-  if (minutes < 60) return `Updated ${minutes} minutes ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours === 1) return "Updated an hour ago";
-  if (hours < 24) return `Updated ${hours} hours ago`;
-
-  const days = Math.floor(hours / 24);
-  return days === 1 ? "Updated a day ago" : `Updated ${days} days ago`;
+  return `Updated ${ago(at, now)}`;
 }
 
 /**

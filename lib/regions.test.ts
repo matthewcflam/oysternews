@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  gkgToMillis,
-  loadRegionIndex,
-  resetRegionIndexCache,
-  storiesFor,
-  storyAge,
-} from "./regions";
+import { gkgToMillis, loadRegionIndex, resetRegionIndexCache, storiesFor } from "./regions";
 import type { RegionIndex } from "./types";
 
 const index: RegionIndex = {
@@ -86,16 +80,8 @@ describe("gkgToMillis", () => {
   });
 });
 
-describe("storyAge", () => {
-  const now = Date.UTC(2026, 7, 13, 12, 0, 0);
-
-  it("stays coarse — the pipeline has no minute-level currency (§3.5)", () => {
-    expect(storyAge("20260813114500", now)).toBe("just now");
-    expect(storyAge("20260813090000", now)).toBe("3h ago");
-    expect(storyAge("20260811120000", now)).toBe("2d ago");
-  });
-
-  it("says nothing at all when the stamp is unreadable", () => {
-    expect(storyAge("nonsense", now)).toBe("");
-  });
-});
+/*
+ * `storyAge`'s tests were here. It was deleted on 2026-08-14 — see the note
+ * where it lived in `lib/regions.ts`. The behaviour it covered now belongs to
+ * `publishedAt` (lib/story.test.ts) over `ago` (lib/age.test.ts).
+ */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CLICKABLE_LAYER_IDS,
   COUNTRIES_SOURCE_LAYER,
   COUNTRY_HIT_ID,
   COUNTRY_LAYER_ID,
@@ -16,12 +17,17 @@ import {
   REGION_OUTLINE_ID,
   STORIES_LAYER_ID,
   STORIES_SOURCE_LAYER,
+  TOP_LAYER_ID,
+  TOP_STATE_KEY,
   boundaryLayers,
   firstPlaceLabelLayerId,
   hitLayers,
   matchId,
   outlineFor,
+  spiderLayers,
   storyLayers,
+  topFilter,
+  topPinLayer,
 } from "./layers";
 
 const layers = storyLayers();
@@ -82,12 +88,69 @@ describe("storyLayers", () => {
     expect(layout["symbol-sort-key"]).toEqual(["-", 0, ["get", "salience"]]);
   });
 
-  it("distinguishes containers from pins in both fill and stroke", () => {
+  it("distinguishes containers from pins in both fill and ring", () => {
     // §2.1 measured containers and pins at different accuracies. Drawing them
     // identically would claim a precision the placement rule does not have.
+    // Since the 2026-08-14 identity the ring is the pin's mark, so the stroke
+    // WIDTH carries the distinction and the stroke colour is a constant white.
     for (const layer of [stories, country]) {
       expect(propertiesRead(layer.paint?.["circle-color"])).toContain("kind");
-      expect(propertiesRead(layer.paint?.["circle-stroke-color"])).toContain("kind");
+      expect(propertiesRead(layer.paint?.["circle-stroke-width"])).toContain("kind");
+      expect(layer.paint?.["circle-stroke-color"]).toBe("#ffffff");
+    }
+  });
+
+  it("gives a container no ring and a pin nothing else", () => {
+    // The container is a solid white disc: a ring on it would read as a pin,
+    // and a ring is the one thing that means "this exact point".
+    for (const layer of [stories, country]) {
+      const width = layer.paint?.["circle-stroke-width"] as unknown[];
+      // ["interpolate", ["linear"], ["zoom"], 1, <case>, 8, <case>]
+      for (const branch of [width[4], width[6]] as unknown[][]) {
+        expect(branch[0]).toBe("case");
+        // The zero branch is the one guarded by the top/container test.
+        expect(branch[2]).toBe(0);
+      }
+    }
+  });
+
+  it("keeps ['zoom'] at the top level of every paint property", () => {
+    // **Measured 2026-08-14.** MapLibre allows `["zoom"]` only as the input of a
+    // top-level `interpolate` or `step`. Nesting it — `["*", <zoom interp>, k]`
+    // inside a `case` — makes `addLayer` throw, and the failure looks like a map
+    // with no pins on it and no error anywhere near the styling code.
+    const topLevelZoom = (paint: Record<string, unknown>) => {
+      for (const value of Object.values(paint)) {
+        if (!Array.isArray(value)) continue;
+        const isZoomInterpolation =
+          (value[0] === "interpolate" || value[0] === "step") &&
+          JSON.stringify(value[2]) === '["zoom"]';
+        // Anything below the top-level input must not mention zoom at all.
+        const rest = isZoomInterpolation ? value.slice(3) : value;
+        expect(JSON.stringify(rest)).not.toContain('["zoom"]');
+      }
+    };
+    for (const layer of [stories, country]) topLevelZoom(layer.paint as Record<string, unknown>);
+  });
+
+  it("puts the top-5 highlight on feature state, never on a property", () => {
+    // "On screen" is a fact about the camera, so no tile can carry it. It also
+    // must default to false: a tile that has just loaded has no state yet, and
+    // an undefined flag rendering as top-5 would flash the whole viewport.
+    for (const key of ["circle-radius", "circle-color", "circle-stroke-width"] as const) {
+      const json = JSON.stringify(stories.paint?.[key]);
+      expect(json).toContain(`["feature-state","${TOP_STATE_KEY}"]`);
+      expect(json).toContain(`["boolean",["feature-state","${TOP_STATE_KEY}"],false]`);
+    }
+  });
+
+  it("draws every state solid — no partial-alpha fills", () => {
+    // The old identity made a container 22% opaque, which reads as "less
+    // important" rather than "less precisely placed", and disappears entirely
+    // at the 3px end of the salience scale.
+    for (const layer of [stories, country]) {
+      expect(JSON.stringify(layer.paint?.["circle-color"])).not.toContain("rgba");
+      expect(layer.paint?.["circle-opacity"]).toBeUndefined();
     }
   });
 
@@ -99,6 +162,46 @@ describe("storyLayers", () => {
 
   it("sizes pins by salience, the §2.5 comparator's own term", () => {
     expect(propertiesRead(stories.paint?.["circle-radius"])).toContain("salience");
+  });
+});
+
+describe("the top-5 layer and the leaves' sort key", () => {
+  const top = topPinLayer();
+  const [, leaves] = spiderLayers();
+
+  it("paints the top-5 copy exactly like the pin underneath it", () => {
+    // The copy lands on the original, so any divergence between the two paints
+    // shows up as a halo of the wrong colour around every marked story.
+    expect(top.paint).toEqual(stories.paint);
+    expect(top["source-layer"]).toBe(STORIES_SOURCE_LAYER);
+    expect(top.maxzoom).toBeUndefined();
+  });
+
+  it("starts matching nothing, so no story is doubled before the first rank", () => {
+    expect(top.filter).toEqual(topFilter([]));
+    // A doubled draw of an UNMARKED story would be invisible but wrong: it would
+    // put an arbitrary pin above every other pin on the map.
+    expect(JSON.stringify(topFilter([]))).toContain("[]");
+  });
+
+  it("selects by url, the one property unique per group", () => {
+    expect(topFilter(["a", "b"])).toEqual(["in", ["get", "url"], ["literal", ["a", "b"]]]);
+  });
+
+  it("orders the leaves by the top flag, which must be a PROPERTY", () => {
+    // `circle-sort-key` is layout, and MapLibre resolves feature state in paint
+    // only — a `["feature-state"]` here is silently ignored, or rejects the
+    // layer. The leaves carry the flag as data precisely so this can work.
+    expect(leaves.layout?.["circle-sort-key"]).toEqual(["get", TOP_STATE_KEY]);
+    expect(JSON.stringify(leaves.layout)).not.toContain("feature-state");
+  });
+
+  it("keeps the clickable layers in drawn order, top-most first", () => {
+    // Whatever is drawn on top is what a reader thinks they are clicking.
+    expect(CLICKABLE_LAYER_IDS.indexOf(TOP_LAYER_ID)).toBeLessThan(
+      CLICKABLE_LAYER_IDS.indexOf(STORIES_LAYER_ID),
+    );
+    expect(CLICKABLE_LAYER_IDS).not.toContain(LABELS_LAYER_ID);
   });
 });
 

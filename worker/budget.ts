@@ -28,6 +28,7 @@
  * everywhere else the floor is what does the work.
  */
 
+import { SPIDERFY_ZOOM, coordKey } from "../lib/spiderfy.ts";
 import type { StoryGroup } from "../lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
@@ -51,14 +52,22 @@ export const MAX_BUDGET_ZOOM = 12;
  * Groups that never win a slot, even at MAX_BUDGET_ZOOM, are assigned
  * MAX_BUDGET_ZOOM + 1 — above tippecanoe's ceiling, so they are not rendered.
  *
- * This is a real cost and it is stated rather than hidden: with city-centroid
- * coordinates, co-located stories collide at EVERY zoom, so zooming never
- * separates them and the overflow is genuinely invisible rather than merely
- * deferred. The alternative — dumping the remainder at the deepest zoom — breaks
- * §9's "~30-60 pins at every zoom, not more" outright, and the §2.4 floor layer
- * already guarantees no country vanishes. `assignMinzoom` returns the overflow
- * count so worker/run.ts can report it (§8) instead of letting it decay quietly.
- * §6 decision 1's revisit trigger — spiderfy — is what shrinks this to zero.
+ * This is a real cost and it is stated rather than hidden. The alternative —
+ * dumping the remainder at the deepest zoom — breaks §9's "~30-60 pins at every
+ * zoom, not more" outright, and the §2.4 floor layer already guarantees no
+ * country vanishes. `assignMinzoom` returns the overflow count so worker/run.ts
+ * can report it (§8) instead of letting it decay quietly.
+ *
+ * **Amended 2026-08-14, when spiderfy landed.** This block used to say that
+ * co-located stories "collide at EVERY zoom, so zooming never separates them"
+ * and that the overflow was therefore genuinely invisible. That is no longer
+ * true: from `SPIDERFY_ZOOM` the client spreads a stack into legs and leaves, so
+ * a deferred story is reachable by zooming into its city. **The overflow number
+ * itself will move on the first run after this change and has not been re-read
+ * yet** — the coordinate cap frees slots at shallow zooms (a stack of 14 held 14
+ * of a tile's 15) while concentrating the competition at z9-12, and which effect
+ * dominates is a measurement, not a guess. Read it off the next run (§8) before
+ * drawing any conclusion about K.
  */
 export const NOT_RENDERED = MAX_BUDGET_ZOOM + 1;
 
@@ -103,6 +112,19 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
   for (let zoom = 0; zoom <= maxZoom; zoom++) {
     /** Slots already consumed in a tile by groups assigned at a shallower zoom. */
     const used = new Map<string, number>();
+    /**
+     * §6 decision 1's coordinate cap. GDELT places every story in a city at the
+     * SAME centroid, so below the spiderfy zoom a second story there is drawn
+     * exactly underneath the first: invisible, and holding a budget slot that
+     * another location could have used. Measured on the live archive, two thirds
+     * of all visible stories were in such a stack — see `lib/spiderfy.ts`.
+     *
+     * So below `SPIDERFY_ZOOM` a coordinate holds one story, the best one. At
+     * and above it the cap lifts, because that is exactly where the client can
+     * spread the stack into legs and leaves and the pins stop overlapping.
+     */
+    const occupied = new Set<string>();
+    const capped = zoom < SPIDERFY_ZOOM;
 
     // Pass 1: an already-assigned group still occupies its tile here. This is
     // what makes minzoom monotonic — deeper zooms inherit their ancestors'
@@ -113,16 +135,22 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
       const { x, y } = tileOf(group.lat, group.lon, zoom);
       const key = tileKey(x, y);
       used.set(key, (used.get(key) ?? 0) + 1);
+      if (capped) occupied.add(coordKey(group.lon, group.lat));
     }
 
     // Pass 2: fill what is left, best first.
     for (const group of ranked) {
       if (minzoom.has(group.id)) continue;
+      const coordinate = coordKey(group.lon, group.lat);
+      // Deferred, not dropped: it becomes eligible again at SPIDERFY_ZOOM, and
+      // because assignment is permanent the deferral cannot break monotonicity.
+      if (capped && occupied.has(coordinate)) continue;
       const { x, y } = tileOf(group.lat, group.lon, zoom);
       const key = tileKey(x, y);
       const count = used.get(key) ?? 0;
       if (count >= k) continue;
       used.set(key, count + 1);
+      if (capped) occupied.add(coordinate);
       minzoom.set(group.id, zoom);
     }
   }

@@ -3,14 +3,23 @@
 **This file is the single source of truth.** If anything in `spikes/`, a design
 doc, or a previous conversation contradicts it, this file wins.
 
-**Status:** **Phases 1, 2, 2.5 and 3 are complete**, and the 4-hourly worker has
-now run green in CI. **Phase 4 is in progress**: both layers are styled, the
-§2.2 outline works, **§2.3 is complete on both sides** — the index is published
-and the label gesture, the outline, the panel and the Global button are built and
-verified in a browser — and the **geotag-confidence treatment is complete in both
-halves**. **Its shipping gate, §5.2 decision 4, is discharged as of 2026-08-14.**
-What is left is the phone profile, one missing outline, and one payload number to
-read. Live: https://sonder-drab-eta.vercel.app/ .
+**Status:** **Phases 1, 2, 2.5, 3 and 6 are complete. Phase 5 is cut. Phase 4 is
+complete except for one item that needs hardware** — the phone profile — **and
+the `K` decision that waits on it.** Both layers are styled, the §2.2 outline
+works, **§2.3 is complete on both sides**, the **geotag-confidence treatment is
+complete in both halves**, its shipping gate (§5.2 decision 4) is discharged, the
+density budget is fixed and on `main`, and the popup has been replaced by the
+story panel. Live: https://sonder-drab-eta.vercel.app/ .
+
+> **One pre-registered obligation is weaker than it was, deliberately, and it is
+> the thing a fresh reader should check first.** §5.2 decision 3 requires the
+> measured accuracy to be *reachable from the product*. It used to be a masthead
+> link on every screen; the masthead was deleted on 2026-08-14 and the link now
+> lives in the panel footer, so **a visitor who never opens a story or a region
+> never sees a route to `/about`** — and that is exactly the visitor most likely
+> to read the map as fact. The trade was made knowingly and is recorded in
+> `app/page.tsx`; it is written here too so that closing the phase does not
+> quietly close this. See Phase 6.
 **Last updated:** 2026-08-14 (late), when **§5.2 decision 4 came back and the
 placement rule changed because of it.** An independent judge scored a fresh
 90-record draw: **pins 68.1% [53.8, 79.6], containers 83.3% [68.1, 92.1]**, no
@@ -55,9 +64,11 @@ on real data**: 15-16 features per tile at every zoom against tiles holding up t
 below under "The density budget never ran". **Every overflow figure taken before
 2026-08-14 counted an intention nothing acted on** — §2.4 has the re-read.
 
-**As of 2026-08-14 18:10 UTC those three changes are in the working tree and not
-yet on `main`, so every 4-hourly run is still publishing a budget-less archive.**
-Landing them is the first thing to do.
+**Landed on `main` as `995935b`, 2026-08-14.** The next scheduled run is the
+first archive this project has ever published with the budget actually applied.
+Confirm it the way §2.4 says to — read the per-tile feature counts, not the log
+line — because the failure this fix repairs was invisible in the log for the
+entire life of the project.
 
 **Two things were then deferred by decision, and both are deferred rather than
 cancelled:** the **phone profile** (§9's 4G target stays unverified on real
@@ -136,10 +147,14 @@ below: 57±1% on a steady pool, unmoved by the weak-city rule, and now backed by
 the first tile-level measurement of what the map actually keeps.** What is left
 of it is a `K` decision that the deferred phone profile gates.
 
-**The one thing open and unblocked is landing the density fix.** The three
-coupled changes in §2.4 are in the working tree, verified end to end on this
-machine against real data, and **not on `main`** — so every scheduled run is
-still publishing an archive with no budget in it.
+~~**The one thing open and unblocked is landing the density fix.**~~ **Landed
+2026-08-14 (`995935b`).** The three coupled changes in §2.4 are on `main`,
+verified end to end against real data.
+
+**Nothing in Phase 4 is now both open and unblocked.** What remains is one item
+that needs hardware this repo cannot stand in for — the phone profile — and the
+`K` decision that waits on it. Everything else in the phase is built, verified in
+a browser, and documented below.
 
 **Next action: finish Phase 4.** The pipeline is closed end to end — `worker/run.ts`
 runs the §3.2 flow 4-hourly under `.github/workflows/worker.yml` and publishes a
@@ -152,8 +167,14 @@ without a deploy.
 
 - **Both layers styled** (`lib/layers.ts`). Radius reads salience; the stops are
   where the measured distribution actually varies (p50 0.693, max 4.357 — half
-  of all stories sit at exactly one domain), not evenly spaced. Containers draw
-  as hollow rings, pins solid. Headlines are a symbol layer from z4 with
+  of all stories sit at exactly one domain), not evenly spaced. **The pin
+  identity was replaced 2026-08-14** — see the block at the top of `lib/layers.ts`
+  before changing any of it. Three states, all solid discs on one footprint:
+  a **pin** is `#D24F39` inside a white ring, an **approximate** (CONTAINER) is a
+  plain white disc, and the **top 5 stories on screen** are solid `#D24F39` and
+  drawn 1.15× proud. The old 22%-opacity container fill is gone: alpha reads as
+  "less important" when the claim is only "less precisely placed", and it
+  disappears entirely at the 3px end of the scale. Headlines are a symbol layer from z4 with
   `text-allow-overlap: false` and `symbol-sort-key` from salience, added
   **below the basemap's place labels** — see the collision measurement below
   before moving it.
@@ -162,8 +183,49 @@ without a deploy.
   touching it: the FIPS join is the only hard part and it is §3.4 all over again.
 - **A dev-only `window.__sonderMap` seam**, stripped from production builds
   (verified: 0 occurrences in `.next/static`).
+- **Spiderfy, and the coordinate cap that pairs with it** (`lib/spiderfy.ts`,
+  `worker/budget.ts`). GDELT gives city centroids, so co-located means *exactly*
+  the same coordinate; measured 2026-08-14, two thirds of every visible story was
+  drawn underneath another one (US z5: 52 stories at 25 locations; Chicago z9:
+  33 at 15, biggest stack 14). That cost twice — the stack rendered as one disc
+  with the others' rings bleeding out from behind it, and a 14-stack spent 14 of
+  its tile's 15 budget slots to show one location. **Below `SPIDERFY_ZOOM` (9)
+  the budget now admits one story per coordinate; at and above it the cap lifts
+  and the client spreads the stack.** The two halves import the same constant,
+  and **changing it requires a tile rebuild**, not just a deploy. The leaves are
+  a GeoJSON overlay computed from the rendered features, with pixel offsets put
+  back through the live camera, so a spider keeps its size at every zoom. The
+  best member keeps the anchor, which is what makes an overlay sufficient: the
+  stacked features underneath cannot be hidden individually in a vector tile, but
+  they sit exactly under the largest disc of the stack. **The top-5 highlight is
+  the one thing that can break that invariant, and it did** — `TOP_SCALE` draws a
+  marked story 15% proud of its footprint, so a marked story sitting third in a
+  stack poked out from behind the pin covering it and read as a salient pin drawn
+  *behind* an ordinary one (reported and fixed 2026-08-14). A displaced member is
+  now withheld from the feature-state flag (`displacedUrls`) and wears its
+  highlight on its **leaf**, which is the copy the reader can actually see.
+- **The top-5-on-screen highlight** (`lib/top.ts`, wired in `MapView.tsx`). Ranked
+  by salience among the features actually rendered, deduplicated by URL (world
+  copies and the §2.4 layer overlap each render one story several times), and
+  **never by tier-1** — §2.3 keeps that preference invisible and a highlight is
+  exactly the badge it forbids. Carried as MapLibre feature state, which needs
+  `promoteId: url` on the source; recomputed on `idle`, not `moveend`, because a
+  move ends before the tiles it uncovered have loaded. **The five are drawn a
+  second time, in a layer of their own above every other disc** (`TOP_LAYER_ID`,
+  filtered to the marked URLs). Draw order inside a circle layer is tile order,
+  so without it a marked pin was behind its neighbours as often as in front of
+  them; `circle-sort-key` cannot fix it, because sort key is a *layout* property
+  and feature state resolves in paint only. The spider leaves carry the flag as a
+  property instead, so there a sort key does work and is what orders them.
 - **The geotag-confidence treatment** (§5.2 decision 3), in both halves: the
-  hollow container ring above, and the popup's placement line (`lib/popup.ts`).
+  container's white disc above, and the placement line — which moved from the
+  popup into the story panel on 2026-08-14 and now comes off `PanelStory`
+  (`lib/story.ts`); `lib/popup.ts` is deleted.
+  **§2.1's "a container is never drawn as a pin" is amended for the top 5 only**:
+  a top-5 container draws solid orange like a top-5 pin, so for at most five
+  features on screen the identity answers "what should I read" instead of "how
+  exactly is this placed". Accepted knowingly 2026-08-14; it is the one place the
+  map claims a precision the pipeline did not measure.
   The pin half is uniform because grading it was measured and refused — see
   below, and do not re-derive the graded version from the out-of-sample numbers
   alone.
@@ -1379,7 +1441,8 @@ invisible except in *which* stories are on screen.
 |---|---|---|---|---|
 | **Default** | free pan and zoom anywhere | **none** | closed | per-tile top-K |
 | **Region** | **unchanged** | the clicked country or state | that region's top stories | per-tile top-K |
-| **Global** | a corner button; resets zoom to default | none | closed | per-tile top-K |
+| ~~**Global**~~ | ~~a corner button; resets zoom to default~~ | — | — | **REMOVED 2026-08-14** |
+| **Story** | **unchanged** | the clicked story's region | that story's panel | per-tile top-K |
 
 **Default** is the base state. The user scrolls freely and zooms wherever they
 like; zooming in makes more stories in that area reachable.
@@ -1388,8 +1451,19 @@ like; zooming in makes more stories in that area reachable.
 That region outlines red and a left-side panel opens listing its top stories.
 The camera does not move.
 
-**Global** is not a structural state. It is a preset of Default that returns the
-camera to whole-planet zoom and closes the panel.
+**Story** is entered by clicking a pin, and replaced the popup on 2026-08-14. It
+is the same panel surface as Region — same component family, same CSS, same
+footer — which is why §2.6's content rule could be moved onto one type
+(`PanelStory`) instead of being asserted twice.
+
+~~**Global** is not a structural state.~~ **The Global button was removed
+2026-08-14**, in the pass that deleted the masthead. It was never a structural
+state — a preset of Default — and it is recorded here rather than deleted because
+its *absence* is now load-bearing: `MapView` adds a `NavigationControl` with
+`showCompass: false` and nothing else, so **the only way back to whole-planet is
+repeated clicks on zoom-out** (or a pinch). Not a dead end, but no one-gesture
+reset — the "I am lost, take me home" affordance is gone. Cheaper to reinstate
+deliberately than to rediscover from a user.
 
 > **This replaced the original "Country" state on 2026-08-13, and two things
 > changed.** The old rule locked onto a country and auto-zoomed, on the theory
@@ -1774,6 +1848,31 @@ salience; cross-class order is settled by the first key.
 
 - **Link-out only.** Title, source, link. **Never reproduce article text.** This
   is a copyright constraint, and the UI is built early, so it is load-bearing.
+
+  > **Amended 2026-08-14, deliberately, when the popup became the story panel.**
+  > The rule is unchanged — no article text is reproduced anywhere — but the panel
+  > now shows the article's **own `og:image`**, hotlinked from the publisher's CDN
+  > and never proxied through Vercel. Two consequences worth naming rather than
+  > discovering: the project now **fetches the article page itself**
+  > (`app/api/og/route.ts`, server-side, meta tags only, page body discarded), and
+  > the reader's browser loads a picture from the publisher's origin. Neither was
+  > true before. The enforcement point moved with the surface: `PanelStory` in
+  > `lib/story.ts` is now the whole of what a story may render, `panelStory()` is
+  > its only constructor, and `lib/story.test.ts` asserts the field list is exactly
+  > six names. `lib/popup.ts` and its test are deleted.
+  >
+  > **Measured 2026-08-14, against 20 real GDELT article URLs from the judged
+  > draw: 19 return an `og:image`, 1 declares none, 0 fetches fail.** Worth having
+  > because the endpoint answers `{"image": null}` for *every* outcome — a refused
+  > host, a timeout, a page with no tag and a broken guard are one response from
+  > outside — so "it returns null" is not evidence of anything and the happy path
+  > has to be exercised deliberately. **`app/**` is outside vitest's include list**
+  > (`vitest.config.ts`), so this is a hand measurement, not a test that will
+  > re-run. The guard predicates it depends on *are* tested, in
+  > `lib/safe-url.test.ts`, which is why they live there. Re-measure by hand if
+  > the parse or the fetch changes; the section fronts of large publishers are a
+  > bad sample for it, because they legitimately declare no `og:image` and their
+  > `<head>` can exceed the 256 KB cap.
 - **Public repo.** This is what makes GitHub Actions free.
 - **English-only**, achieved by consuming `lastupdate.txt` and **not**
   `lastupdate-translation.txt`. Approximately English, not exactly.
@@ -1994,7 +2093,7 @@ path, and there is no fallback.** State this on the About page.
 ### Phase 0 — Reconcile the spec · 15 min
 Done when this file replaces the old one and nothing else claims to be the plan.
 
-### Phase 1 — Finish the spike · 2-3 evenings · *partly done*
+### Phase 1 — Finish the spike · 2-3 evenings · *closed*
 Already measured: access paths, volume, titles, location quality, source
 concentration, theme distribution, FIPS coverage.
 
@@ -2101,10 +2200,10 @@ thresholds**, both clear.
    > — looked strong on the out-of-sample draw (33% against 78%, p=0.053, on six
    > pins) and went flat on the larger sample (58% against 64%, p=0.74). FINDINGS
    > §9.1. So the popup names the place the rule chose and says a rule chose it,
-   > identically on every story; `lib/popup.ts` holds both the rule and the
-   > table. **Phase 6 still owes the interval and the method** — this line does
-   > not discharge that, it just stops the map from making a silent claim in the
-   > meantime.
+   > identically on every story. ~~`lib/popup.ts` holds both the rule and the
+   > table.~~ **Since 2026-08-14 the panel holds it** (`lib/story.ts`); popup.ts
+   > is deleted. ~~**Phase 6 still owes the interval and the method**~~ — **paid,
+   > 2026-08-14**: `/about` states both, from `lib/accuracy.ts`.
 4. ~~**Before Phase 4 ships, get an independent judge on a fresh rule-H draw.**~~
    **Done 2026-08-14**, `judged-c29ce-90`, 90 records disjoint from all 170
    previously judged URLs. Both thresholds clear again and the pins' lower bound
@@ -2124,7 +2223,7 @@ thresholds**, both clear.
 unstratified 50 turned out to yield 32 judgeable pins rather than 50, and again
 when decision 4's independent draw was set at 90.
 
-### Phase 2 — Skeleton and first deploy · 1-2 evenings · *in progress*
+### Phase 2 — Skeleton and first deploy · 1-2 evenings · *closed 2026-08-10*
 Public Next.js repo. MapLibre ≥5.0 + MapTiler rendering a hand-made PMTiles
 archive with a few fake points. Push to Vercel.
 
@@ -2226,7 +2325,7 @@ Four things worth carrying into Phase 3:
 Not done, on purpose: no dedupe beyond normalized title, no ranking, no budget,
 no freshness stamp, and the map does not update itself. The masthead says so.
 
-### Phase 3 — Ingestion + grouping · 7-9 evenings · *the big one*
+### Phase 3 — Ingestion + grouping · 7-9 evenings · *the big one* · *closed*
 Build `worker/` per §3.3. Everything in the §3.2 data flow.
 
 Critical details, each of which is a real bug avoided:
@@ -2255,25 +2354,29 @@ Critical details, each of which is a real bug avoided:
   make a group tier-1-fresh. No overlap today; it is a one-line ordering guarantee
   against a future list edit
 
-### Phase 4 — The map · 5-7 evenings
+### Phase 4 — The map · 5-7 evenings · *closed 2026-08-14 except the phone profile*
 2D Mercator. Two tile layers (stories + country-top) over the MapTiler basemap,
 plus boundaries for the red outline.
 
 The states from §2.3: free pan/zoom by default; clicking a country or state
 label outlines that region and opens a panel of its top stories, camera
-unchanged; and a corner button that resets to whole-planet. All render the same
-content — only the highlight, the panel and (for Global) the camera differ.
+unchanged; clicking a pin opens that story's panel. All render the same content —
+only the highlight and the panel differ.
 
-> **Rewritten 2026-08-13.** This paragraph described country lock-on with
-> auto-zoom until then. §2.3 carries the new rule and why it changed; the only
-> camera move left in the feature is the Global button.
+> **Rewritten 2026-08-13**, when this paragraph still described country lock-on
+> with auto-zoom, and **again 2026-08-14**, when the Global button was removed
+> and the popup became the story panel. **The feature now moves the camera
+> nowhere at all** — every state is a highlight and a panel over a camera the
+> user alone controls. §2.3 carries the rule and what the removal cost.
 
 Container pins, red click-outline, symbol layer with `text-allow-overlap: false`
 and `symbol-sort-key` from salience. Relative freshness stamp, explicit stale
 notice past 2× the cadence. Geotag confidence treatment lands here — **done
-2026-08-13**, in both halves: the hollow container ring (`lib/layers.ts`) and the
-popup's placement line (`lib/popup.ts`), the second of which is uniform across
-pins because §5.2 decision 3's note says grading was measured and refused.
+2026-08-13**, in both halves: the container's disc (`lib/layers.ts` — a hollow
+ring until the 2026-08-14 pin-identity pass) and the placement line, which lived
+in `lib/popup.ts` until the panel replaced the popup and now comes off
+`PanelStory` in `lib/story.ts`. The second is uniform across pins because §5.2
+decision 3's note says grading was measured and refused.
 
 **Profile against the performance targets on a real mid-tier phone**, not a
 desktop throttle.
@@ -2299,12 +2402,27 @@ judged ≥6 to be genuinely underreported.
 **The 2-3 evenings go to Phase 6**, which was already the phase most likely to be
 cut for time and is probably the stronger portfolio artifact anyway.
 
-### Phase 6 — About / methodology · 3-5 evenings · *started 2026-08-14*
-**The page is built and live at `/about`** (`app/about/page.tsx`), reachable from
-the map by a "How this works" link in the masthead — §5.2 decision 3 asks for the
-accuracy to be *reachable from the product*, not merely to exist. Every item on
+### Phase 6 — About / methodology · 3-5 evenings · *closed 2026-08-14*
+**The page is built and live at `/about`** (`app/about/page.tsx`). Every item on
 the "must state" list below is on the page. It is a static prerender, so it costs
 nothing per visit.
+
+> **The route to it got narrower the same day, and this is the open question the
+> phase closes with.** §5.2 decision 3 asks for the accuracy to be *reachable
+> from the product*, not merely to exist. It was a masthead link, visible on
+> every screen. The masthead was deleted for the map's top-left corner, and
+> "How this works" moved into the panel footer — `StoryPanel` and `RegionPanel`
+> both render it, so it appears when a story or a region is open **and at no
+> other time**. The landing state of the site now contains no path to the
+> methodology at all.
+>
+> **This is a judgement call, not a defect, and it was made knowingly** — the
+> reasoning is in `app/page.tsx` and it is a real trade: the link was costing the
+> product its best corner. But the obligation exists *because* pins measured
+> 68.1%, and the reader who bounces without clicking anything is the one who
+> takes the map most literally. **If it is ever reinstated, the cheapest honest
+> version is a persistent low-corner link**, not a return of the masthead. Do not
+> resolve this by editing decision 3.
 
 **Two things about it are load-bearing and easy to undo by accident:**
 
@@ -2320,13 +2438,15 @@ nothing per visit.
    draw is ever judged, **replace the table and the note together** — updating
    one without the other is how the page starts lying.
 
-> **The masthead link cost a measurement, and the next line added there will
-> too.** `.panel` is opaque at z-index 3 and positioned by a hardcoded `top`, so
-> it had been sitting *over* the new link at both widths — the link stayed
-> present and clickable and invisible, which is the failure shape this project
-> keeps finding. The offsets are now 108px / 126px at ≤520px against a masthead
-> bottom of 96px / 114px, measured in a browser. Re-measure on any masthead
-> change.
+> ~~**The masthead link cost a measurement, and the next line added there will
+> too.**~~ **Obsolete 2026-08-14 — the masthead is deleted and those offsets
+> describe nothing.** Kept because the *failure shape* is the durable part:
+> `.panel` was opaque at z-index 3 and positioned by a hardcoded `top`, so it sat
+> **over** the link at both widths and the link stayed present, clickable and
+> invisible. That is the shape this project keeps finding, and the panel is
+> full-bleed now, which is a larger opaque surface than the one that caused it.
+> Any future chrome placed over the map gets measured in a browser, not reasoned
+> about.
 
 **Closed 2026-08-14: the page can no longer disagree with the judge in silence.**
 The figures were hand-copied out of this document, so a re-judged draw would have
@@ -2397,12 +2517,12 @@ content model. No topic classification is needed anywhere in this project.
 
 | # | Decision | Provisional | Why |
 |---|---|---|---|
-| 1 | Zoom ceiling | **z12 as built**, not the z10 this row proposed | GDELT gives city centroids, so all Chicago stories share one coordinate and do not spread on zoom. Revisit with spiderfy if it feels flat. **Correction 2026-08-13:** this row said z10 while §3.1's locked flags say `-z12` and `worker/tiles.ts` has always passed `-z12`. The build is the truth; the row was never updated. Every overflow figure in this document is against z12 |
+| 1 | Zoom ceiling | **z12 as built**, not the z10 this row proposed | GDELT gives city centroids, so all Chicago stories share one coordinate and do not spread on zoom. Revisit with spiderfy if it feels flat. **Correction 2026-08-13:** this row said z10 while §3.1's locked flags say `-z12` and `worker/tiles.ts` has always passed `-z12`. The build is the truth; the row was never updated. Every overflow figure in this document is against z12. **Resolved 2026-08-14: spiderfy is built** (`lib/spiderfy.ts`), and with it a coordinate cap in the budget — below z9 a coordinate carries its best story only, at z9 and above the stack is spread into legs and leaves. Measured before the fix: US z5 showed 52 stories at 25 locations, biggest stack 11; Chicago z9 showed 33 at 15, biggest stack 14. Two thirds of every visible story was drawn underneath another one |
 | 2 | Cadence | **4-hourly** | Cuts Actions minutes and tile builds 4×, imperceptible against a 24h window, serves "stability over freshness" |
 | 3 | Cron trigger | **`schedule` only**, plus a monthly calendar reminder | The 60-day auto-disable is repo-*inactivity* based, not elapsed time. Drops a third-party service and a never-rotating `actions: write` PAT |
 | 4 | State storage | **append-only per-run shards**, expired by filename | A 25-40 MB read-modify-write JSON is a database without a database's properties. Shards delete three resilience mechanisms |
 | 5 | ~~Red-outline precedence when two are lit~~ | **RESOLVED 2026-08-13 — there is never more than one.** Every click clears both outlines and the panel before it establishes anything, so a container click inside a locked region *replaces* the region outline rather than joining it | The row assumed a region lock and a §2.2 container click-reveal could be lit together and proposed distinguishing them by weight. Building it made the simpler answer obvious: one red outline and one panel, or the user cannot say which of the two the map claims is selected. Two lit outlines with a weight difference asks the reader to decode a legend that is not on screen. If two ever do need to co-exist, the brighter-and-thicker treatment is still the right shape — do not introduce a second colour |
-| 6 | ~~Country auto-zoom level~~ | **SUPERSEDED 2026-08-13** | §2.3 no longer moves the camera when a region is selected, so there is no country fit to compute. The Global button is the only camera move left, and its target is fixed (whole planet). Kept as a row because the reasoning — a fixed zoom is wrong for both Monaco and Russia — returns the moment anyone re-proposes auto-zoom |
+| 6 | ~~Country auto-zoom level~~ | **SUPERSEDED 2026-08-13** | §2.3 no longer moves the camera when a region is selected, so there is no country fit to compute. ~~The Global button is the only camera move left~~ — **and it was removed 2026-08-14, so the product now moves the camera nowhere at all.** Kept as a row because the reasoning — a fixed zoom is wrong for both Monaco and Russia — returns the moment anyone re-proposes auto-zoom |
 | 7 | Blob transfer allowance | **RESOLVED 2026-08-13 by arithmetic — it is not the binding limit, and the exact allowance does not need to be known.** MapTiler binds first, by more than an order of magnitude | Measured on the deployed site: an arrival at world zoom costs **~440 KB from Blob** — `manifest.json` 824 B plus six `206` range requests into the 21.9 MB archive (196 KB, 167 KB, 41 KB, 17 KB, 9.5 KB, 7 KB). Opening a region panel adds the index, 328 KB. So a generous visit is ~0.8 MB. **MapTiler pauses the map at ~330-520 visits/month** (§3.1), and 500 visits × 0.8 MB is **~400 MB** — so Blob transfer would have to be capped below that to bind first, which no Vercel plan is. The dashboard number was never the thing worth knowing; the ratio was. Recheck if the archive grows several-fold or if the basemap moves to OpenFreeMap, which removes the ceiling that is currently doing the limiting |
 | 8 | Local tile toolchain on Windows | **RESOLVED 2026-08-09 — route A, real tippecanoe via WSL** | tippecanoe has no native Windows build, but **Ubuntu 24.04 ships `tippecanoe 2.49.0` in apt**, so this is one command and not a source build: `wsl -d Ubuntu -- sudo apt-get install -y tippecanoe`. Builder's call: the Phase 3 `minzoom` / top-K work is the riskiest code in the project and wants the real toolchain locally, not a `geojson-vt` stand-in. `scripts/build-fake-tiles.sh` detects native tippecanoe first and shells into WSL otherwise, so the same script works locally and in CI. **Installed and in use since 2026-08-10.** `wsl -d Ubuntu -- which tippecanoe` answers `/usr/bin/tippecanoe`, and it built both the Phase 2 archive and the 2026-08-13 boundaries rebuild. This row read *"still pending the one `sudo` password"* until 2026-08-13, three days after it stopped being true — §0 rule 1. Docker 29.0.1 is installed with its daemon stopped and is the unused fallback. **Amended 2026-08-14: the apt half of this row is dead.** 2.49.0 is *below* the correctness floor §2.4 now enforces — it eats every feature with an explicit `minzoom` — so "one command and not a source build" is no longer available at any price, here or in CI. Both are on **2.79.0 built from source**; locally that is `/usr/local/bin/tippecanoe`, which shadows apt's `/usr/bin` copy on `PATH`. The routing decision (WSL over Docker or a stand-in) is unchanged and still right; only its cheap install is gone |
 | 9 | Tier-1 list membership | **RESOLVED 2026-08-13 — keep all 28, unchanged.** The concern that forced this row does not survive real data | The row was provisional because `newsweek.com` and `latimes.com` — the two members most arguable as papers of record — were **26% of the tier-1 records in the three-hour spike**, so the thinnest part of the list was carrying a quarter of a privileged class. **Measured on the live 24-hour index, they are 4% and 5%.** The class is now led by `independent.co.uk` 16%, `scmp.com` 16%, `theguardian.com` 16%, `bbc.co.uk` 15%, with `aljazeera.com` present at 6% after returning **zero** in the spike. The spike's ranking was a small-sample artifact, and the list now looks like what it was built to be. 15 of 28 domains still return nothing (Reuters, AP, NYT, WaPo, WSJ…) and still cost nothing. Also measured: tier-1 is **1.9% of groups but 6.2% of panel rows** — the §2.5 comparator promoting them roughly threefold, which is the rule working, visible for the first time |
@@ -2442,14 +2562,24 @@ single-location.
    has no field an article body could arrive in, so the constraint is enforced by
    the type rather than by a rendering choice.
 
-   > **Closed for the popup, 2026-08-13.** Its HTML now comes from one pure
-   > function, `storyPopupHtml` in `lib/popup.ts`, and `popup.test.ts` strips the
-   > tags and asserts the rendered text is **exactly** title, source, placement
-   > line and "Read at source" — so a feature that started carrying prose fails a
-   > test rather than shipping. The same test pins the other rule the popup could
-   > break: no field but those four may reach it, `tier1` least of all, because
-   > §2.3 says the preference is invisible and a badge is what that forbids. The
-   > panel still has no DOM assertion; its type is doing the work.
+   > **Closed for the popup, 2026-08-13.** Its HTML came from one pure function,
+   > `storyPopupHtml` in `lib/popup.ts`, and `popup.test.ts` stripped the tags and
+   > asserted the rendered text was **exactly** title, source, placement line and
+   > "Read at source".
+   >
+   > **The popup is gone as of 2026-08-14 — a click now opens the story panel —
+   > and the guarantee was carried over rather than allowed to lapse with it.**
+   > `PanelStory` (`lib/story.ts`) is the whole content model, `panelStory()` is
+   > its only constructor, and `lib/story.test.ts` asserts the field list is
+   > exactly `date, kind, place, source, title, url` and that `salience`,
+   > `domains`, `tier1`, `region`, `country` and an injected `body` are all
+   > dropped. `tier1` matters most: §2.3 says the preference is invisible, and a
+   > badge is what that forbids. **This is now a stronger assertion than the
+   > popup's**, because it constrains the data rather than the rendered string —
+   > `nearby.test.ts` re-asserts the same six names on every neighbour.
+   >
+   > Both list surfaces are still type-enforced with no DOM assertion:
+   > `RegionStory` for §2.3's panel, `PanelStory` for "Stories Nearby".
 3. **Tile fetch failure is undefined.** A 404 or timeout currently produces a
    blank region with no explanation.
 
