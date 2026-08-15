@@ -82,21 +82,10 @@ export function gkgToMillis(stamp: string): number {
   return Date.UTC(year, month - 1, day, hour, minute, second);
 }
 
-/**
- * The panel's per-story age line.
- *
- * Coarser than the run's freshness stamp and deliberately so: §3.5 makes a story
- * up to 48 hours old, assembled from 15-minute bundles, so "22m ago" would claim
- * a precision the pipeline does not have anywhere except by accident.
+/*
+ * `storyAge` was here. It rendered "3h ago" for the region panel's old meta
+ * line, lost its last caller when that line went, and was deleted on 2026-08-14
+ * when the panels went relative — a second, differently-worded age formatter
+ * with no callers is a trap for whoever writes the next list. `publishedAt` in
+ * `lib/story.ts` is the one both panels use now, over `lib/age.ts`'s ladder.
  */
-export function storyAge(date: string, now: number): string {
-  const at = gkgToMillis(date);
-  if (Number.isNaN(at)) return "";
-
-  const minutes = Math.floor((now - at) / 60_000);
-  if (minutes < 60) return "just now";
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}

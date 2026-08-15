@@ -1,6 +1,25 @@
 import type { Metadata } from "next";
+import { Newsreader } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
+
+/**
+ * The one typeface on the site (2026-08-14). Self-hosted by `next/font`, so
+ * there is no request to Google at runtime and no FOUT to design around.
+ *
+ * The **variable** axis is loaded rather than a fixed set of weights: the map
+ * chrome runs from 11px labels to a 26px place heading, and one variable file is
+ * smaller than the three static cuts that range would otherwise need.
+ *
+ * Exposed as a CSS variable rather than applied by class because `globals.css`
+ * is where every rule that sizes text already lives — see the `--font-body`
+ * declaration on `body` there.
+ */
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-newsreader",
+});
 
 export const metadata: Metadata = {
   title: "Sonder — a map of current world news",
@@ -25,7 +44,7 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={newsreader.variable}>
       <body>
         {children}
         <Analytics />

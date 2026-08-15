@@ -4,19 +4,34 @@
   box-sizing: border-box;
 }
 
+/* One typeface for the whole site (2026-08-14): Newsreader, loaded and
+   self-hosted by `next/font` in app/layout.tsx, which sets --font-newsreader on
+   <html>. The stack behind it is what paints during the swap and on the one
+   machine where the font file fails — serif fallbacks, so the substitution
+   changes the metrics rather than the voice.
+
+   It is set here on `body` rather than by a class on every element because a few
+   places reset `font` wholesale (`.panel__list button`, `.global` controls);
+   those use `font: inherit`, so they follow this and nothing has to remember. */
 html,
 body {
   margin: 0;
   height: 100%;
   background: #0d0f12;
   color: #f2f4f7;
-  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 15px/1.45 var(--font-newsreader), Newsreader, Georgia, "Times New Roman", serif;
 }
 
 main {
   position: relative;
   height: 100vh;
   height: 100dvh;
+  /* The collapse tab hangs 30px past the panel's right edge, and the panel
+     itself sits at translateX(-100%) when collapsed — both stick out of the
+     viewport. Without this clip they extend the scrollable area and the page
+     grows a horizontal scrollbar, on a page whose whole premise is that it
+     never scrolls. */
+  overflow: hidden;
 }
 
 /* Scoped to `main` on purpose: MapLibre stamps `maplibregl-map` onto this same
@@ -29,48 +44,42 @@ main .map {
   inset: 0;
 }
 
-/* right: 0 with the padding is what keeps the subtitle clear of MapLibre's zoom
-   control on a phone. The Phase 2 copy was short enough to fit beside it; the
-   Phase 2.5 copy is not, and ran underneath the +/- buttons at 390px. */
-.masthead {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  padding: 12px 60px 22px 16px;
-  /* Three stops, not two. A straight fade to transparent puts the subtitle at
-     roughly 30% plate, which reads fine over Phase 2's dark local style and
-     nearly disappears over the light streets-v2 basemap in production. Hold the
-     plate through the text, then fade. */
-  background: linear-gradient(
-    to bottom,
-    rgba(13, 15, 18, 0.9) 0%,
-    rgba(13, 15, 18, 0.72) 60%,
-    transparent 100%
-  );
-  pointer-events: none;
-}
+/* §2.3's freshness stamp — the only survivor of the masthead, which was deleted
+   on 2026-08-14 along with its wordmark, its subtitle and the dark plate they
+   sat on.
 
-.masthead h1 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.02em;
-}
+   **Top-right, and it is only free because the zoom control moved.** MapLibre's
+   NavigationControl held this corner until the same change docked it
+   bottom-right (`MapView.tsx`); putting the stamp here before that would have
+   run it under the +/- buttons.
 
-.masthead p {
-  margin: 2px 0 0;
-  font-size: 12px;
-  opacity: 0.85;
-}
+   No plate of its own. The band it used to sit on is what the user asked to
+   remove, so legibility over a light basemap comes from the text-shadow instead
+   — the stamp is one short line, so a shadow can do what a 100px-tall gradient
+   was doing.
 
-/* §2.3's freshness stamp. Quieter than the subtitle above it — it is a fact
-   about the data, not part of the pitch — until it goes stale, where §8 wants it
-   read rather than skimmed past. */
+   `pointer-events: none` because it is a label, not a control: it overlaps the
+   map, and a drag started on it must reach the map underneath.
+
+   **z-index 2 — UNDER the panels (3), and that is the mobile case.** Below
+   520px the story panel is 100vw, so its close button lands in this exact
+   corner; at equal z-index the stamp wins on DOM order and prints over the hero
+   photo, on top of the ×. Letting the panel cover it costs nothing — the stamp
+   is still there when the panel closes — and on desktop the panel is 340px wide
+   and never reaches this corner at all. */
 .freshness {
-  margin: 4px 0 0;
-  font-size: 11px;
+  position: absolute;
+  top: 10px;
+  right: 16px;
+  z-index: 2;
+  margin: 0;
+  max-width: min(60vw, 340px);
+  font-size: 13px;
   letter-spacing: 0.02em;
-  opacity: 0.65;
+  text-align: right;
+  opacity: 0.9;
+  text-shadow: 0 1px 6px rgba(13, 15, 18, 0.9);
+  pointer-events: none;
 }
 
 .freshness--stale {
@@ -87,6 +96,14 @@ main .map {
    variant — so on the light streets-v2 basemap it washes out and stops meeting
    the "attribution stays visible" requirement. The plate gives it the ground it
    was designed for without altering the mark. */
+/* §2.6: "MapTiler attribution and logo stay visible."
+
+   The panel covers this corner when it is open, and the earlier fix for that was
+   to raise the logo to z-index 4 so it floated over the panel. That is undone
+   here: the panel now carries its own copy in its footer
+   (`.maptiler-logo--panel`), which is what the mark is supposed to look like
+   when the panel is up, so this one goes back UNDER the panel at 2. Both are the
+   same component — see components/MapTilerLogo.tsx for why that matters. */
 .maptiler-logo {
   position: absolute;
   left: 10px;
@@ -105,132 +122,264 @@ main .map {
   height: auto;
 }
 
-/* Story popups.
+/* The panel's copy: in normal flow inside the footer, not pinned to the
+   viewport. Only the POSITIONING is unwound — otherwise it would land on top of
+   the map's copy at the same absolute coordinates and the mark would be drawn
+   twice in one place.
 
-   maplibre-gl.css draws the popup white and sets no text colour, so the content
-   inherited `body { color: #f2f4f7 }` — near-white on white, about 1.1:1, which
-   made every story title and source unreadable while the link stayed visible on
-   its UA blue. Dark plate instead of dark text: it matches the masthead and the
-   notices, and it reads over both the dark local style and the light streets-v2
-   basemap. The dark plate started as the legibility floor; §5.2 decision 3's
-   geotag-confidence line (`.popup__place`, below) is what Phase 4 added on top.
-
-   The tip is a CSS triangle made of borders, so its colour lives on whichever
-   border faces the popup — one rule per anchor, all eight, or the arrow stays
-   white against a dark bubble on half the pins. */
-main .maplibregl-popup-content {
-  background: #12151a;
-  color: #f2f4f7;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+   **Nothing here may change its size.** This carried a smaller padding and a
+   92px image until 2026-08-14, against the map copy's 110px, so the same
+   required mark was visibly two different sizes depending on whether a panel
+   was open — which is the one thing rendering it from a single component was
+   supposed to make impossible. If a size ever needs changing, change it on
+   `.maptiler-logo` above, where both copies read it. */
+.maptiler-logo--panel {
+  position: static;
+  z-index: auto;
 }
 
-main .maplibregl-popup-content a {
-  color: #7cc0ff;
-}
+/* The panel — ONE set of rules, worn by both `StoryPanel` and `RegionPanel`.
 
-/* §5.2 decision 3, the pin half of the geotag-confidence treatment: where the
-   rule put this story, and that a rule put it there. Same weight as the panel's
-   meta line — it is context for the headline, not a competing claim, and at 0.6
-   over the plate it still clears 4.5:1. It is deliberately identical on every
-   story: `lib/popup.ts` has the measurement showing there is no per-pin signal
-   to grade on. */
-main .popup__place {
-  display: inline-block;
-  margin-bottom: 4px;
-  font-size: 11px;
-  opacity: 0.6;
-}
+   It began as the story panel, replacing the map popup: the dark bubble anchored
+   to a dot was the wrong shape for a headline, a place, a timestamp and a list of
+   neighbours, and the popup's whole legibility problem (maplibre-gl.css draws it
+   white and sets no text colour, so content inherited near-white on white at
+   ~1.1:1) went with it. This is an ordinary element we own, so it is styled and
+   not fought.
 
-main .maplibregl-popup-close-button {
-  color: #f2f4f7;
-  opacity: 0.7;
-  font-size: 16px;
-  padding: 0 6px;
-}
+   **The region panel was a separate dark floating card until 2026-08-14** and is
+   now this, which is why these rules are named `.panel__*` rather than
+   `.story__*`. §2.3 allows exactly one panel open at a time and the click handler
+   in MapView enforces it; two panels that LOOKED different made the same slot
+   read as two features, and the region card's ~1px dark border over the map was
+   the older, weaker design of the two. A country now opens the same purple
+   column a story does — flag in the hero instead of an og:image, "Top stories"
+   instead of "Stories Nearby", and no headline block, because a country is not
+   an article.
 
-main .maplibregl-popup-close-button:hover {
-  background-color: rgba(255, 255, 255, 0.08);
-  opacity: 1;
-}
+   Shared styling is the point, not a coincidence: if the two ever diverge again
+   it should be because someone chose to add a modifier here, not because two
+   stylesheets drifted.
 
-main .maplibregl-popup-anchor-top .maplibregl-popup-tip,
-main .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
-main .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
-  border-bottom-color: #12151a;
-}
+   **`top: 0`, because the masthead is gone (2026-08-14).** The offset used to be
+   108px/126px, measured off the masthead's last line of text so the panel did
+   not cover the About link. With nothing above it, any offset would just be a
+   strip of map the panel refuses to use.
 
-main .maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
-main .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
-main .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
-  border-top-color: #12151a;
-}
+   **Full-bleed, not a floating card.** `bottom: 0` and `left: 0` rather than a
+   margin and a max-height: the panel runs the full height of the viewport and
+   sits flush against the left edge. A card that
+   shrink-wrapped its content left the accent colour ending mid-screen with a
+   strip of map below it, which read as the panel having failed to load the rest.
+   Fixing the height also fixes the scroll: the height comes from top/bottom, so
+   a long "Stories Nearby" list scrolls INSIDE the panel and the page still never
+   scrolls (`main` is the viewport).
 
-main .maplibregl-popup-anchor-left .maplibregl-popup-tip {
-  border-right-color: #12151a;
-}
-
-main .maplibregl-popup-anchor-right .maplibregl-popup-tip {
-  border-left-color: #12151a;
-}
-
-/* §2.3's region panel. Left side, under the masthead, above the map.
-
-   `max-height` plus its own scroll rather than a fixed height: ten stories with
-   long headlines is taller than a phone, and the page itself must never scroll —
-   `main` is the viewport and the map fills it. */
-/* `top` clears the masthead, so it is a measurement and not a taste: the panel
-   is opaque and z-index 3, so anything of the masthead's below this line is
-   covered rather than crowded. Phase 6 added the "How this works" link, taking
-   the masthead's bottom text to 96px at desktop and 114px at 390px — the old
-   84px / 108px put the panel straight over that link, which is a silent failure
-   (the link is still there, still clickable, and invisible). Re-measure both of
-   these if a line is ever added to or removed from the masthead. */
+   **This lands on top of the MapTiler logo, which §2.6 requires stay visible.**
+   That is handled where the logo is styled, not here — it is raised above this
+   panel. Do not lower it. */
+/* **`.panel` positions and slides; `.panel__scroll` holds and scrolls.** That
+   split exists for one reason: the collapse tab hangs 30px off the right edge,
+   and `overflow-y: auto` clips BOTH axes — on the single element this used to
+   be, the tab was simply invisible. So the outer element must not clip, which
+   means the scrolling has to move inward. */
 .panel {
   position: absolute;
-  top: 108px;
-  left: 12px;
+  top: 0;
+  bottom: 0;
+  left: 0;
   z-index: 3;
-  width: min(340px, calc(100vw - 24px));
-  max-height: calc(100% - 144px);
-  overflow-y: auto;
-  padding: 12px 14px 14px;
-  border: 1px solid #2c3138;
-  border-radius: 8px;
-  background: rgba(13, 15, 18, 0.94);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  /* 420, up from 340 (2026-08-14). Newsreader is a text face with a small
+     x-height for its size, and at 340px the headline broke to four lines while
+     "Stories Nearby" ran to three each — the panel read as a column of fragments
+     rather than of headlines. Everything inside went up with it; the widths and
+     the type sizes are one decision, not two. */
+  width: min(420px, 100vw);
+  color: #ffffff;
+  /* Reduced-motion is handled once, globally, at the bottom of this file — it
+     forces every transition to 0.01ms, so the slide degrades to a jump here
+     with no second guard. */
+  transition: transform 220ms ease;
 }
 
-/* The masthead subtitle wraps to two lines below ~520px, which pushes the
-   freshness stamp and the about link down under the panel's top edge. Measured
-   at 390px: the link's bottom sits at 114px, so the panel starts at 126px. */
+/* Collapsed: the whole column steps off the left edge, tab included. The tab
+   sits at `right: -30px`, so after the shift it lands at 0..30px — flush
+   against the viewport edge, which is the Google Maps behaviour. */
+.panel--collapsed {
+  transform: translateX(-100%);
+}
+
+.panel__scroll {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow-y: auto;
+  /* The accent purple, #373666.
+
+     **One flat colour, not a family (2026-08-14).** The panel used to be three
+     shades — #4E4D8F for the body, #43427D behind the hero, #55549B for the
+     list and footer — layered to separate its sections. They are all this now,
+     so the panel reads as a single surface and the sections are separated by
+     the space and the type alone. Anything below that still needs to sit
+     "on" the panel should use opacity or a filter rather than reaching for a
+     fourth purple. */
+  background: #373666;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+
+  /* A thin, self-effacing scrollbar (Firefox half). The platform default is a
+     wide grey slab down the middle of a designed surface. Scoped here rather
+     than set globally on purpose: /about is a document and should keep the
+     scrollbar its reader's OS gives it. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+
+/* The WebKit/Blink half of the same thing. Both are needed — neither syntax is
+   supported by both engine families. */
+.panel__scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel__scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel__scroll::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.panel__scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* The pull-out tab. Vertically centred on the panel's right edge, rounded on
+   the outer side only, so it reads as a handle attached to the column rather
+   than a floating button. */
+.panel__tab {
+  position: absolute;
+  top: 50%;
+  right: -30px;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  border-radius: 0 6px 6px 0;
+  background: #373666;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Brightness, not a second colour. The panel is one flat purple as of
+   2026-08-14, so the lighter hex this used to swap to no longer exists — and
+   re-introducing one just for a hover would be the first crack in that. */
+.panel__tab:hover {
+  filter: brightness(1.25);
+}
+
 @media (max-width: 520px) {
   .panel {
-    top: 126px;
-    max-height: calc(100% - 168px);
+    /* Edge to edge on a phone: 340px of a 390px screen leaves a 50px strip of
+       map that is too narrow to read and too wide to ignore. */
+    width: 100vw;
+  }
+
+  /* At 100vw the tab's usual -30px is 30px past the right edge of the screen,
+     where it cannot be tapped (and, without `main`'s overflow clip, would push
+     the page sideways). Tuck it inside the panel instead. */
+  .panel__tab {
+    right: 0;
+    border-radius: 6px 0 0 6px;
   }
 }
 
-.panel__head {
+/* The hero. Fixed height so the panel's shape does not jump between a story with
+   an og:image and one without — the fallback is the same block in flat purple,
+   which is why the height lives here and not on the image.
+
+   That fallback used to be a darker purple than the panel below it; since the
+   shades were collapsed it is the same one, so a story with no image opens as
+   an unbroken column of colour with the place name on it. */
+.panel__hero {
+  position: relative;
+  flex: none;
+  height: 215px;
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  align-items: flex-end;
+  padding: 16px 18px;
+  overflow: hidden;
+  background: #373666;
 }
 
-.panel__head h2 {
-  margin: 0;
-  font-size: 15px;
-  letter-spacing: 0.01em;
+.panel__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Subdued (2026-08-14). The hero is whatever the publisher chose or whatever
+     colours a flag happens to be, and at full strength it was the brightest
+     thing on screen — a national flag in particular is designed to be maximally
+     saturated, so Egypt or Colombia out-shouted the heading sitting on it. This
+     pulls the image back to being the panel's ground rather than its subject.
+     The purple wash that gives it the panel's hue is on the ::after below,
+     because a filter cannot tint. */
+  filter: brightness(1) saturate(0.85);
+}
+
+/* A flat purple wash across the whole hero, so a photo or a flag reads as part
+   of this panel rather than as a rectangle cut out of somewhere else.
+
+   Only drawn when there IS an image. Over the flat purple fallback it would
+   just muddy the accent.
+
+   **The bottom-up dark scrim that used to sit under this is gone.** It existed
+   so the place name cleared 4.5:1 over whatever the publisher's photo happened
+   to be; without it that heading now leans on its own text-shadow alone, which
+   is why that shadow stays dark (see `.panel__place`) rather than being
+   recoloured to the new purple with everything else. */
+.panel__hero--image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(55, 54, 102, 0.35), rgba(55, 54, 102, 0.35));
+}
+
+/* The map's own pin, restated. #D24F39 is the accent the pins are drawn in, so
+   the panel opens with the thing the reader just clicked. */
+.panel__dot {
+  position: absolute;
+  top: 16px; /* distance from hero's top edge */
+  left: 18px; /* distance from the hero's left edge */
+  z-index: 1;
+  width: 26px; /* size — change both together, or it stops being round */
+  height: 26px;
+  border-radius: 50%;
+  background: #d24f39;
+  /* The hero is a photo the publisher chose, and a flat 20px disc can land on a
+     patch of similar red. The ring is what keeps it reading as the map's pin
+     restated rather than as part of the image — the same white ring the pins
+     themselves are drawn with. */
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
 }
 
 .panel__close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 1;
   border: 0;
   background: none;
-  color: #f2f4f7;
-  opacity: 0.7;
-  font-size: 20px;
+  color: #ffffff;
+  opacity: 0.85;
+  font-size: 26px;
   line-height: 1;
-  padding: 0 4px;
+  padding: 2px 6px;
   cursor: pointer;
 }
 
@@ -238,61 +387,230 @@ main .maplibregl-popup-anchor-right .maplibregl-popup-tip {
   opacity: 1;
 }
 
-.panel__note {
+/* `z-index: 1` puts the place name ABOVE the scrim, and it is the whole point of
+   the scrim existing. The pseudo-element is painted after this heading in DOM
+   order, so without it the gradient lands ON the text and dims the one label the
+   panel is named for — legible, but greyed, and it looked like a disabled
+   control rather than a heading. The scrim must darken the photo and nothing
+   else. */
+.panel__place {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  /* Belt and braces over an unpredictable photo: the scrim does the work, this
+     keeps the descenders readable where a bright area survives it. */
+  text-shadow: 0 1px 6px rgba(20, 19, 46, 0.55);
+}
+
+.panel__body {
+  flex: none;
+  padding: 18px 18px 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+/* §2.6: link-out only. The headline IS the link — there is no article text for
+   it to expand into, so a separate "read more" would promise something that does
+   not exist. */
+.panel__title {
+  display: block;
+  color: #ffffff;
+  font-size: 19px;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.panel__title:hover {
+  text-decoration: underline;
+}
+
+.panel__time {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-style: italic;
+  opacity: 0.75;
+}
+
+.panel__source {
+  display: inline-block;
+  margin-top: 2px;
+  color: #ffffff;
+  font-size: 14px;
+  opacity: 0.75;
+  text-decoration: none;
+}
+
+.panel__source:hover {
+  text-decoration: underline;
+  opacity: 1;
+}
+
+/* §5.2 decision 3, the pin half of the geotag-confidence treatment: where the
+   rule put this story, and that a rule put it there. Quieter than the headline —
+   it is context, not a competing claim — and at 0.65 over the purple it still
+   clears 4.5:1. Deliberately identical on every story: `lib/story.ts` has the
+   measurement showing there is no per-pin signal to grade on. */
+.panel__placement {
   margin: 10px 0 0;
-  font-size: 12px;
-  opacity: 0.7;
+  font-size: 13px;
+  opacity: 0.65;
 }
 
 .panel__list {
-  margin: 10px 0 0;
+  flex: 1 0 auto;
+  padding: 18px 18px 22px;
+  background: #373666;
+}
+
+.panel__list h3 {
+  margin: 0 0 16px;
+  font-size: 19px;
+  font-weight: 400;
+}
+
+.panel__list ul,
+.panel__list ol {
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
-.panel__story + .panel__story {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid #22262c;
+/* 30px, up from 16. With a publisher chip now sitting above each headline, a
+   row is two elements rather than one, and at 16px the gap BETWEEN rows was no
+   larger than the gap inside them — the list read as one block of text with
+   orange marks scattered through it instead of as separate stories. */
+.panel__list li + li {
+  margin-top: 30px;
 }
 
-.panel__story a {
-  color: #f2f4f7;
-  font-size: 13px;
-  line-height: 1.35;
-  text-decoration: none;
-}
-
-.panel__story a:hover {
-  color: #7cc0ff;
-  text-decoration: underline;
-}
-
+/* The row above each headline: who published it, and when. */
 .panel__meta {
-  margin: 3px 0 0;
-  font-size: 11px;
-  opacity: 0.6;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 6px;
 }
 
-/* §2.3's Global button. Bottom-right of the map, clear of the MapTiler logo
-   (bottom-left) and of MapLibre's attribution row. */
-.global-button {
-  position: absolute;
-  right: 12px;
-  bottom: 34px;
-  z-index: 3;
-  padding: 6px 12px;
-  border: 1px solid #2c3138;
-  border-radius: 6px;
-  background: rgba(13, 15, 18, 0.9);
-  color: #f2f4f7;
+/* The publisher, in the pin accent (#D24F39 — the same orange as `.panel__dot`
+   and the map's pins, so the panel has one accent rather than three).
+
+   **It says a domain, not a masthead** — `chron.com`, not "The Houston
+   Chronicle". `source` is a bare domain everywhere in the pipeline, and a
+   domain→publisher lookup would be §3.4's join-on-names trap wearing display
+   clothing: it fails silently and plausibly on exactly the outlets nobody
+   checks. */
+.panel__chip {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: #d24f39;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1.3;
+  /* A long domain must not push the timestamp off the row. */
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel__stamp {
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+/* **A button in one panel, an anchor in the other, and they must look the same.**
+   Selecting a NEARBY story swaps the panel in place rather than navigating, and a
+   control that does not navigate must not be an anchor; a country's TOP story
+   goes straight out to the publisher (§2.6, link-out only), and a control that
+   does navigate must not be a button. The element follows what the click does;
+   this rule is what stops that correctness from showing up as two different
+   looking lists. Reset to look like the text they both are. */
+.panel__list button,
+.panel__list a {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #ffffff;
   font: inherit;
-  font-size: 12px;
+  font-size: 17px;
+  line-height: 1.3;
+  text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
-.global-button:hover {
-  border-color: #4a525c;
+.panel__list button:hover,
+.panel__list a:hover {
+  text-decoration: underline;
+}
+
+.panel__note {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+/* The panel footer: MapTiler's mark at the left end, "How does this work?" at
+   the right.
+
+   `margin-top: auto` pins it to the bottom of a SHORT panel (the flex column has
+   spare height when a story has one neighbour); `flex: none` keeps it from being
+   squeezed by a long one.
+
+   **`position: sticky` is what makes the MapTiler logo actually visible**, and
+   it is a §2.6 requirement rather than a nicety. Enlarging the panel on
+   2026-08-14 took a six-neighbour story to 880px of content in a 720px viewport,
+   which put this footer 98px below the fold — and the map's own copy of the logo
+   sits UNDER the panel by design, so the mark was on the page and on screen
+   nowhere. That is exactly the silent failure the two-copies arrangement exists
+   to prevent, so the footer now stays pinned to the bottom edge of the scroller
+   at every content height. `.panel` is the scroll container, so `bottom: 0`
+   resolves against it.
+
+   It is opaque, and it must stay opaque: it is sticky, so the list scrolls
+   BEHIND it, and a transparent footer would show headlines sliding through the
+   MapTiler logo. It carries the panel's own purple — the same one the list
+   does since the shades were collapsed — so the bottom of the panel is one
+   block of colour rather than a band change two rows from the edge. */
+.panel__footer {
+  flex: none;
+  position: sticky;
+  bottom: 0;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  /* 30px of bottom padding, not 14 (2026-08-14). The browser's own link-preview
+     bubble — the "https://…" that appears on hover — is painted by the browser
+     in the bottom-left corner of the viewport, over everything, and at 14px it
+     landed squarely on the MapTiler logo and the About link. Since both of the
+     things in this footer ARE links, hovering either one covered the other.
+     Nothing in CSS can move that bubble; the only fix is to sit above it. */
+  padding: 12px 18px 30px;
+  background: #373666;
+}
+
+/* §5.2 decision 3's path from the map to the measured accuracy. Underlined
+   because it is the one navigation on this screen, and an unmarked link in a
+   panel of headlines that are also links would be indistinguishable from body
+   text. */
+.panel__about {
+  color: #ffffff;
+  font-size: 15px;
+  opacity: 0.85;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.panel__about:hover {
+  opacity: 1;
 }
 
 .notice {
@@ -426,28 +744,6 @@ main.about {
   border-radius: 0 6px 6px 0;
   background: rgba(124, 192, 255, 0.05);
   font-size: 14px;
-}
-
-/* The masthead is `pointer-events: none` so drags pass through to the map
-   underneath it. A link in there inherits that and becomes unclickable, which is
-   a silent failure — it looks like a link and does nothing. Re-enable on the
-   link alone, not the masthead, or the plate starts eating map drags. */
-.masthead__about {
-  pointer-events: auto;
-  margin: 6px 0 0;
-  font-size: 12px;
-}
-
-.masthead__about a {
-  color: #f2f4f7;
-  opacity: 0.75;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.masthead__about a:hover {
-  opacity: 1;
-  color: #7cc0ff;
 }
 
 /* §2.6: prefers-reduced-motion is honored. */
