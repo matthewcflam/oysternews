@@ -12,6 +12,7 @@ import {
   type MapMouseEvent,
 } from "maplibre-gl";
 import { Protocol } from "pmtiles";
+import type { FeatureCollection } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, basemap } from "@/lib/basemap";
 import { firstLabel, labelAnchor, labelName } from "@/lib/labels";
@@ -23,9 +24,13 @@ import {
   COUNTRY_OUTLINE_ID,
   COUNTRY_SOURCE_LAYER,
   HIT_LAYER_FOR,
+  LABELS_LAYER_ID,
   MATCH_NOTHING,
   OUTLINE_LAYER_FOR,
+  PIN_IMAGE_ID,
   REGION_OUTLINE_ID,
+  SELECTED_SOURCE_ID,
+  SELECTED_STATE_KEY,
   SOURCE_ID,
   SPIDER_SOURCE_ID,
   STORIES_LAYER_ID,
@@ -33,16 +38,19 @@ import {
   TOP_LAYER_ID,
   TOP_STATE_KEY,
   boundaryLayers,
+  bubbleLabelFilter,
   firstPlaceLabelLayerId,
   hitLayers,
   matchId,
   outlineFor,
+  selectedPinLayer,
   spiderLayers,
   storyLayers,
   topFilter,
   topPinLayer,
 } from "@/lib/layers";
 import { loadManifest } from "@/lib/manifest";
+import { PIN_PIXEL_RATIO, trianglePin } from "@/lib/pin";
 import { nearbyBox, nearbyStories } from "@/lib/nearby";
 import { loadRegionIndex, storiesFor } from "@/lib/regions";
 import { panelStory, type PanelStory } from "@/lib/story";
@@ -59,6 +67,7 @@ import { sameKeys, topKeys } from "@/lib/top";
 import type { RegionIndex } from "@/lib/types";
 import MapTilerLogo from "./MapTilerLogo";
 import RegionPanel from "./RegionPanel";
+import StoryBubbles, { type TopStory } from "./StoryBubbles";
 import StoryPanel from "./StoryPanel";
 
 /**
@@ -87,9 +96,39 @@ const WORKER_URL = "/maplibre-gl-worker.mjs";
 /** What a label click resolved to: an id the outline archive can draw, and a heading. */
 type Selection = { id: string; name: string };
 
+const NO_PIN: FeatureCollection = { type: "FeatureCollection", features: [] };
+
+/**
+ * Drop the selection triangle at a coordinate, or clear it with `null`.
+ *
+ * A one-feature GeoJSON source rather than a `Marker`: a marker is a DOM node
+ * positioned on every frame of every drag, and this has to survive the same pans
+ * and zooms the pins do. As a source it moves with the map for free, at the same
+ * moment the pin under it moves — a marker lags it by a frame, which at the tip
+ * of a triangle is visible as the point sliding off its own dot.
+ */
+const showPin = (map: MapLibreMap | null, at: [number, number] | null) => {
+  const source = map?.getSource<GeoJSONSource>(SELECTED_SOURCE_ID);
+  if (!source) return;
+  source.setData(
+    at
+      ? {
+          type: "FeatureCollection",
+          features: [{ type: "Feature", geometry: { type: "Point", coordinates: at }, properties: {} }],
+        }
+      : NO_PIN,
+  );
+};
+
 export default function MapView() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  /**
+   * The same map as `mapRef`, in state, purely so the overlay re-renders once it
+   * exists. A ref is invisible to React, and `StoryBubbles` has to subscribe to
+   * the map's events the moment there is a map to subscribe to.
+   */
+  const [ready, setReady] = useState<MapLibreMap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const provider = basemap().provider;
 
@@ -109,6 +148,36 @@ export default function MapView() {
    */
   const [story, setStory] = useState<PanelStory | null>(null);
   const [nearby, setNearby] = useState<PanelStory[]>([]);
+
+  /**
+   * The open story's url, and the spider's redraw, both held for `markSelected`.
+   *
+   * The url is a ref rather than derived from `story` because the two readers of
+   * it — the feature state on the vector source and the leaf property on the
+   * overlay — are both written from map code, outside React's ordering. Reading
+   * it off state would paint the disc a render late, which is a frame in which
+   * the wedge is pointing at an orange circle.
+   *
+   * `redrawSpider` is the map effect handing out its own `drawSpider`, because a
+   * leaf's fill is data and data only changes when the overlay is rebuilt. A
+   * click does not move the camera, so nothing else would rebuild it until the
+   * reader's next gesture.
+   */
+  const selectedUrl = useRef<string | null>(null);
+  const redrawSpider = useRef<(() => void) | null>(null);
+
+  /**
+   * Mode 1's speech bubbles: the five stories the ring marks **on arrival**,
+   * with their headlines and the coordinate each tail has to land on.
+   *
+   * **Written exactly twice.** Once at the first `idle`, where the ranking is
+   * taken over the default world view and is therefore the top five stories in
+   * the world; and once, back to empty, on the reader's first camera move. The
+   * bubbles are the map's opening sentence, not a live caption that follows the
+   * reader — see `dismissBubbles`. The ring goes on re-ranking to the viewport
+   * at every idle, which is where "what is big here" keeps being answered.
+   */
+  const [tops, setTops] = useState<TopStory[]>([]);
 
   /**
    * The panel, slid off the left edge but still selected.
@@ -136,9 +205,50 @@ export default function MapView() {
   const [index, setIndex] = useState<RegionIndex | null>(null);
   const [indexFailed, setIndexFailed] = useState(false);
 
-  /** Clear the outline from outside the map effect — the panel's close button. */
+  /**
+   * Clear the outline and the selection pin from outside the map effect — the
+   * panel's close button.
+   *
+   * The triangle is torn down here, alongside the outline, because the two are
+   * the same statement: "this is the thing you picked". Clearing one without the
+   * other leaves the map pointing at something the panel is no longer showing.
+   */
+  /**
+   * Move the `MARK` fill onto one story's disc, or take it off with `null`.
+   *
+   * **Both source layers**, for the reason `setTop` gives: the flag has to
+   * survive the z4 handover from the country floor to the stories layer without
+   * a repaint gap. The top-5 copy on top reads the same source and the same
+   * state, so it recolours with the original underneath it.
+   *
+   * The spider is redrawn last because a leaf carries the flag as data, not as
+   * state. Cheap: it is the same rebuild `drawSpider` does on every zoom step.
+   */
+  const markSelected = (url: string | null) => {
+    const map = mapRef.current;
+    const previous = selectedUrl.current;
+    selectedUrl.current = url;
+    if (!map) return;
+
+    for (const sourceLayer of [STORIES_SOURCE_LAYER, COUNTRY_SOURCE_LAYER]) {
+      if (previous) {
+        map.removeFeatureState({ source: SOURCE_ID, sourceLayer, id: previous }, SELECTED_STATE_KEY);
+      }
+      if (url) {
+        map.setFeatureState(
+          { source: SOURCE_ID, sourceLayer, id: url },
+          { [SELECTED_STATE_KEY]: true },
+        );
+      }
+    }
+
+    redrawSpider.current?.();
+  };
+
   const clearRegion = () => {
     setSelection(null);
+    markSelected(null);
+    showPin(mapRef.current, null);
     for (const id of [COUNTRY_OUTLINE_ID, REGION_OUTLINE_ID]) {
       if (mapRef.current?.getLayer(id)) mapRef.current.setFilter(id, MATCH_NOTHING);
     }
@@ -155,6 +265,60 @@ export default function MapView() {
     setStory(null);
     setNearby([]);
     clearRegion();
+  };
+
+  /**
+   * Open a story: the panel, its neighbours, and the triangle on its coordinate.
+   *
+   * **One path for two gestures.** A pin click and a bubble click select the
+   * same thing and must leave the map in the same state — the risk of two copies
+   * is not that either is wrong today, but that one of them later grows a step
+   * the other does not and the map starts behaving differently depending on
+   * which half of the same mark the reader hit.
+   *
+   * `at` is where the triangle goes and `point` is where the neighbours are
+   * measured from. They are separate because a bubble click lands 100px away
+   * from its own pin, and "stories near this story" must not mean "stories near
+   * the corner of a box".
+   */
+  const selectStory = (selected: PanelStory, at: [number, number], point: { x: number; y: number }) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    /**
+     * **Every selection starts from a clean slate**, which settles the one
+     * question §2.3 left open: a container click clears a region lock. There is
+     * one red outline and one panel, and a container outline drawn while a
+     * region outline is still up would leave the user unable to say which of the
+     * two the map is claiming is selected.
+     */
+    clearRegion();
+    /**
+     * A selection always re-opens the panel. Leaving it collapsed would make the
+     * click produce NO visible response at all — the panel is off screen, so a
+     * new story would swap in where nobody can see it, and the map would look
+     * broken rather than busy.
+     */
+    setCollapsed(false);
+    showPin(map, at);
+    // After `clearRegion`, which has just taken the fill off whatever was open.
+    markSelected(selected.url);
+
+    /**
+     * "Stories Nearby": a second query over the same layers, this time across a
+     * box rather than a point. Run here, once per selection, rather than on
+     * `idle` with everything else — the neighbours of a story are a property of
+     * the gesture, not of the viewport, and recomputing them on every camera
+     * settle would rewrite a list the reader is reading.
+     */
+    const layers = CLICKABLE_LAYER_IDS.filter((id) => map.getLayer(id));
+    const around = map.queryRenderedFeatures(nearbyBox(point), { layers });
+
+    // §2.6 (link-out only) and §5.2 decision 3 (the pin half of the
+    // geotag-confidence treatment) both live in `lib/story.ts`, where they are
+    // tested rather than reviewed.
+    setStory(selected);
+    setNearby(nearbyStories(around, selected.url));
   };
 
   /**
@@ -206,6 +370,7 @@ export default function MapView() {
     // corner when the masthead was removed, and the two would overlap there.
     map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
+    setReady(map);
 
     /**
      * Dev-only test seam. §11 is this project's expensive lesson: it has shipped
@@ -274,6 +439,14 @@ export default function MapView() {
          */
         map.addSource(SPIDER_SOURCE_ID, { type: "geojson", data: EMPTY_SPIDER });
 
+        /**
+         * The selection triangle: at most one feature, empty until something is
+         * clicked. Its image is generated rather than loaded — see `lib/pin.ts`
+         * for why this repo has no sprite.
+         */
+        map.addSource(SELECTED_SOURCE_ID, { type: "geojson", data: NO_PIN });
+        map.addImage(PIN_IMAGE_ID, trianglePin(), { pixelRatio: PIN_PIXEL_RATIO });
+
         setRegionsUrl(manifest.regionsUrl ?? null);
 
         // Outlines go under the stories, which go under the labels. Order is
@@ -302,6 +475,9 @@ export default function MapView() {
         // `topPinLayer` — draw order inside a circle layer is tile order, and
         // the highlight is feature state, which a `circle-sort-key` cannot read.
         map.addLayer(topPinLayer());
+        // Above every disc, including the top-5 copy: the triangle marks the one
+        // thing the reader picked, so nothing may be drawn over it.
+        map.addLayer(selectedPinLayer());
         map.addLayer(headlines, firstPlaceLabelLayerId(map.getStyle().layers));
 
         /* ------------------------------------------------------------------ */
@@ -354,6 +530,12 @@ export default function MapView() {
           for (const key of flagged) if (!visible.includes(key)) setTop(key, false);
           for (const key of visible) setTop(key, true);
           flagged = visible;
+          // Mode 1: a bubbled headline replaces the 11px one under the pin. Keyed
+          // on the bubbles themselves rather than on `marked`, because the two
+          // part company the moment the ring re-ranks and the bubbles do not —
+          // and because `dismissBubbles` empties this list, which is what gives
+          // the five their small labels back.
+          map.setFilter(LABELS_LAYER_ID, bubbleLabelFilter(bubbles.map((bubble) => bubble.story.url)));
           // The layer that draws them above every other disc. Its filter and the
           // feature state are set together, always, so the copy on top can never
           // be painted as an ordinary pin or an ordinary pin painted as a copy.
@@ -372,6 +554,42 @@ export default function MapView() {
          */
         let stacks: Stack[] = [];
 
+        /**
+         * The records `StoryBubbles` is rendering, held here as well as in React
+         * state because `applyTop` reads them to decide which small labels to
+         * suppress, and it runs on every idle rather than on a render.
+         */
+        let bubbles: TopStory[] = [];
+
+        /** Has the opening ranking been taken? It is taken once; see `refresh`. */
+        let bubblesCaptured = false;
+
+        /**
+         * Take the bubbles down, permanently, on the reader's first camera move.
+         *
+         * **`movestart`, and any move counts** — a drag, a wheel, a keyboard
+         * nudge, or a `flyTo` from the search bar. The five headlines answer
+         * "what is happening in the world" for the view the reader was handed;
+         * the instant they choose a different view, that sentence is about
+         * somewhere they are no longer looking, and the ring is already there to
+         * mark what matters where they went.
+         *
+         * Armed only once the capture has happened, so a camera animation during
+         * startup cannot dismiss bubbles that were never drawn.
+         */
+        const dismissBubbles = () => {
+          if (!bubblesCaptured || !bubbles.length) return;
+          bubbles = [];
+          setTops(bubbles);
+          // Directly rather than through `applyTop`: its `sameKeys` guard returns
+          // early whenever the ranking has not changed, and the five have to get
+          // their 11px labels back on this move whether or not it re-ranks.
+          map.setFilter(LABELS_LAYER_ID, bubbleLabelFilter([]));
+          map.off("movestart", dismissBubbles);
+        };
+
+        map.on("movestart", dismissBubbles);
+
         const drawSpider = () => {
           const source = map.getSource<GeoJSONSource>(SPIDER_SOURCE_ID);
           if (!source) return;
@@ -381,9 +599,13 @@ export default function MapView() {
           const data =
             map.getZoom() < SPIDERFY_ZOOM || !stacks.length
               ? EMPTY_SPIDER
-              : spiderData(stacks, map, marked);
+              : spiderData(stacks, map, marked, selectedUrl.current);
           source.setData(data);
         };
+
+        // The selection's own trigger: a click recolours a leaf, and a click
+        // moves no camera, so nothing else here would rebuild the overlay.
+        redrawSpider.current = drawSpider;
 
         /**
          * **On `idle`, not on `moveend`.** Both halves of this ask what is
@@ -406,6 +628,48 @@ export default function MapView() {
           const features = map.queryRenderedFeatures({ layers });
 
           marked = topKeys(features);
+
+          /**
+           * Mode 1's bubbles, from the same query and the same ranking — the
+           * headline and the coordinate for each of `marked`, best first.
+           *
+           * **Taken once, at the first idle, and never recomputed.** That idle is
+           * the default world view, so these five are the top five stories in the
+           * world rather than the top five of whatever the reader is looking at;
+           * `dismissBubbles` retires them on the first camera move. The ring,
+           * which keeps recomputing below, is the part of this that stays live.
+           *
+           * Deduplicated by url on the way in, because `renderWorldCopies` draws
+           * a story once per visible copy of the world and §2.4 draws it again
+           * in the country floor. Which copy wins does not matter:
+           * `StoryBubbles` normalises the longitude to the copy nearest the
+           * camera before it projects.
+           */
+          if (!bubblesCaptured) {
+            const found = new Map<string, TopStory>();
+            for (const feature of features) {
+              if (feature.geometry.type !== "Point") continue;
+              const selected = panelStory(feature.properties);
+              if (!selected || found.has(selected.url)) continue;
+              found.set(selected.url, {
+                story: selected,
+                lngLat: feature.geometry.coordinates as [number, number],
+              });
+            }
+
+            const opening = marked
+              .map((key) => found.get(key))
+              .filter((bubble): bubble is TopStory => Boolean(bubble));
+
+            // An idle that ranked nothing is not the opening view — the style has
+            // loaded but this archive's first tiles have not. Leave the capture
+            // open rather than freezing an empty set for the whole session.
+            if (opening.length) {
+              bubbles = opening;
+              bubblesCaptured = true;
+              setTops(bubbles);
+            }
+          }
 
           // The stacks are read BEFORE the highlight is applied: which stories a
           // spider has displaced decides which of the five may be flagged on the
@@ -482,6 +746,11 @@ export default function MapView() {
             if (typeof id !== "string" || !id) continue;
 
             map.setFilter(OUTLINE_LAYER_FOR[label.level], matchId(id));
+            // On the label's own anchor where there is one, so the triangle
+            // lands on the name the reader clicked rather than on the pixel
+            // they happened to hit. A region has no orange circle of its own,
+            // so here the triangle is the whole mark.
+            showPin(map, anchor ?? [event.lngLat.lng, event.lngLat.lat]);
             setSelection({ id, name: labelName(label.feature) });
             return;
           }
@@ -511,23 +780,10 @@ export default function MapView() {
           const layers = CLICKABLE_LAYER_IDS.filter((id) => map.getLayer(id));
           const [feature] = map.queryRenderedFeatures(event.point, { layers });
 
-          /**
-           * **Every click starts from a clean slate**, which settles the one
-           * question §2.3 left open: a container click clears a region lock.
-           * There is one red outline and one panel, and a container outline
-           * drawn while a region outline is still up would leave the user
-           * unable to say which of the two the map is claiming is selected.
-           */
           setStory(null);
           setNearby([]);
           clearRegion();
           clearOutline();
-          /**
-           * A click always re-opens the panel. Leaving it collapsed would make
-           * the click produce NO visible response at all — the panel is off
-           * screen, so a new story would swap in where nobody can see it, and
-           * the map would look broken rather than busy.
-           */
           setCollapsed(false);
 
           // A pin is hit-tested FIRST and wins the tap, even where it sits over
@@ -543,25 +799,29 @@ export default function MapView() {
           // §2.2: "Clicking any container story outlines its container in red."
           // A PIN gets none — it is at an exact place, and drawing a region
           // around it would claim the opposite.
+          // Dead while containers are filtered off the map (`NOT_CONTAINER`) —
+          // no click can produce a feature this accepts. Kept wired because the
+          // "somewhere in" stories are moving into the region panel and will
+          // need the same join to draw their outline from there.
           const outline = outlineFor(feature.properties);
           if (outline) {
             map.setFilter(outline.layerId, ["==", ["get", "id"], outline.id]);
           }
 
           /**
-           * "Stories Nearby": a second query over the same layers, this time
-           * across a box rather than a point. Run here, once per click, rather
-           * than on `idle` with everything else — the neighbours of a story are
-           * a property of the click, not of the viewport, and recomputing them
-           * on every camera settle would rewrite a list the reader is reading.
+           * The triangle goes on the FEATURE's coordinate, not the click point,
+           * so its tip meets the centre of the circle the reader aimed at. On a
+           * spider leaf that is the displaced position — which is correct: the
+           * leaf is where the story is drawn, and the tip has to agree with what
+           * is on screen rather than with where the story really is.
            */
-          const around = map.queryRenderedFeatures(nearbyBox(event.point), { layers });
-
-          // §2.6 (link-out only) and §5.2 decision 3 (the pin half of the
-          // geotag-confidence treatment) both live in `lib/story.ts`, where they
-          // are tested rather than reviewed.
-          setStory(selected);
-          setNearby(nearbyStories(around, selected.url));
+          selectStory(
+            selected,
+            feature.geometry.type === "Point"
+              ? (feature.geometry.coordinates as [number, number])
+              : [event.lngLat.lng, event.lngLat.lat],
+            event.point,
+          );
         });
 
         for (const layer of CLICKABLE_LAYER_IDS) {
@@ -596,6 +856,9 @@ export default function MapView() {
 
     return () => {
       cancelled = true;
+      setReady(null);
+      // The handler closes over a map that is about to be removed.
+      redrawSpider.current = null;
       map.remove();
       removeProtocol("pmtiles");
     };
@@ -613,6 +876,25 @@ export default function MapView() {
       <div ref={container} className="map" />
 
       {/*
+        Mode 1: the top five headlines, in bubbles pointing at their own pins.
+        Outside the map container rather than inside it, so MapLibre never sees
+        the nodes — it owns its container's children, and a React subtree in
+        there is a subtree two libraries both believe they are managing.
+      */}
+      <StoryBubbles
+        map={ready}
+        stories={tops}
+        selectedUrl={story?.url ?? null}
+        onSelect={(selected, at) => {
+          const map = mapRef.current;
+          if (!map) return;
+          // The neighbours are measured from the PIN, not from the bubble that
+          // was clicked — see `selectStory`.
+          selectStory(selected, at, map.project(at));
+        }}
+      />
+
+      {/*
         The story panel and the region panel share one slot, and the click
         handler guarantees at most one selection at a time — a story click clears
         the region and a region click can only happen where no story was hit.
@@ -622,16 +904,6 @@ export default function MapView() {
         <StoryPanel
           story={story}
           nearby={nearby}
-          /*
-            Selecting a neighbour swaps the panel without going back to the map.
-            The list itself is left alone: every story in it is near every other,
-            so re-querying would produce the same neighbourhood minus one, and
-            would cost the reader the list they were part-way through.
-          */
-          onSelect={(next) => {
-            setStory(next);
-            setNearby([story, ...nearby].filter((other) => other.url !== next.url));
-          }}
           onClose={clearStory}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((open) => !open)}

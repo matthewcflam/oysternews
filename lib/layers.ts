@@ -7,12 +7,12 @@
  * 1. **A label may only ever contain the headline** (§2.6, link-out only). The
  *    text field is the one place article prose could reach a rendered surface, so
  *    it is asserted in `layers.test.ts` rather than left to review.
- * 2. **A container is not a pin.** §2.1 places a container at a region's centre
- *    because the story has no exact location; drawing it identically to a
- *    precisely-placed pin would claim a precision the pipeline measured itself
- *    NOT to have (69.7% pins, §5.2). Since 2026-08-14 the white *ring* is the
- *    pin's mark and a container is a plain white disc — see the identity block
- *    below, including the one case where top-5 is allowed to override this.
+ * 2. **A container is not drawn at all.** §2.1 places a container at a region's
+ *    centre because the story has no exact location; drawing it as a point
+ *    claims a precision the pipeline measured itself NOT to have (69.7% pins,
+ *    §5.2). Since 2026-08-14 every pin layer filters containers out with
+ *    `NOT_CONTAINER` and they are surfaced in the region panel instead — see the
+ *    identity block below.
  * 3. **Tier-1 is invisible.** §2.3: "no tier-1 toggle and no tier-1 badge; the
  *    preference is invisible except in *which* stories are on screen." Nothing
  *    here may read the `tier1` property, and a test holds that line.
@@ -56,45 +56,59 @@ export const LABEL_MINZOOM = 4;
 /* -------------------------------------------------------------------------- */
 
 /**
- * Three states, and every one of them is a **solid disc of a fixed footprint**:
+ * **Two states (2026-08-14), and the ring is the only difference between them:**
  *
- * | State       | Reads as                                   | Drawn as            |
- * | ----------- | ------------------------------------------ | ------------------- |
- * | Top 5       | one of the five best stories on screen now | solid orange, large |
- * | Pin         | an exact place                             | orange in a white ring |
- * | Approximate | somewhere in this region (a CONTAINER)     | solid white         |
+ * | State  | Reads as                                   | Drawn as                  |
+ * | ------ | ------------------------------------------ | ------------------------- |
+ * | Pin    | a story                                    | solid orange              |
+ * | Top 5  | one of the five best stories on screen now | solid orange in a white ring |
  *
- * The previous identity distinguished a container by making it *fainter* — a 22%
- * fill and a pale stroke. That reads as "less important", which is the wrong
- * claim: a container is a story whose LOCATION is coarse, not a story that
- * matters less. Solid white against solid orange says "different kind", not
- * "lesser", and it says it at 3px where an alpha difference does not survive.
+ * Both occupy the **same footprint**, so the five marked pins are not larger
+ * than their neighbours — they are the same circle wearing a border. That is the
+ * whole point of the collapse: size already encodes salience through
+ * `radiusBySalience`, and a second size signal on top of it made "big" mean two
+ * things at once.
  *
- * **Top 5 overrides the pin/container distinction, and that is a deliberate
- * amendment to §2.1 made 2026-08-14.** A top-5 container therefore draws exactly
- * like a top-5 pin, which does claim an exactness the placement rule did not
- * measure. The trade was accepted knowingly: the top-5 treatment answers "what
- * should I read", the ring answers "where exactly", and when they collide the
- * first question is the one a reader is actually asking. It is capped at five
- * features on screen, so the claim is small and bounded — but `layers.test.ts`
- * no longer holds that line, and this comment is the only place it is recorded.
+ * **The ring changed sides.** Until now the ring meant "an exact place" and
+ * marked every PIN, with the top 5 distinguished by a `TOP_SCALE` multiplier and
+ * containers drawn as solid white discs. Three marks for three ideas, on a map
+ * where the smallest is 3px across. The ring now answers the one question a
+ * reader is actually asking — *what should I read* — and the exactness question
+ * is answered by the panel's placement line instead (`lib/story.ts`), where it
+ * can use words.
+ *
+ * **A container is no longer drawn.** It has no third mark because it is not on
+ * the map: `NOT_CONTAINER` filters it out of every layer, and "somewhere in this
+ * region" is surfaced in the region panel, which can say so in a sentence rather
+ * than by asking a reader to decode a colour.
  */
-const ACCENT = "#D24F39";
+export const ACCENT = "#D24F39";
 const WHITE = "#ffffff";
+
+/**
+ * The brand's purple — the far stop of the sphere beside the search field, and
+ * the colour of the selection triangle (`lib/pin.ts`, which imports it from here
+ * so there is one definition of it in TypeScript).
+ *
+ * **The selection mark is deliberately NOT the accent.** Everything orange on
+ * this map is a story; the triangle is not a story, it is the reader's own
+ * pointer at one. In orange it read as a sixth, oddly-shaped pin.
+ *
+ * `app/globals.css` states it a third time, inside a gradient, where a variable
+ * would not help — a gradient stop cannot be imported.
+ */
+export const MARK = "#B339D2";
 
 /**
  * The white ring, as a share of the footprint radius — measured off the identity
  * sheet, where the orange core is ~0.68 of the white disc around it.
  *
- * It is a RATIO and not the old fixed 1.5px because the footprint spans 3px to
- * 13px: a constant ring is half the area of a small circle and a hairline on a
- * large one, so "pin" would have meant two different marks at the two ends of
- * the salience scale.
+ * It is a RATIO and not a fixed 1.5px because the footprint spans 3px to 13px: a
+ * constant ring is half the area of a small circle and a hairline on a large
+ * one, so "top 5" would have meant two different marks at the two ends of the
+ * salience scale.
  */
 const RING_RATIO = 0.32;
-
-/** A top-5 disc is drawn slightly proud of the others, per the identity sheet. */
-const TOP_SCALE = 1.15;
 
 /**
  * The feature-state flag `MapView` sets on the five best stories in the viewport.
@@ -103,6 +117,16 @@ const TOP_SCALE = 1.15;
  * whole map to change five circles.
  */
 export const TOP_STATE_KEY = "top";
+
+/**
+ * The feature-state flag `MapView` sets on the one open story, and clears when
+ * the panel closes. At most one feature carries it.
+ *
+ * Feature state for the same reason `TOP_STATE_KEY` is: which story is open is a
+ * fact about this reader's gesture, not about the tile, and re-filtering a layer
+ * on every click would restyle the whole map to change one circle.
+ */
+export const SELECTED_STATE_KEY = "selected";
 
 /**
  * Radius by salience, at a given zoom.
@@ -156,10 +180,23 @@ const byZoom = (
 ];
 
 /**
- * A container is drawn white: the story is somewhere in this region, not at this
- * point. See the header — this is a truth claim, not a palette choice.
+ * **Containers are not drawn on the map (2026-08-14).** Placing one at a
+ * region's centroid puts a point on a coastline or in a desert and asserts a
+ * story happened there, which is exactly what §2.1 says it does not know. The
+ * region panel says "somewhere in" in words instead.
+ *
+ * Every layer that draws a story carries this, including `topPinLayer` — the
+ * top-5 copy reads the same source and would resurrect a container the moment
+ * one ranked. Nothing has to change in `lib/top.ts` or `lib/spiderfy.ts`: both
+ * are fed from `queryRenderedFeatures`, and an undrawn feature is not returned.
  */
-const isContainer: ExpressionSpecification = ["==", ["get", "kind"], "CONTAINER"];
+/*
+ * Typed as an `ExpressionSpecification`, not a `FilterSpecification`: the latter
+ * is a union that still admits the legacy array-filter syntax, and TypeScript
+ * cannot then prove this is safe to nest inside `["all", ...]` in `topFilter`.
+ * A layer's `filter` accepts an expression, so nothing is lost by narrowing.
+ */
+export const NOT_CONTAINER: ExpressionSpecification = ["!=", ["get", "kind"], "CONTAINER"];
 
 /**
  * Set by `MapView` on every camera move. Absent (on a tile that has just loaded,
@@ -177,12 +214,23 @@ const isTop: ExpressionSpecification = [
 ];
 
 /**
- * All three states share ONE footprint, so a pin and an approximate of equal
- * salience occupy the same space on the map and only their filling differs.
- * MapLibre grows a stroke outward from the radius, so the pin's orange core is
- * shrunk by exactly the ring it is about to gain — `(1 - RING_RATIO) + RING_RATIO`.
+ * The open story, read the same two ways and for the same reason: a spider leaf
+ * lives in its own source, and feature state does not cross sources.
  */
-/** The disc: top-5 proud of the footprint, a pin inset by the ring it gains. */
+const isSelected: ExpressionSpecification = [
+  "any",
+  ["boolean", ["feature-state", SELECTED_STATE_KEY], false],
+  ["==", ["get", SELECTED_STATE_KEY], 1],
+];
+
+/**
+ * Both states share ONE footprint, so a marked story and an ordinary one of
+ * equal salience occupy exactly the same space on the map and only their filling
+ * differs. MapLibre grows a stroke OUTWARD from the radius, so a marked pin's
+ * orange core is shrunk by exactly the ring it is about to gain —
+ * `(1 - RING_RATIO) + RING_RATIO` — and the two outer edges land on each other.
+ */
+/** The disc: inset by its ring when marked, the full footprint otherwise. */
 const discRadius = (
   single: number,
   few: number,
@@ -190,20 +238,10 @@ const discRadius = (
   huge: number,
 ): ExpressionSpecification => {
   const footprint = radiusBySalience(single, few, many, huge);
-  return [
-    "case",
-    isTop,
-    ["*", footprint, TOP_SCALE],
-    isContainer,
-    footprint,
-    ["*", footprint, 1 - RING_RATIO],
-  ];
+  return ["case", isTop, ["*", footprint, 1 - RING_RATIO], footprint];
 };
 
-/**
- * The ring, which only a pin has. A top-5 story is solid by design — including
- * a top-5 container, which is the amendment recorded in the identity block.
- */
+/** The ring, which only the top 5 on screen have. */
 const ringWidth = (
   single: number,
   few: number,
@@ -211,15 +249,31 @@ const ringWidth = (
   huge: number,
 ): ExpressionSpecification => [
   "case",
-  ["any", isTop, isContainer],
-  0,
+  isTop,
   ["*", radiusBySalience(single, few, many, huge), RING_RATIO],
+  0,
 ];
 
 const circlePaint = {
   "circle-radius": byZoom(discRadius),
-  // isTop is tested FIRST: a top-5 container goes orange with the rest of them.
-  "circle-color": ["case", isTop, ACCENT, isContainer, WHITE, ACCENT] as ExpressionSpecification,
+  /**
+   * Two colours, and the second one is only ever worn by one story at a time.
+   *
+   * Every story on the map is the same orange — salience is in the radius and
+   * the ring means "top five here", so nothing about a disc's fill is a claim
+   * about the story. The exception is the open one: the selection wedge points
+   * at it from above, and filling the disc it points at in the same `MARK`
+   * makes the pair read as one mark rather than as a triangle that happens to
+   * be near a pin. It is a statement about what the reader picked, which is why
+   * it can be a colour: it is the only property of a pin the reader set.
+   *
+   * The change is in `circlePaint` rather than in a layer of its own, so it
+   * lands wherever a story is drawn — the stories layer, the country floor, the
+   * top-5 copy on top, and (through the property arm of `isSelected`) a spider
+   * leaf. A recolour that missed one of those would leave the wedge pointing at
+   * an orange disc in exactly the cases the map is busiest.
+   */
+  "circle-color": ["case", isSelected, MARK, ACCENT] as ExpressionSpecification,
   "circle-stroke-width": byZoom(ringWidth),
   "circle-stroke-color": WHITE,
 };
@@ -252,6 +306,10 @@ export function storyLayers(): [
       source: SOURCE_ID,
       "source-layer": COUNTRY_SOURCE_LAYER,
       maxzoom: COUNTRY_LAYER_MAXZOOM,
+      // The country floor is one story per country and many of them are
+      // containers, so this layer thins out visibly below z4. That is the
+      // accepted cost of not drawing a story at a centroid it did not happen at.
+      filter: NOT_CONTAINER,
       paint: circlePaint,
     },
     {
@@ -259,6 +317,7 @@ export function storyLayers(): [
       type: "circle",
       source: SOURCE_ID,
       "source-layer": STORIES_SOURCE_LAYER,
+      filter: NOT_CONTAINER,
       paint: circlePaint,
     },
     {
@@ -267,6 +326,8 @@ export function storyLayers(): [
       source: SOURCE_ID,
       "source-layer": STORIES_SOURCE_LAYER,
       minzoom: LABEL_MINZOOM,
+      // A headline with no pin under it would point at nothing.
+      filter: NOT_CONTAINER,
       layout: {
         // §2.6: the headline, and nothing else. Never article text.
         "text-field": ["get", "title"],
@@ -351,7 +412,34 @@ export function spiderLayers(): [LineLayerSpecification, CircleLayerSpecificatio
  * `idle` has ranked anything.
  */
 export function topFilter(urls: readonly string[]): FilterSpecification {
-  return ["in", ["get", "url"], ["literal", [...urls]]];
+  // ANDed with `NOT_CONTAINER` for the same reason the pin layers carry it: this
+  // layer reads the same source, so without it a container that ranked would be
+  // drawn here even though it is filtered out of the layer underneath.
+  return ["all", NOT_CONTAINER, ["in", ["get", "url"], ["literal", [...urls]]]];
+}
+
+/**
+ * The headline layer, minus the stories that are wearing a speech bubble.
+ *
+ * Mode 1 draws the top five headlines in `#D24F39` Newsreader at 16px next to
+ * their pins. `stories-labels` is still drawing the same `title` in 11px Noto
+ * underneath them from z4 up, so without this a bubbled story says its own
+ * sentence twice, in two typefaces, a few pixels apart.
+ *
+ * **Keyed on the captured bubble list, not on which bubbles were actually
+ * placed.** A bubble that `lib/bubble.ts` drops for want of room takes its small
+ * label with it, and that is the accepted cost of not plumbing the placement
+ * result back into the style: the alternative is a filter that depends on a React
+ * render, which then repaints the map, which produces another `idle`. The story
+ * keeps its ring.
+ *
+ * The bubbles are captured once and retired on the reader's first camera move, so
+ * `MapView` calls this with `[]` from `dismissBubbles` — that call is what gives
+ * the five their 11px labels back, and it does not go through `applyTop`, whose
+ * `sameKeys` guard returns early when the ranking has not changed.
+ */
+export function bubbleLabelFilter(urls: readonly string[]): FilterSpecification {
+  return ["all", NOT_CONTAINER, ["!", ["in", ["get", "url"], ["literal", [...urls]]]]];
 }
 
 /**
@@ -582,6 +670,44 @@ export function hitLayers(): [FillLayerSpecification, FillLayerSpecification] {
   ];
 }
 
+/* -------------------------------------------------------------------------- */
+/* The selection pin: the triangle dropped on whatever was clicked             */
+/* -------------------------------------------------------------------------- */
+
+export const SELECTED_SOURCE_ID = "selected";
+export const SELECTED_LAYER_ID = "selected-pin";
+export const PIN_IMAGE_ID = "pin-triangle";
+
+/**
+ * The triangle that marks the current selection, drawn **above every disc**.
+ *
+ * **Its apex is the anchor.** `icon-anchor: "bottom"` puts the middle of the
+ * image's bottom edge — which is where `trianglePin` rasterises the point, by
+ * construction; see `PIN_LEFT_PAD` — on the feature's coordinate, so the tip
+ * lands on the story's own orange circle and the wedge hangs above it. Any other
+ * anchor would float the mark near the story rather than on it, and "near" is not
+ * a claim this map is allowed to make about a location.
+ *
+ * **Overlap and placement are both forced.** This is the one thing on screen the
+ * reader explicitly asked for; letting MapLibre's collision detection drop it
+ * because a headline got there first would make the click look like it failed.
+ * `icon-ignore-placement` is the other half — without it the triangle still
+ * takes part in collisions as an obstacle and erases the labels around it.
+ */
+export function selectedPinLayer(): SymbolLayerSpecification {
+  return {
+    id: SELECTED_LAYER_ID,
+    type: "symbol",
+    source: SELECTED_SOURCE_ID,
+    layout: {
+      "icon-image": PIN_IMAGE_ID,
+      "icon-anchor": "bottom",
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+  };
+}
+
 /**
  * Which outline layer a container belongs to, and what to filter it by.
  *
@@ -589,6 +715,12 @@ export function hitLayers(): [FillLayerSpecification, FillLayerSpecification] {
  * an admin-1 region otherwise (`USCA`, `UKC9`) — §2.2. Anything that is not a
  * container gets no outline at all: a PIN is at an exact place, and drawing a
  * country around it would claim the opposite.
+ *
+ * **Nothing on the map can reach this today.** Containers are filtered out of
+ * every pin layer (`NOT_CONTAINER`), so no click can produce a feature it
+ * accepts. It is kept whole, with its tests, because the "somewhere in" stories
+ * are being moved into the region panel and will need exactly this join to draw
+ * their outline from there.
  */
 export function outlineFor(properties: {
   kind?: unknown;

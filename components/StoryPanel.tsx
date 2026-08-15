@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import MapTilerLogo from "./MapTilerLogo";
 import PanelTab from "./PanelTab";
@@ -32,8 +31,6 @@ export type StoryPanelProps = {
   story: PanelStory;
   /** Neighbours from the radius query. Empty is a normal answer — see `lib/nearby.ts`. */
   nearby: PanelStory[];
-  /** Swap the panel to a neighbour without going back to the map. */
-  onSelect: (story: PanelStory) => void;
   onClose: () => void;
   /**
    * Slid off the left edge, still selected. Owned by `MapView` rather than by
@@ -47,7 +44,6 @@ export type StoryPanelProps = {
 export default function StoryPanel({
   story,
   nearby,
-  onSelect,
   onClose,
   collapsed,
   onToggleCollapse,
@@ -186,9 +182,18 @@ export default function StoryPanel({
                       {other.source && <span className="panel__chip">{other.source}</span>}
                       {age && <span className="panel__stamp">{age}</span>}
                     </p>
-                    <button type="button" onClick={() => onSelect(other)}>
+                    {/*
+                      §2.6: link-out only, and as of 2026-08-14 that is what a
+                      neighbour click DOES. It used to swap the panel to this
+                      story, which made the list a browsing surface that always
+                      ended in a second click on the same headline. Going
+                      straight to the publisher is the one thing this project can
+                      actually give a reader, so the row does it in one gesture —
+                      the same anchor `RegionPanel` has always used.
+                    */}
+                    <a href={other.url} target="_blank" rel="noopener noreferrer">
                       {other.title}
-                    </button>
+                    </a>
                   </li>
                 );
               })}
@@ -205,11 +210,12 @@ export default function StoryPanel({
         and it fails silently when hidden). Same component, so the two cannot
         drift.
 
-        **"How this works"** came off the masthead when the masthead was deleted.
-        It is inside the panel, so it is only reachable with a story open — the
-        accepted cost of giving the map back its top-left corner. `next/link`
-        rather than an anchor: /about is a route in this app, and a full document
-        load would discard the map and every tile it has cached.
+        **"How this works" has moved out again (2026-08-14)**, to "About Us" in
+        the brand block over the map's top-right corner. It lived here only
+        because the deleted masthead left it homeless, and the cost was that
+        §5.2 decision 3's measured accuracy was reachable *only with a story
+        open*. The new chrome is always on screen, so that trade is repaid and
+        the footer goes back to carrying one thing.
 
         `RegionPanel` renders this same footer, because both are the panel and
         both cover the same corner. The stylesheet makes it sticky so the logo
@@ -217,9 +223,6 @@ export default function StoryPanel({
       */}
         <footer className="panel__footer">
           <MapTilerLogo className="maptiler-logo--panel" />
-          <Link className="panel__about" href="/about">
-            How does this work?
-          </Link>
         </footer>
       </div>
 
