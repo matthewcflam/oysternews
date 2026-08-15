@@ -62,8 +62,19 @@ describe("nearbyStories", () => {
   });
 
   it("carries no field the panel may not render", () => {
+    // The same list `story.test.ts` pins, re-asserted on the neighbour path
+    // because a nearby row is a panel surface too. `image` joined it 2026-08-14;
+    // see the note there before adding an eighth name.
     const [story] = nearbyStories([feature("https://a.test/1", 3)], "https://z.test/none");
-    expect(Object.keys(story).sort()).toEqual(["date", "kind", "place", "source", "title", "url"]);
+    expect(Object.keys(story).sort()).toEqual([
+      "date",
+      "image",
+      "kind",
+      "place",
+      "source",
+      "title",
+      "url",
+    ]);
   });
 });
 

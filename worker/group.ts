@@ -253,6 +253,7 @@ function buildGroup(members: PlacedArticle[], now: number): StoryGroup {
     title: face.title,
     url: face.url,
     domain: face.domain,
+    image: face.image,
     lat: face.lat,
     lon: face.lon,
     kind: face.kind,

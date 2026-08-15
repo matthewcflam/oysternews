@@ -137,6 +137,13 @@ function featureOf(group: StoryGroup): unknown {
       kind: group.kind,
       region: group.regionId,
       country: group.countryCode,
+      // The panel's thumbnail, straight from GDELT's V2.1SHARINGIMAGE. A URL,
+      // not bytes — §2.6 is about reproducing content, and a link to the
+      // publisher's own CDN reproduces nothing. Mean 115 bytes, so this is the
+      // most expensive property in the list; it is here rather than fetched at
+      // click time because the alternative was a server-side fetch of the
+      // article page, which is a much worse thing to own. See parse.ts.
+      image: group.image,
       // Kept for the §2.3 freshness stamp and for debugging why a pin ranks
       // where it does. Numbers and dates, never prose.
       salience: Number(group.salience.toFixed(4)),

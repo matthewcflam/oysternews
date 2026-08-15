@@ -31,6 +31,7 @@ function article(patch: Partial<Article> = {}): Article {
     domain: "example.com",
     url: "https://example.com/a",
     title: "A headline",
+    image: "",
     themes: ["TAX_FNCACT"],
     locations: [location()],
     ...patch,

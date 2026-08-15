@@ -5,13 +5,22 @@ import {
   parseBundle,
   parseLocations,
   parseRow,
+  parseSharingImage,
   parseThemes,
   unescapeEntities,
 } from "./parse.ts";
 
 /** Build a GKG row with the fields this project reads placed at their real indices. */
 function row(
-  fields: Partial<{ date: string; source: string; url: string; themes: string; locations: string; extras: string }>,
+  fields: Partial<{
+    date: string;
+    source: string;
+    url: string;
+    themes: string;
+    locations: string;
+    image: string;
+    extras: string;
+  }>,
   columnCount = MIN_COLS,
 ): string {
   const cells = new Array(Math.max(columnCount, MIN_COLS)).fill("");
@@ -20,6 +29,7 @@ function row(
   cells[4] = fields.url ?? "https://example.com/a";
   cells[8] = fields.themes ?? "";
   cells[10] = fields.locations ?? "";
+  cells[18] = fields.image ?? "";
   cells[26] = fields.extras ?? "<PAGE_TITLE>A title</PAGE_TITLE>";
   // V2GCAM is 69.4% of a real bundle's bytes and must never be materialized.
   cells[17] = "wc:100,c1.1:5,c12.1:9";
@@ -110,6 +120,51 @@ describe("locations", () => {
   it("sorts a missing offset last rather than first", () => {
     const [location] = parseLocations("4#X#US#0#0#1#2#3#notanumber");
     expect(location.offset).toBe(Number.MAX_SAFE_INTEGER);
+  });
+});
+
+describe("the sharing image", () => {
+  // V2.1SHARINGIMAGE (column 18) is the publisher's own og:image, and it ends up
+  // in an <img src> in the browser. This is the ONLY place it is validated, so
+  // these cases are the whole of the trust boundary between GDELT and the DOM.
+
+  it("reads the publisher's image off column 18", () => {
+    const { article } = parseRow(row({ image: "https://cdn.example.com/a.jpg" }));
+    expect(article?.image).toBe("https://cdn.example.com/a.jpg");
+  });
+
+  it("refuses every scheme but http and https", () => {
+    // `javascript:` is the reason this is an allowlist. `data:` would let one
+    // row carry an arbitrarily large payload into a tile.
+    for (const hostile of [
+      "javascript:alert(1)",
+      "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+      "file:///etc/passwd",
+      "vbscript:msgbox(1)",
+    ]) {
+      expect(parseSharingImage(hostile)).toBe("");
+    }
+  });
+
+  it("returns empty for junk rather than passing it through", () => {
+    // 12.2% of real records have no image at all, so "" is the ordinary answer
+    // and every failure path has to produce the same one.
+    expect(parseSharingImage("")).toBe("");
+    expect(parseSharingImage("   ")).toBe("");
+    expect(parseSharingImage("not a url")).toBe("");
+    expect(parseSharingImage("/relative/path.jpg")).toBe("");
+  });
+
+  it("takes the first usable value when the field is multi-valued", () => {
+    // Documented as multi-valued; 6 of 1,085 sampled rows carried a ';'. The
+    // publisher's order is the preference order.
+    expect(parseSharingImage("https://a.test/1.jpg;https://b.test/2.jpg")).toBe(
+      "https://a.test/1.jpg",
+    );
+    // A hostile value first must not poison the usable one behind it.
+    expect(parseSharingImage("javascript:alert(1);https://b.test/2.jpg")).toBe(
+      "https://b.test/2.jpg",
+    );
   });
 });
 

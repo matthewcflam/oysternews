@@ -35,6 +35,7 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   return {
     id: "g",
     title: "A headline",
+    image: "",
     url: "https://a.com/1",
     domain: "a.com",
     lat: 1,

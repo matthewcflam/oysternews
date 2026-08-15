@@ -1852,27 +1852,71 @@ salience; cross-class order is settled by the first key.
   > **Amended 2026-08-14, deliberately, when the popup became the story panel.**
   > The rule is unchanged — no article text is reproduced anywhere — but the panel
   > now shows the article's **own `og:image`**, hotlinked from the publisher's CDN
-  > and never proxied through Vercel. Two consequences worth naming rather than
-  > discovering: the project now **fetches the article page itself**
-  > (`app/api/og/route.ts`, server-side, meta tags only, page body discarded), and
-  > the reader's browser loads a picture from the publisher's origin. Neither was
-  > true before. The enforcement point moved with the surface: `PanelStory` in
-  > `lib/story.ts` is now the whole of what a story may render, `panelStory()` is
-  > its only constructor, and `lib/story.test.ts` asserts the field list is exactly
-  > six names. `lib/popup.ts` and its test are deleted.
+  > and never proxied through Vercel. The reader's browser loads a picture from
+  > the publisher's origin, which was not true before. The enforcement point moved
+  > with the surface: `PanelStory` in `lib/story.ts` is now the whole of what a
+  > story may render, `panelStory()` is its only constructor, and
+  > `lib/story.test.ts` asserts the field list. `lib/popup.ts` and its test are
+  > deleted.
   >
-  > **Measured 2026-08-14, against 20 real GDELT article URLs from the judged
-  > draw: 19 return an `og:image`, 1 declares none, 0 fetches fail.** Worth having
-  > because the endpoint answers `{"image": null}` for *every* outcome — a refused
-  > host, a timeout, a page with no tag and a broken guard are one response from
-  > outside — so "it returns null" is not evidence of anything and the happy path
-  > has to be exercised deliberately. **`app/**` is outside vitest's include list**
-  > (`vitest.config.ts`), so this is a hand measurement, not a test that will
-  > re-run. The guard predicates it depends on *are* tested, in
-  > `lib/safe-url.test.ts`, which is why they live there. Re-measure by hand if
-  > the parse or the fetch changes; the section fronts of large publishers are a
-  > bad sample for it, because they legitimately declare no `og:image` and their
-  > `<head>` can exceed the 256 KB cap.
+  > **Amended again the same day, and this one deleted code rather than adding
+  > it.** For a few hours the thumbnail came from `/api/og`, a route handler that
+  > **fetched the article page itself**, server-side, once per story opened. That
+  > is an SSRF primitive, and it carried a scheme allowlist, pre-fetch DNS checks
+  > against the private ranges, hand-followed redirects, a byte cap and a timeout
+  > to stop being one.
+  >
+  > **All of it existed to re-derive a field GDELT was already handing us.** GKG
+  > 2.1 column 18 is `V2.1SHARINGIMAGE` — the publisher's own `og:image`, read off
+  > the page by GDELT's crawler — and `worker/parse.ts` was already slicing column
+  > 26 out of the same row for the title. The endpoint, `lib/og.ts` and
+  > `lib/safe-url.ts` are **deleted**; the field rides the tile feature like every
+  > other property, and the client fetches nothing.
+  >
+  > ```
+  >   coverage      85.6% of 7,049 articles (12 bundles)   /api/og measured 95%
+  >   url bytes     mean 115, p50 106, p90 179
+  >   archive       12.23 MB -> 16.04 MB   = +31.2%   (tippecanoe 2.79.0, -Z0 -z12 -r1)
+  >   SSRF surface  gone
+  > ```
+  >
+  > **The cost is real and it is the reason to keep watching this.** +31.2% on the
+  > archive partially undoes the density work landed hours earlier, and PMTiles is
+  > range-requested, so what a reader actually pays is ~31% more bytes on the tiles
+  > they fetch. It bought the removal of a per-click server-side fetch of a
+  > third-party page and the entire guard around it. **If it ever needs trimming,
+  > the field is the first thing to look at**, and the honest fallback is not
+  > `/api/og` again — it is showing fewer thumbnails.
+  >
+  > **The image is taken from the group's representative article only**, never
+  > from whichever member happens to have one: borrowing across members would
+  > raise coverage a few points and pair the panel's headline with a picture from
+  > a different article, which the reader cannot detect.
+  >
+  > `parseSharingImage` is the **only** place the value is validated, and it is an
+  > `http`/`https` allowlist — the field reaches an `<img src>`, so `javascript:`
+  > is the case that matters and `data:` would let one row carry an arbitrary
+  > payload into a tile. The archive is the boundary: an invalid URL never gets
+  > published. The panel's `onError` and 200px minimum-width check are a different
+  > guard, against images that break or turn out to be tracking beacons.
+  >
+  > **The endpoint's own coverage was measured before it was deleted, and it is
+  > kept because it is the number the GDELT column has to be judged against:**
+  > 20 real article URLs from the judged draw, **19 returned an `og:image`, 1
+  > declared none, 0 fetches failed**. So live fetching was ~95% and GDELT's
+  > column is 85.6% — **the ~9 points is what the SSRF surface actually cost to
+  > keep**, and it is the whole of the argument for the trade. The gap is stale
+  > and missing entries, not a parsing failure.
+  >
+  > That measurement also has a methodological trap worth keeping. The endpoint
+  > answered `{"image": null}` for *every* outcome — refused host, timeout, no
+  > tag, broken guard — so "it returns null" was never evidence of anything. The
+  > first probe of it used **section fronts** (`bbc.com/news`,
+  > `theguardian.com/us`) and read 0 for 2, which looked like a broken endpoint
+  > and was not: section fronts legitimately declare no `og:image`, and the
+  > Guardian's `<head>` exceeded the 256 KB read cap. **Sample article URLs, which
+  > is what the product passes.** The same rule applies to `parseSharingImage`
+  > now, minus the network.
 - **Public repo.** This is what makes GitHub Actions free.
 - **English-only**, achieved by consuming `lastupdate.txt` and **not**
   `lastupdate-translation.txt`. Approximately English, not exactly.
@@ -2571,12 +2615,19 @@ single-location.
    > and the guarantee was carried over rather than allowed to lapse with it.**
    > `PanelStory` (`lib/story.ts`) is the whole content model, `panelStory()` is
    > its only constructor, and `lib/story.test.ts` asserts the field list is
-   > exactly `date, kind, place, source, title, url` and that `salience`,
+   > exactly `date, image, kind, place, source, title, url` and that `salience`,
    > `domains`, `tier1`, `region`, `country` and an injected `body` are all
    > dropped. `tier1` matters most: §2.3 says the preference is invisible, and a
    > badge is what that forbids. **This is now a stronger assertion than the
    > popup's**, because it constrains the data rather than the rendered string —
-   > `nearby.test.ts` re-asserts the same six names on every neighbour.
+   > `nearby.test.ts` re-asserts the same names on every neighbour.
+   >
+   > **The list was six names until 2026-08-14, when `image` was added with
+   > `V2.1SHARINGIMAGE`.** A growing list is a weakening assertion, so the count
+   > is stated here and in the test: an image URL is a pointer to the publisher's
+   > CDN, the same class of thing as `url`, and anything that cannot be defended
+   > in one sentence does not get added. **Widening this list to make a test pass
+   > is the failure mode.**
    >
    > Both list surfaces are still type-enforced with no DOM assertion:
    > `RegionStory` for §2.3's panel, `PanelStory` for "Stories Nearby".

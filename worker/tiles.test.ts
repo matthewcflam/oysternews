@@ -23,6 +23,7 @@ function group(overrides: Partial<StoryGroup> = {}): StoryGroup {
   return {
     id: "g1",
     title: "A headline",
+    image: "",
     url: "https://example.com/a",
     domain: "example.com",
     lat: 51.5,
@@ -111,6 +112,10 @@ describe("the feature payload", () => {
         "country",
         "date",
         "domains",
+        // Added 2026-08-14 with V2.1SHARINGIMAGE. The most expensive property
+        // here — mean 115 bytes against a 7.2 MB archive — and it bought the
+        // deletion of a server-side article fetch. A URL, never bytes.
+        "image",
         "kind",
         "place",
         "region",

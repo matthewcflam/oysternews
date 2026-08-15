@@ -9,16 +9,25 @@ const pin = {
   place: "Houston, Texas, United States",
   kind: "PIN",
   date: "20260813193400",
+  image: "https://chron.com/storm.jpg",
 };
 
 describe("panelStory", () => {
-  it("carries the title, source, url, place, kind and date — and nothing else", () => {
+  it("carries the title, source, url, place, kind, date and image — and nothing else", () => {
     // §7 critical gap 2, inherited from the deleted popup.test.ts. §2.6 is a
     // copyright constraint, so the assertion is that the panel's content model
-    // is EXACTLY these six fields: anything upstream that starts carrying
+    // is EXACTLY these seven fields: anything upstream that starts carrying
     // article text must fail here rather than ship.
+    //
+    // **It was six until 2026-08-14, when the thumbnail moved onto the tile.**
+    // The list growing is the assertion weakening, so it is changed by hand and
+    // never widened to make a failure go away — an image URL is a pointer to the
+    // publisher's CDN, the same class of thing as `url`, and that is the whole
+    // argument for admitting it. Anything that is not defensible in one sentence
+    // does not belong on this list.
     expect(Object.keys(panelStory(pin) ?? {}).sort()).toEqual([
       "date",
+      "image",
       "kind",
       "place",
       "source",
@@ -27,7 +36,7 @@ describe("panelStory", () => {
     ]);
   });
 
-  it("drops every field that is not one of the six", () => {
+  it("drops every field that is not one of the seven", () => {
     // A feature carries salience, domains, tier1, region and country
     // (worker/tiles.ts). None may reach the panel — tier1 least of all: §2.3
     // says the preference is invisible, and a badge is exactly what that forbids.
@@ -67,6 +76,10 @@ describe("panelStory", () => {
       place: "",
       kind: "",
       date: "",
+      // 12.2% of GDELT records carry no sharing image, so "" is the normal
+      // answer here rather than the degraded one — the panel has a designed
+      // header for it.
+      image: "",
     });
   });
 });
