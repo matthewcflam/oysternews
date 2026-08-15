@@ -124,6 +124,17 @@ describe("jsonl", () => {
     const [parsed] = fromJsonl(JSON.stringify(older)).articles;
     expect(parsed.adm1).toBe("");
   });
+
+  it("fills in image, which a shard written before 2026-08-14 has never heard of", () => {
+    // This one was missed when the field was added, and nothing caught it: the
+    // undefined survived into StoryGroup, JSON.stringify silently dropped the key
+    // from the tile feature, and panelStory() read the missing property back as
+    // "". Every layer degraded to the same blank thumbnail the empty case
+    // already renders, so the type violation was invisible end to end.
+    const { image, ...older } = article();
+    const [parsed] = fromJsonl(JSON.stringify(older)).articles;
+    expect(parsed.image).toBe("");
+  });
 });
 
 describe("the pool", () => {

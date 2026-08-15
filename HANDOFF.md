@@ -1888,6 +1888,44 @@ salience; cross-class order is settled by the first key.
   > the field is the first thing to look at**, and the honest fallback is not
   > `/api/og` again — it is showing fewer thumbnails.
   >
+  > **A new tile property is 0% covered for a full window, and it looks exactly
+  > like a broken feature.** Measured on the live archive two hours after this
+  > shipped: **688 of 11,203 stories carried an image, 6.1%**, against the 85.6%
+  > the parser produces. Nothing was wrong. The pool is per-run shards spanning
+  > 24 hours (48 for tier-1), so every shard written before the field existed
+  > contributes articles without it. Bucketing by GKG hour shows it exactly —
+  > 0.0% for every hour up to 01:00, then **60.9% / 82.3% / 85.9%** for the three
+  > hours the new code has ingested:
+  >
+  > ```
+  >   2026081501    410 stories     0 with image    0.0%
+  >   2026081502    366           223              60.9%   <- first run with the field
+  >   2026081503    402           331              82.3%
+  >   2026081504    156           134              85.9%   <- the parser's rate
+  > ```
+  >
+  > It reaches steady state ~24 hours after the first run that carries the field,
+  > 48 for tier-1. **Do not react to the low number** — the same shape will follow
+  > every future property, and the only honest reading is per-hour, not overall.
+  >
+  > **Two hours of that was a real defect, and it is the trap `state.ts` already
+  > documents.** `migrate()` exists to fill in fields a shard predates, its own
+  > comment says anything added later belongs there, and `image` was not added on
+  > the first pass. The cast `JSON.parse(...) as PlacedArticle` then claimed a
+  > `string` that was `undefined` at runtime. **It was invisible in all three
+  > layers below it**: `undefined` reached `StoryGroup.image`, `JSON.stringify`
+  > dropped the key from the feature, and `panelStory()` read the absent property
+  > back as `""` — the same blank hero the 12.2%-no-image case renders. Fixed, and
+  > `state.test.ts` now pins it. The lesson is not "remember migrate": it is that
+  > a missing field degrades into a *designed* empty state here, so the type is
+  > the only thing that can catch it and a cast is exactly where the type stops.
+  >
+  > **3.5% of published image urls are `http://`** (24 of 688) and a browser on an
+  > https page will upgrade or block them. Left in deliberately: an upgrade often
+  > succeeds, and a failure costs the same flat header the url was never going to
+  > beat. Worth revisiting only if the fallback rate looks wrong once the window
+  > has turned over.
+  >
   > **The image is taken from the group's representative article only**, never
   > from whichever member happens to have one: borrowing across members would
   > raise coverage a few points and pair the panel's headline with a picture from
