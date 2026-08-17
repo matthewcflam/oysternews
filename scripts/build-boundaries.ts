@@ -45,6 +45,22 @@ const CACHE_DIR = path.join(REPO_ROOT, ".cache");
 const BUILD_DIR = path.join(REPO_ROOT, "build", "boundaries");
 const OUTPUT = path.join(REPO_ROOT, "public", "boundaries.pmtiles");
 
+/**
+ * The second output: `id -> [west, south, east, north]`, for Mode 3's "Zoom to
+ * Texas" button.
+ *
+ * **It is built HERE, from the same two feature lists the archive is built from,
+ * and that is the entire point.** A bbox computed anywhere else is a second join
+ * — a second chance to decide that `US06` and `USCA` are different places, or
+ * that Tamil Nadu is `IN22`. Every id in this file is an id the outline archive
+ * can draw, by construction, because it comes off the same `outline()` calls.
+ *
+ * JSON rather than a second pmtiles layer: it is one array of four numbers per
+ * region, the browser needs a random-access lookup rather than a tile, and
+ * `fitBounds` wants numbers, not geometry.
+ */
+const BBOX_OUTPUT = path.join(REPO_ROOT, "public", "region-bbox.json");
+
 export const COUNTRIES_LAYER = "countries";
 export const REGIONS_LAYER = "regions";
 
@@ -212,6 +228,97 @@ function regionOutlines(features: Feature[]): Feature[] {
   return out;
 }
 
+/* ------------------------------------------------------------------------- */
+/* The bbox table                                                             */
+/* ------------------------------------------------------------------------- */
+
+/** `[west, south, east, north]`. West may exceed east's usual range — see below. */
+export type Bbox = [number, number, number, number];
+
+/** Every coordinate pair in a Polygon or MultiPolygon, flattened. */
+function* positions(geometry: unknown): Generator<[number, number]> {
+  const walk = function* (node: unknown): Generator<[number, number]> {
+    if (!Array.isArray(node)) return;
+    if (typeof node[0] === "number" && typeof node[1] === "number") {
+      yield [node[0], node[1]];
+      return;
+    }
+    for (const child of node) yield* walk(child);
+  };
+
+  const geo = geometry as { coordinates?: unknown };
+  yield* walk(geo?.coordinates);
+}
+
+/**
+ * Longitude bounds for one region, chosen between two candidate frames.
+ *
+ * **This is the antimeridian trap, and it is silent.** Russia spans 19°E to
+ * 169°W; the United States runs to the Aleutians at 172°E. Take the naive
+ * min/max of their longitudes and you get -180 to 180 — a bbox of the entire
+ * planet — so "Zoom to Russia" zooms OUT to the world view and looks like a
+ * button that does nothing. Fiji is worse: it straddles 180 exactly, so a naive
+ * fit centres it on the Atlantic.
+ *
+ * The fix is to measure the same points twice: once as given, and once with
+ * every longitude mapped into [0, 360). The correct frame is whichever is
+ * NARROWER, because a region is the small arc between its edges and never the
+ * large one — Russia is 190° wide in the raw frame and 150° in the shifted one.
+ *
+ * When the shifted frame wins, the result is returned with west back inside
+ * [-180, 180) and east allowed to run past 180 (Fiji becomes 174 → 182). That is
+ * a form MapLibre understands directly, because `renderWorldCopies` means the
+ * copy of the world at +360 is a real place on screen; normalising east back to
+ * -178 would recreate the bug this function exists to remove.
+ */
+function longitudeBounds(lons: number[]): [number, number] {
+  const raw: [number, number] = [Math.min(...lons), Math.max(...lons)];
+
+  const shiftedLons = lons.map((lon) => (lon < 0 ? lon + 360 : lon));
+  const shifted: [number, number] = [Math.min(...shiftedLons), Math.max(...shiftedLons)];
+
+  if (shifted[1] - shifted[0] >= raw[1] - raw[0]) return raw;
+  return shifted[0] >= 180 ? [shifted[0] - 360, shifted[1] - 360] : shifted;
+}
+
+/**
+ * One bbox per id, over every feature carrying that id.
+ *
+ * **The union, not the first match.** Natural Earth splits a great many regions
+ * into several features that each carry the parent's code — that is exactly the
+ * "187 codes carried by more than one feature" the cross-border check above
+ * counts, and most of them are legitimate. Taking the first would zoom to one
+ * province of a region and call it the region.
+ *
+ * Rounded to three decimals: ~100m at the equator, which is four orders of
+ * magnitude finer than a camera fit needs, and it halves the file.
+ */
+export function bboxesById(features: Feature[]): Record<string, Bbox> {
+  const lons = new Map<string, number[]>();
+  const lats = new Map<string, number[]>();
+
+  for (const feature of features) {
+    const id = String(feature.properties.id ?? "");
+    if (!id) continue;
+    const lon = lons.get(id) ?? lons.set(id, []).get(id)!;
+    const lat = lats.get(id) ?? lats.set(id, []).get(id)!;
+    for (const [x, y] of positions(feature.geometry)) {
+      lon.push(x);
+      lat.push(y);
+    }
+  }
+
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  const out: Record<string, Bbox> = {};
+  for (const [id, lon] of lons) {
+    const lat = lats.get(id)!;
+    if (lon.length === 0) continue;
+    const [west, east] = longitudeBounds(lon);
+    out[id] = [round(west), round(Math.min(...lat)), round(east), round(Math.max(...lat))];
+  }
+  return out;
+}
+
 /**
  * **A forward-slash literal, never `path.join`** — and the paths handed after it
  * get the same treatment (`posix`, below).
@@ -258,6 +365,32 @@ async function main(): Promise<void> {
   await writeFile(regionsFile, collection(regions), "utf8");
 
   /**
+   * Countries and regions in ONE table, because the browser looks up by id and
+   * the two namespaces cannot collide — a FIPS country code is two characters
+   * and an admin-1 code is four, which is the same fact `buildRegionIndex` files
+   * both levels into one flat map on.
+   */
+  const bboxes = { ...bboxesById(countries), ...bboxesById(regions) };
+  await writeFile(BBOX_OUTPUT, `${JSON.stringify(bboxes)}\n`, "utf8");
+  const bboxSize = (await stat(BBOX_OUTPUT)).size;
+  console.log(
+    `  bbox:      ${Object.keys(bboxes).length} regions -> ${BBOX_OUTPUT}` +
+      ` (${(bboxSize / 1024).toFixed(0)} KB)`,
+  );
+
+  /**
+   * **`--bbox-only` exists because the two outputs have wildly different costs.**
+   * The archive needs tippecanoe installed and takes minutes; the bbox table is
+   * a pass over feature lists that are already in memory. Regenerating the table
+   * after a join change should not require the tool, and skipping the archive
+   * here is safe precisely because nothing above this line is archive-specific.
+   */
+  if (process.argv.includes("--bbox-only")) {
+    console.log("--bbox-only: skipping tippecanoe");
+    return;
+  }
+
+  /**
    * -z8, not the stories archive's z12. An outline is a shape, not a
    * measurement: MapLibre overzooms a z8 tile for free, and the difference is
    * invisible against a 2px stroke while the file is a fraction of the size.
@@ -290,7 +423,18 @@ async function main(): Promise<void> {
   console.log(`built ${OUTPUT} (${(built.size / 1_000_000).toFixed(1)} MB)`);
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exit(1);
-});
+/**
+ * **Guarded, so the module can be imported.** `bboxesById` is the one piece of
+ * this script worth unit-testing — the antimeridian rule is silent when it is
+ * wrong (see `longitudeBounds`), which is exactly the §11 shape — and an
+ * unguarded `main()` would kick off a 54 MB parse and a tippecanoe run the
+ * moment a test file imported it.
+ */
+const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+
+if (invokedDirectly) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

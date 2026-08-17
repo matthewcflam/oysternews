@@ -31,8 +31,8 @@ describe("buildRegionIndex", () => {
   it("files a story under both its country and its admin-1", () => {
     const index = buildRegionIndex([group({ id: "1" })]);
     expect(Object.keys(index).sort()).toEqual(["US", "USCA"]);
-    expect(index.US[0].title).toBe("A headline");
-    expect(index.USCA[0]).toEqual(index.US[0]);
+    expect(index.US.stories[0].title).toBe("A headline");
+    expect(index.USCA.stories[0]).toEqual(index.US.stories[0]);
   });
 
   it("does not file a country container under itself twice", () => {
@@ -46,7 +46,7 @@ describe("buildRegionIndex", () => {
     // Pins are 33.5% of the feed and carry regionId "". A panel keyed on
     // regionId would show California's containers and omit a third of its news.
     const index = buildRegionIndex([group({ kind: "PIN", regionId: "", adm1: "USCA" })]);
-    expect(index.USCA).toHaveLength(1);
+    expect(index.USCA.stories).toHaveLength(1);
   });
 
   it("skips a story with no country attribution rather than making an empty key", () => {
@@ -62,7 +62,7 @@ describe("buildRegionIndex", () => {
       group({ id: "top", title: "top", salience: 4 }),
       group({ id: "mid", title: "mid", salience: 2 }),
     ]);
-    expect(index.US.map((story) => story.title)).toEqual(["top", "mid", "low"]);
+    expect(index.US.stories.map((story) => story.title)).toEqual(["top", "mid", "low"]);
   });
 
   it("puts a tier-1 story ahead of a more salient ordinary one", () => {
@@ -71,7 +71,7 @@ describe("buildRegionIndex", () => {
       group({ id: "big", title: "big", salience: 4 }),
       group({ id: "t1", title: "t1", salience: 0.7, tier1Fresh: true }),
     ]);
-    expect(index.US[0].title).toBe("t1");
+    expect(index.US.stories[0].title).toBe("t1");
   });
 
   it("caps each region independently", () => {
@@ -79,15 +79,15 @@ describe("buildRegionIndex", () => {
       group({ id: `${i}`, salience: 100 - i }),
     );
     const index = buildRegionIndex([...many, group({ id: "fr", countryCode: "FR", adm1: "" })]);
-    expect(index.US).toHaveLength(REGION_TOP_N);
-    expect(index.FR).toHaveLength(1);
+    expect(index.US.stories).toHaveLength(REGION_TOP_N);
+    expect(index.FR.stories).toHaveLength(1);
   });
 
   it("carries only title, source, url, date and place — §2.6 link-out only", () => {
     // The type is the constraint; this is the test that keeps it one. Salience
     // and tier1 must not reach the browser: §2.3 forbids a tier-1 badge, and the
     // surest way to prevent one is for the data not to be there.
-    const [story] = buildRegionIndex([group()]).US;
+    const [story] = buildRegionIndex([group()]).US.stories;
     expect(Object.keys(story).sort()).toEqual(["date", "place", "source", "title", "url"]);
   });
 
@@ -95,7 +95,7 @@ describe("buildRegionIndex", () => {
     // §2.4 overflow: minzoom above the z12 ceiling means it is in the pipeline
     // and not on the map. The panel is the only surface that can reach it.
     const index = buildRegionIndex([group({ minzoom: 14 })]);
-    expect(index.US).toHaveLength(1);
+    expect(index.US.stories).toHaveLength(1);
   });
 });
 

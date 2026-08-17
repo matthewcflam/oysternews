@@ -1,9 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import MapTilerLogo from "./MapTilerLogo";
-import PanelTab from "./PanelTab";
-import { placeHeading, placementLine, publishedAt, type PanelStory } from "@/lib/story";
+import { linkLabel, placeLine, publishedAt, type PanelStory } from "@/lib/story";
+
 
 /**
  * The story panel: what a click on a pin opens.
@@ -13,8 +13,23 @@ import { placeHeading, placementLine, publishedAt, type PanelStory } from "@/lib
  * neighbours; the panel is the same slot §2.3's region panel already uses, so
  * only one of the two is ever open.
  *
+ * **Mode 2 (2026-08-16) made it a floating card**, 324x489, against the note in
+ * `globals.css` that said full-bleed and gave reasons. Those reasons are answered
+ * rather than ignored — a fixed height and a soft shadow, see `.panel` — and the
+ * content changed with the shape:
+ *
+ * - the headline **stops being the link**; a *Read The Story* button takes that
+ *   job, so there is one primary action and it is drawn as one;
+ * - source and age **merge into one italic line**, because they answer one
+ *   question between them;
+ * - "Stories Nearby" becomes **"More Reporting"** — other outlets covering *this*
+ *   story rather than other stories near this one. The first was a geographic
+ *   accident of what the map had rendered; the second is a fact about the story;
+ * - the placement disclosure moves to **"How does this work?"** at the foot. It
+ *   is not dropped — see `lib/story.ts`.
+ *
  * **Presentational only**, for the same reason `RegionPanel` is: the gesture, the
- * radius query and the outline all live in `MapView.tsx`, so the §2.6 constraint
+ * selection and the outline all live in `MapView.tsx`, so the §2.6 constraint
  * can be checked by reading one short file. **It has no exceptions as of
  * 2026-08-14** — the thumbnail used to be fetched here, from `/api/og`, and that
  * was the one network call in the component. GDELT carries the publisher's
@@ -22,32 +37,17 @@ import { placeHeading, placementLine, publishedAt, type PanelStory } from "@/lib
  * other field and this component fetches nothing at all.
  *
  * **§2.6 is enforced by `PanelStory`, not by care.** Title, source, url, place,
- * kind, date and image. There is no article text to render because there is no
- * field for it, and `panelStory()` is the only constructor — see `lib/story.ts`,
- * which explains why `image` is on that list and why it is not article content.
+ * kind, date, image and the coverage links. There is no article text to render
+ * because there is no field for it, and `panelStory()` is the only constructor —
+ * see `lib/story.ts`, which explains why each of the eight is on that list.
  */
 
 export type StoryPanelProps = {
   story: PanelStory;
-  /** Neighbours from the radius query. Empty is a normal answer — see `lib/nearby.ts`. */
-  nearby: PanelStory[];
   onClose: () => void;
-  /**
-   * Slid off the left edge, still selected. Owned by `MapView` rather than by
-   * this component because the same tab has to survive swapping to `RegionPanel`
-   * — see the note there.
-   */
-  collapsed: boolean;
-  onToggleCollapse: () => void;
 };
 
-export default function StoryPanel({
-  story,
-  nearby,
-  onClose,
-  collapsed,
-  onToggleCollapse,
-}: StoryPanelProps) {
+export default function StoryPanel({ story, onClose }: StoryPanelProps) {
   /**
    * **The thumbnail arrives on the tile feature now (2026-08-14), so there is no
    * lookup to be in flight.** It used to be an async fetch of `/api/og`, which
@@ -87,8 +87,6 @@ export default function StoryPanel({
    */
   const MIN_IMAGE_WIDTH = 200;
 
-  const heading = placeHeading(story.place);
-  const placement = placementLine(story);
   /**
    * One clock reading for the whole panel, not one per row. Every age on screen
    * is then measured from the same instant — rows rendered either side of a
@@ -98,16 +96,41 @@ export default function StoryPanel({
   const now = Date.now();
   const time = publishedAt(story.date, now);
 
+  /**
+   * `yahoo.com · 3 hours ago`, or whichever half exists.
+   *
+   * Both halves are routinely present and neither is guaranteed: `source` is ""
+   * for a feature with no domain and `publishedAt` returns "" for a stamp it
+   * cannot parse. Joining the survivors is what stops a dangling separator with
+   * nothing on one side of it.
+   */
+  const byline = [story.source, time].filter(Boolean).join(" · ");
+
+  /** "Anaheim, California, USA", or "Somewhere in Texas, USA" — see `placeLine`. */
+  const place = placeLine(story);
+
+  /**
+   * The coverage links, labelled and de-duplicated by label.
+   *
+   * The worker already emits one url per distinct domain, so this changes nothing
+   * on well-formed data — it is here because the card renders the *label*, and
+   * two rows reading `chron.com` twice would look like a bug in the card rather
+   * than a change upstream. A url whose host will not parse is dropped rather
+   * than printed as a bare href.
+   */
+  const coverage: { url: string; label: string }[] = [];
+  const seen = new Set<string>();
+  for (const url of story.more) {
+    const label = linkLabel(url);
+    if (!label || seen.has(label)) continue;
+    seen.add(label);
+    coverage.push({ url, label });
+  }
+
   return (
-    <aside
-      className={`panel${collapsed ? " panel--collapsed" : ""}`}
-      aria-label={story.title || "Story"}
-    >
-      {/*
-        `.panel` positions and slides; this element holds and scrolls. The split
-        is what lets the tab hang off the right edge — `overflow-y: auto` clips
-        both axes, so on one element the tab was invisible.
-      */}
+    <aside className="panel" aria-label={story.title || "Story"}>
+      {/* `.panel` positions and carries the shadow; this element clips to the
+          card's radius. One element cannot both overflow and clip. */}
       <div className="panel__scroll">
         <header className={`panel__hero${image ? " panel__hero--image" : ""}`}>
           {image && (
@@ -135,98 +158,84 @@ export default function StoryPanel({
               referrerPolicy="no-referrer"
             />
           )}
-          <span className="panel__dot" aria-hidden="true" />
+          {/*
+            **The mockup draws no ×, and shipping without one would be a trap.**
+            A card with no dismissal is a card the reader cannot put down. There
+            are three ways out and none of them costs visual weight: Escape and a
+            click on the map background are both handled in `MapView`, and this is
+            the one that is visible to somebody who does not know either.
+          */}
           <button type="button" className="panel__close" onClick={onClose} aria-label="Close panel">
             ×
           </button>
-          {heading && <h2 className="panel__place">{heading}</h2>}
         </header>
 
         <div className="panel__body">
-          {/* §2.6: link-out only. Title, source, link — never article text. */}
-          <a className="panel__title" href={story.url} target="_blank" rel="noopener noreferrer">
-            {story.title}
-          </a>
-          {time && <p className="panel__time">{time}</p>}
-          <a className="panel__source" href={story.url} target="_blank" rel="noopener noreferrer">
-            {story.source}
-          </a>
+          {byline && <p className="panel__byline">{byline}</p>}
+
           {/*
-          §5.2 decision 3, the pin half: the panel names the place the rule picked
-          and says it was picked automatically. Uniform by measurement — there is
-          no per-pin signal to grade on (lib/story.ts has the table).
-        */}
-          {placement && <p className="panel__placement">{placement}</p>}
+            An `h2`, not an `a` — see `.panel__title`. §2.6 is unchanged by that:
+            the card still links out and only links out, it just does it from the
+            button below rather than from the headline.
+          */}
+          <h2 className="panel__title">{story.title}</h2>
+
+          {place && (
+            <p className="panel__where">
+              <span className="panel__sphere" aria-hidden="true" />
+              {place}
+            </p>
+          )}
+
+          {/* §2.6: link-out only. Title, source, link — never article text. */}
+          <a
+            className="panel__cta"
+            href={story.url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Read The Story
+          </a>
         </div>
 
-        <section className="panel__list" aria-label="Stories nearby">
-          <h3>Stories Nearby</h3>
-
-          {nearby.length === 0 ? (
-            // A normal answer, not an error. §2.4's budget thins features at low
-            // zoom, so a quiet part of the world genuinely has no neighbours drawn.
-            <p className="panel__note">Nothing else nearby on the map right now.</p>
-          ) : (
+        {/*
+          **Omitted entirely when there is nothing to put in it**, which is the
+          common case rather than the degraded one: 87.2% of groups are a single
+          article and carry no coverage at all (measured — see the theme audit).
+          An empty "More Reporting" heading over a blank space would read as a
+          failed fetch on nine cards out of ten.
+        */}
+        {coverage.length > 0 && (
+          <section className="panel__more" aria-label="More reporting">
+            <h3>More Reporting</h3>
             <ul>
-              {nearby.map((other) => {
-                const age = publishedAt(other.date, now);
-                return (
-                  <li key={other.url}>
-                    {/*
-                      Publisher and age above the headline. Both come off the
-                      story itself — §2.6's five fields already carry them — so
-                      this adds no data, only surfaces what a reader previously
-                      had to click through to find.
-                    */}
-                    <p className="panel__meta">
-                      {other.source && <span className="panel__chip">{other.source}</span>}
-                      {age && <span className="panel__stamp">{age}</span>}
-                    </p>
-                    {/*
-                      §2.6: link-out only, and as of 2026-08-14 that is what a
-                      neighbour click DOES. It used to swap the panel to this
-                      story, which made the list a browsing surface that always
-                      ended in a second click on the same headline. Going
-                      straight to the publisher is the one thing this project can
-                      actually give a reader, so the row does it in one gesture —
-                      the same anchor `RegionPanel` has always used.
-                    */}
-                    <a href={other.url} target="_blank" rel="noopener noreferrer">
-                      {other.title}
-                    </a>
-                  </li>
-                );
-              })}
+              {coverage.map((link) => (
+                <li key={link.url}>
+                  <a href={link.url} target="_blank" rel="noopener noreferrer">
+                    {link.label}
+                  </a>
+                </li>
+              ))}
             </ul>
-          )}
-        </section>
+          </section>
+        )}
 
         {/*
-        The panel's footer, and the home of two things that used to live on the
-        map itself.
+          §5.2 decision 3's route out of the card. The placement disclosure used
+          to be a line under the headline; /about carries the rule, the measured
+          accuracy and the interval, which is more than the line ever said, and
+          the card gets its place line back as a place rather than a hedge.
 
-        **The MapTiler logo** is here because this panel is full-bleed and covers
-        the map's own bottom-left copy (§2.6 — the Free plan requires the mark,
-        and it fails silently when hidden). Same component, so the two cannot
-        drift.
-
-        **"How this works" has moved out again (2026-08-14)**, to "About Us" in
-        the brand block over the map's top-right corner. It lived here only
-        because the deleted masthead left it homeless, and the cost was that
-        §5.2 decision 3's measured accuracy was reachable *only with a story
-        open*. The new chrome is always on screen, so that trade is repaid and
-        the footer goes back to carrying one thing.
-
-        `RegionPanel` renders this same footer, because both are the panel and
-        both cover the same corner. The stylesheet makes it sticky so the logo
-        survives a list too long to fit — see `.panel__footer`.
-      */}
-        <footer className="panel__footer">
-          <MapTilerLogo className="maptiler-logo--panel" />
+          `next/link` because this is the one in-app navigation the card has —
+          /about is a route in this project, not somebody else's site, and it is
+          the only anchor here that is not `target="_blank"`.
+        */}
+        <footer className="panel__footer panel__footer--about">
+          <Link className="panel__about" href="/about">
+            How does this work?
+          </Link>
         </footer>
       </div>
-
-      <PanelTab collapsed={collapsed} onToggle={onToggleCollapse} />
     </aside>
   );
 }

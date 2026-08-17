@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { panelStory, placeHeading, placementLine, publishedAt } from "./story";
+import { linkLabel, panelStory, placeLine, publishedAt } from "./story";
 
 /** A tile feature's properties, as `queryRenderedFeatures` hands them over. */
 const pin = {
@@ -10,25 +10,31 @@ const pin = {
   kind: "PIN",
   date: "20260813193400",
   image: "https://chron.com/storm.jpg",
+  // A `\n`-joined string, not an array: MVT property values are scalar. See
+  // `worker/tiles.ts` — pinned there too, because an array is silently
+  // JSON-stringified and triples what the field costs in the archive.
+  more: "https://ap.org/storm\nhttps://reuters.com/storm",
 };
 
 describe("panelStory", () => {
-  it("carries the title, source, url, place, kind, date and image — and nothing else", () => {
+  it("carries the title, source, url, place, kind, date, image and more — and nothing else", () => {
     // §7 critical gap 2, inherited from the deleted popup.test.ts. §2.6 is a
     // copyright constraint, so the assertion is that the panel's content model
-    // is EXACTLY these seven fields: anything upstream that starts carrying
+    // is EXACTLY these eight fields: anything upstream that starts carrying
     // article text must fail here rather than ship.
     //
-    // **It was six until 2026-08-14, when the thumbnail moved onto the tile.**
-    // The list growing is the assertion weakening, so it is changed by hand and
-    // never widened to make a failure go away — an image URL is a pointer to the
-    // publisher's CDN, the same class of thing as `url`, and that is the whole
-    // argument for admitting it. Anything that is not defensible in one sentence
-    // does not belong on this list.
+    // **Six until 2026-08-14 (the thumbnail), seven until 2026-08-16 (the
+    // coverage links).** The list growing is the assertion weakening, so it is
+    // changed by hand and never widened to make a failure go away. Each of the
+    // two additions is defensible in one sentence — an image URL and a list of
+    // article URLs are both pointers to publishers, the same class of thing as
+    // `url` — and anything that is not defensible in one sentence does not
+    // belong on this list.
     expect(Object.keys(panelStory(pin) ?? {}).sort()).toEqual([
       "date",
       "image",
       "kind",
+      "more",
       "place",
       "source",
       "title",
@@ -36,10 +42,16 @@ describe("panelStory", () => {
     ]);
   });
 
-  it("drops every field that is not one of the seven", () => {
+  it("drops every field that is not one of the eight, topic included", () => {
     // A feature carries salience, domains, tier1, region and country
     // (worker/tiles.ts). None may reach the panel — tier1 least of all: §2.3
     // says the preference is invisible, and a badge is exactly what that forbids.
+    //
+    // **`topic` is on this list by decision, not by omission.** The classifier
+    // exists and the tile carries the field, but the story card shows no topic
+    // label — chips filter a region's rows, which is Mode 3. If that ever
+    // changes, `topic` moves to the allowlist above and this line comes out;
+    // what must not happen is it arriving in neither place.
     const story = panelStory({
       ...pin,
       tier1: 1,
@@ -47,13 +59,42 @@ describe("panelStory", () => {
       domains: 40,
       region: "USTX",
       country: "US",
+      topic: "Disaster",
       body: "Article prose that must never render.",
     }) as Record<string, unknown>;
 
-    for (const leak of ["tier1", "salience", "domains", "region", "country", "body"]) {
+    for (const leak of ["tier1", "salience", "domains", "region", "country", "topic", "body"]) {
       expect(story).not.toHaveProperty(leak);
     }
     expect(JSON.stringify(story)).not.toContain("Article prose");
+  });
+
+  it("splits the coverage links and drops any scheme that is not http(s)", () => {
+    // The second lock on a door `worker/parse.ts` already holds: these urls are
+    // rendered as hrefs the reader clicks, and `javascript:` and `data:` are the
+    // two schemes that turn a link into code. A pipeline change that started
+    // emitting one would otherwise reach the DOM before anyone read the diff.
+    expect(panelStory(pin)?.more).toEqual([
+      "https://ap.org/storm",
+      "https://reuters.com/storm",
+    ]);
+
+    expect(
+      panelStory({
+        ...pin,
+        more: "javascript:alert(1)\nhttps://ap.org/storm\ndata:text/html,<script>",
+      })?.more,
+    ).toEqual(["https://ap.org/storm"]);
+  });
+
+  it("reads an absent `more` as an empty list, because that is the common case", () => {
+    // 87.2% of groups are a single article and carry no coverage at all
+    // (measured). The field is also simply absent until the pipeline half of
+    // Mode 2 lands, and absent has to read the same as empty — the card omits
+    // the section either way rather than rendering an empty heading.
+    const { more } = panelStory({ ...pin, more: undefined })!;
+    expect(more).toEqual([]);
+    expect(panelStory({ ...pin, more: "" })?.more).toEqual([]);
   });
 
   it("refuses a feature with no url", () => {
@@ -80,52 +121,61 @@ describe("panelStory", () => {
       // answer here rather than the degraded one — the panel has a designed
       // header for it.
       image: "",
+      more: [],
     });
   });
 });
 
-describe("placeHeading", () => {
-  it("keeps the two ends of a full place name", () => {
-    // The middle is what the reader already infers from the map in front of them.
-    expect(placeHeading("Anaheim, California, United States")).toBe("Anaheim, USA");
-    expect(placeHeading("Lahore, Punjab, Pakistan")).toBe("Lahore, Pakistan");
+describe("linkLabel", () => {
+  it("names the host, without www", () => {
+    // A domain, not a masthead — `chron.com`, not "The Houston Chronicle". A
+    // domain-to-publisher lookup is §3.4's join-on-names trap wearing display
+    // clothing: it fails silently and plausibly on the outlets nobody checks.
+    expect(linkLabel("https://www.chron.com/storm/i-45")).toBe("chron.com");
+    expect(linkLabel("https://apnews.com/article/x?utm=1")).toBe("apnews.com");
   });
 
-  it("shortens the two countries whose full names wrap a 390px heading", () => {
-    expect(placeHeading("Leeds, England, United Kingdom")).toBe("Leeds, UK");
-  });
-
-  it("does not duplicate a one-part name", () => {
-    // A country-level container has no city and no admin-1. "France, France"
-    // would be worse than the name on its own.
-    expect(placeHeading("France")).toBe("France");
-    expect(placeHeading("United States")).toBe("USA");
-  });
-
-  it("says nothing when there is no place", () => {
-    expect(placeHeading("")).toBe("");
-    expect(placeHeading("  ,  , ")).toBe("");
+  it("says nothing for a url it cannot parse", () => {
+    // The card drops the row rather than printing a bare href at a reader.
+    expect(linkLabel("not a url")).toBe("");
+    expect(linkLabel("")).toBe("");
   });
 });
 
-describe("placementLine", () => {
-  it("names the point a pin was placed at", () => {
-    expect(placementLine(pin)).toBe("Houston, Texas, United States · placed automatically");
+describe("placeLine", () => {
+  const at = (place: string, kind = "PIN") => placeLine({ place, kind });
+
+  it("keeps every part of the place name", () => {
+    // The admin-1 is what separates one Springfield from the next, and at 12px
+    // in a 288px column all three parts fit. `placeHeading` dropped the middle
+    // because it printed at 34px across the hero; that heading is gone.
+    expect(at("Anaheim, California, United States")).toBe("Anaheim, California, USA");
+    expect(at("Lahore, Punjab, Pakistan")).toBe("Lahore, Punjab, Pakistan");
+  });
+
+  it("shortens the two countries whose full names wrap a 390px line", () => {
+    expect(at("Leeds, England, United Kingdom")).toBe("Leeds, England, UK");
+  });
+
+  it("returns a one-part name as it stands", () => {
+    expect(at("France")).toBe("France");
+    expect(at("United States")).toBe("USA");
   });
 
   it("says a container is only somewhere in its region", () => {
     // §2.1 chose a container precisely because the story had no usable exact
     // location. "Somewhere in" is that fact said out loud; the hollow ring in
-    // lib/layers.ts is the same claim made visually.
-    expect(placementLine({ kind: "CONTAINER", place: "Texas, United States" })).toBe(
-      "Somewhere in Texas, United States · placed automatically",
-    );
+    // lib/layers.ts is the same claim made visually. **This is the half of the
+    // deleted `placementLine` that had to survive Mode 2** — the other half, "·
+    // placed automatically", moved to /about behind "How does this work?".
+    expect(at("Texas, United States", "CONTAINER")).toBe("Somewhere in Texas, USA");
   });
 
   it("says nothing when there is no place to name", () => {
-    // Better silent than a dangling "· placed automatically" with no subject.
-    expect(placementLine({ ...pin, place: "" })).toBe("");
-    expect(placementLine({ ...pin, place: "   " })).toBe("");
+    // Better silent than a dangling "Somewhere in" with no subject.
+    expect(at("")).toBe("");
+    expect(at("  ,  , ")).toBe("");
+    expect(at("", "CONTAINER")).toBe("");
   });
 
   it("does not grade the pin", () => {
@@ -136,7 +186,7 @@ describe("placementLine", () => {
     // there. See lib/story.ts's header for the full table.
     const quiet = panelStory({ ...pin, salience: 0.69, domains: 1 })!;
     const loud = panelStory({ ...pin, salience: 4.35, domains: 40 })!;
-    expect(placementLine(quiet)).toBe(placementLine(loud));
+    expect(placeLine(quiet)).toBe(placeLine(loud));
   });
 });
 

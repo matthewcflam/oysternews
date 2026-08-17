@@ -1,10 +1,17 @@
 /**
- * A country's flag, for the region panel's hero.
+ * A country's flag, and its name — the two things the region panel's header
+ * needs that a FIPS region id alone cannot give it.
  *
- * The panel is the story panel's shell reused, and the story panel's hero is the
- * publisher's `og:image`. A region has no article and therefore no image, so the
- * flag is what fills that slot — it is the one picture that is unambiguously
- * *of* the country and needs no per-region curation.
+ * The flag is the panel's one picture. A region has no article and therefore no
+ * `og:image` the way a story does, and a flag is the one image that is
+ * unambiguously *of* the country and needs no per-region curation. Mode 3
+ * (2026-08-16) moved it from a full-bleed hero to a small plate beside the
+ * heading; nothing about the lookup changed with it.
+ *
+ * `countryName` is here rather than in a file of its own because it reads the
+ * same merged table `flagUrl` does. Two modules merging the same two JSON files
+ * is two places for the merge order to drift, and the order is load-bearing —
+ * see below.
  *
  * **The id is FIPS 10-4, and flags are addressed by ISO 3166.** That is §3.4's
  * join trap, and it is silent: a naive two-letter passthrough draws Serbia's flag
@@ -17,6 +24,7 @@
 
 import crosswalk from "@/data/crosswalk.json";
 import overrides from "@/data/fips-overrides.json";
+import { shortCountry } from "@/lib/story";
 
 /**
  * Where the images come from. flagcdn serves public-domain flag PNGs keyed by
@@ -40,11 +48,20 @@ const FLAG_BASE = "https://flagcdn.com/w640";
  * files in this order for exactly that reason, and this is the same merge; the
  * overrides go last because they exist to correct AND to fill, so they must win.
  */
+type CrosswalkRow = { iso: string; name: string };
+
+const MERGED: [string, CrosswalkRow][] = [
+  ...Object.entries((crosswalk as { fips: Record<string, CrosswalkRow> }).fips),
+  ...Object.entries((overrides as { fips: Record<string, CrosswalkRow> }).fips),
+];
+
 const FIPS_TO_ISO: Record<string, string> = Object.fromEntries(
-  [
-    ...Object.entries((crosswalk as { fips: Record<string, { iso: string }> }).fips),
-    ...Object.entries((overrides as { fips: Record<string, { iso: string }> }).fips),
-  ].map(([fips, entry]) => [fips, entry.iso]),
+  MERGED.map(([fips, entry]) => [fips, entry.iso]),
+);
+
+/** The same merge, read for the other column — see `countryName`. */
+const FIPS_TO_NAME: Record<string, string> = Object.fromEntries(
+  MERGED.map(([fips, entry]) => [fips, entry.name]),
 );
 
 /**
@@ -72,4 +89,28 @@ export function flagUrl(regionId: string): string | null {
   if (!iso) return null;
 
   return `${FLAG_BASE}/${iso.toLowerCase()}.png`;
+}
+
+/**
+ * The country a region id belongs to, for the panel's breadcrumb — `"India"`
+ * for `IN`, `"USA"` for `USCA`.
+ *
+ * **It reads the first two characters and nothing else**, which is the whole of
+ * the country/admin-1 relationship as `boundaries.pmtiles` encodes it: an
+ * admin-1 id is its country's FIPS code with a two-character subdivision
+ * appended (`USCA`, `IN25`), so the parent is a prefix rather than a join. That
+ * matters — §3.4 — because the alternative is matching "California" to a country
+ * by name, which is the trap `flagUrl` above exists to avoid.
+ *
+ * `""` when the crosswalk does not carry the code. The breadcrumb drops the
+ * missing crumb rather than printing a bare id: it is a wayfinding line, and
+ * "World › IN25 › …" tells the reader less than "World › …" does.
+ *
+ * Shortened through `shortCountry` so a breadcrumb and a story row two inches
+ * below it cannot spell the same country two different ways — the crosswalk says
+ * "United States of America" where GDELT says "United States".
+ */
+export function countryName(regionId: string): string {
+  const fips = (regionId ?? "").trim().toUpperCase().slice(0, 2);
+  return shortCountry(FIPS_TO_NAME[fips] ?? "");
 }

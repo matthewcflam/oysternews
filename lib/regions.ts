@@ -15,7 +15,7 @@
  * be fast — the map appearing.
  */
 
-import type { RegionIndex, RegionStory } from "./types";
+import type { RegionEntry, RegionIndex, RegionStory } from "./types";
 
 let pending: Promise<RegionIndex> | null = null;
 let pendingUrl = "";
@@ -55,17 +55,40 @@ export function resetRegionIndexCache(): void {
   pendingUrl = "";
 }
 
+/** The shape a missing region and a legacy index both collapse to. */
+const EMPTY: RegionEntry = { stories: [], total: 0, sources: 0 };
+
 /**
- * A region's stories, or an empty list.
+ * A region's entry: its rows, and the two counts the header prints.
  *
- * **An empty list is a normal answer, not an error.** A country can have no news
- * in the window — 124 of ~250 had any at all (§2.4) — and Natural Earth draws
- * plenty of polygons GDELT never mentions. The panel says so rather than
+ * **An empty entry is a normal answer, not an error.** A country can have no
+ * news in the window — 124 of ~250 had any at all (§2.4) — and Natural Earth
+ * draws plenty of polygons GDELT never mentions. The panel says so rather than
  * treating it as a failure.
+ *
+ * **It reads two shapes on purpose.** The published value was a bare
+ * `RegionStory[]` until 2026-08-16, and an index from before that is still
+ * valid and still reachable: archives are kept by `KEEP_ARCHIVES`, runs are four
+ * hours apart, and a browser can hold a manifest across a deploy. The legacy
+ * form yields `total: 0`, which `RegionPanel` renders as **no counts line** —
+ * not as "0 stories today". That distinction is the whole reason 0 is the
+ * sentinel: a region that genuinely has nothing has no rows either, and gets the
+ * empty-state note instead.
+ *
+ * This is the same argument that makes `regionsUrl` optional on the manifest. A
+ * new field must never be able to break the map for a reader who has not
+ * refreshed.
  */
+export function entryFor(index: RegionIndex | null, regionId: string): RegionEntry {
+  if (!index || !regionId) return EMPTY;
+  const value = index[regionId];
+  if (Array.isArray(value)) return { stories: value, total: 0, sources: 0 };
+  return value ?? EMPTY;
+}
+
+/** The rows alone, for callers that do not care about the counts. */
 export function storiesFor(index: RegionIndex | null, regionId: string): RegionStory[] {
-  if (!index || !regionId) return [];
-  return index[regionId] ?? [];
+  return entryFor(index, regionId).stories;
 }
 
 /**
