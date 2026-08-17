@@ -152,7 +152,7 @@ export default function RegionPanel({
   const now = Date.now();
 
   return (
-    <aside className="panel" aria-label={`Top stories in ${heading}`}>
+    <aside className="panel panel--bounded" aria-label={`Top stories in ${heading}`}>
       {/* `.panel` positions and carries the shadow; this element clips to the
           card's radius. One element cannot both overflow and clip. */}
       <div className="panel__scroll">

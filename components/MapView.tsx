@@ -290,19 +290,33 @@ export default function MapView() {
    * zoom number cannot. `MAX_FIT_ZOOM` is why a small region does not overshoot
    * the archive's z12 ceiling.
    */
-  const zoomToRegion = () => {
-    const map = mapRef.current;
-    const box = bboxFor(bboxes, selection?.id ?? "");
-    if (!map || !box) return;
+ const BBOX_OVERRIDES: Record<string, [number, number, number, number]> = {
+  FR: [-5.14, 41.33, 9.56, 51.10],    // Metropolitan France
+  US: [-137.0, 24.39, -66.93, 49.38],  // Contiguous USA (Lower 48)
+  NO: [4.5, 57.9, 31.1, 71.2],
+  NL: [3.3, 50.7, 7.2, 53.6],
+  EC: [-100.0, -5.5, -70.0, 2.5],
+};
 
-    map.fitBounds(
-      [
-        [box[0], box[1]],
-        [box[2], box[3]],
-      ],
-      { padding: FIT_PADDING, maxZoom: MAX_FIT_ZOOM },
-    );
-  };
+const zoomToRegion = () => {
+  const map = mapRef.current;
+  const id = selection?.id ?? "";
+
+  // Check the lookup table first, fallback to standard bbox calculation
+  const box = BBOX_OVERRIDES[id] ?? bboxFor(bboxes, id);
+
+  if (!map || !box || box.length < 4) return;
+
+  const [minLng, minLat, maxLng, maxLat] = box;
+
+  map.fitBounds(
+    [
+      [minLng, minLat],
+      [maxLng, maxLat],
+    ],
+    { padding: FIT_PADDING, maxZoom: MAX_FIT_ZOOM },
+  );
+};
 
   /**
    * Close the story panel and drop the container outline it drew.

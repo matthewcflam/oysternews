@@ -32,9 +32,8 @@
      everything inside it inherits — and a token with no use site is a colour
      nobody can see.
 
-     The card fill. The 0.95 is not decoration: the map showing faintly through is
-     what says the card is OVER the map rather than replacing part of it. */
-  --panel-veil: rgba(55, 54, 102, 0.95);
+     The card fill is fully opaque now; the map should not show through it. */
+  --panel-veil: rgba(55, 54, 102, 1);
   /* The same purple at 0.35, washed across a hero image so a publisher's photo or
      a national flag reads as part of the panel rather than a rectangle cut out of
      somewhere else. */
@@ -43,7 +42,7 @@
   --mark: #c05ac4;
   --muted: #afafaf;
   --pill: #4e4d8f;
-  --shadow: rgba(0, 0, 0, 0.1);
+  --shadow: rgba(0, 0, 0, 0.15);
 }
 
 /* One typeface for the whole site (2026-08-14): Newsreader, loaded and
@@ -270,9 +269,9 @@ main .bubbles {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
-  text-align: center;
+  text-align: right;
   text-shadow: 0 1px 6px rgba(13, 15, 18, 0.9);
   pointer-events: none;
 }
@@ -322,7 +321,7 @@ main .bubbles {
 .brand__dot {
   position: absolute;
   left: 0.3em;
-  top: 0.275em;
+  top: 0.2em;
   width: 0.2em;
   height: 0.2em;
 }
@@ -336,10 +335,10 @@ main .bubbles {
      would drag the whole block across the top of the map rather than wrap. */
   max-width: min(60vw, 260px);
   color: #ffffff;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.35;
   letter-spacing: -0.02em;
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .freshness--stale {
@@ -351,16 +350,20 @@ main .bubbles {
    2026-08-14 it is reachable with nothing selected, which is what it always
    needed to be. Underlined because it is the one navigation on this screen. */
 .brand__about {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: #ffffff;
-  font-size: 12px;
-  line-height: 12px;
+  font-size: 14px;
+  line-height: 1.2;
   letter-spacing: -0.02em;
   text-decoration: underline;
   text-underline-offset: 2px;
-  opacity: 0.9;
+  opacity: 1;
   pointer-events: auto;
 }
 
@@ -468,7 +471,7 @@ main .bubbles {
    also load-bearing for Mode 2, whose card ends ~200px above this corner and
    therefore no longer needs the panel to carry a second copy. If there was a
    reason to disable it, the reason belongs here and the mark belongs somewhere. */
-.maptiler-logo {
+/*.maptiler-logo {
   position: absolute;
   left: 10px;
   bottom: 10px;
@@ -485,6 +488,7 @@ main .bubbles {
   width: 110px;
   height: auto;
 }
+*/
 
 /* There is no second copy any more. `.maptiler-logo--panel` unwound the
    positioning above so the mark could sit inside a panel footer; the story card
@@ -557,40 +561,31 @@ main .bubbles {
    tab it was built for: the shadow plate hangs 10-20px outside the card and the
    card's own 29px radius has to clip the hero, and one element cannot both
    overflow and clip. */
+
+/*   width: fit-content;
+  min-width: 324px;
+  max-width: calc(100vw - 30px);*/
+
 .panel {
   position: absolute;
   /* From the mockup's 1481x832 frame. Absolute rather than proportional: the card
      is a fixed 324x489, and a percentage offset would walk it down a tall monitor
      while its contents stayed the same size. */
-  top: 165px;
+  top: 15px;
   left: 15px;
   z-index: 3;
   width: 324px;
-  height: 489px;
-  /* The one concession to a short viewport. The card would otherwise run off the
-     bottom of a 600px-tall window, and 180px keeps the bottom-left corner — the
-     MapTiler mark and MapLibre's attribution — clear at every height. Below this
-     ceiling nothing about the card changes; above it, the list inside scrolls. */
+  height: fit-content;
+  min-height: 450px;
   max-height: calc(100% - 180px);
   color: #ffffff;
+  filter: drop-shadow(0px 6px 3px rgba(0, 0, 0, 0.25));
 }
 
-/* The shadow. `Rectangle 26` in the mockup: 344x513 at (5, 161) behind a 324x489
-   card at (15, 165) — 10px to each side, 4px above and 20px below.
-
-   **Asymmetric on purpose, and drawn as an element rather than a `box-shadow`.**
-   The bias downward is what a lifted card's shadow does. Drawing it as a real
-   element keeps it measurable — `getBoundingClientRect` can check it against the
-   geometry table, which a box-shadow cannot — while the blur is what stops a flat
-   10% rectangle reading as a second card behind the first. */
-.panel::before {
-  content: "";
-  position: absolute;
-  inset: -4px -10px -20px -10px;
-  z-index: -1;
-  border-radius: 38px;
-  background: var(--shadow);
-  filter: blur(6px);
+/* Region/label panels need a bounded card so the footer stays inside the shell
+   and the list can scroll; the story panel keeps the fitted shared shell. */
+.panel--bounded {
+  height: 489px;
 }
 
 .panel__scroll {
@@ -991,66 +986,6 @@ main .bubbles {
   outline-offset: 2px;
 }
 
-/* "More Reporting": other outlets covering THIS story.
-
-   **The section that scrolls, and the only one that may.** Everything above it is
-   fixed furniture at a fixed height; a card this size cannot afford the headline
-   sliding out of view to make room for a third link.
-
-   `flex: 1 1 auto` with `min-height: 0` — without the min-height a flex item
-   refuses to shrink below its content and the overflow never engages, which is
-   the classic way a scroll container silently becomes a clipped one. */
-.panel__more {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 17px 18px 0;
-  letter-spacing: -0.02em;
-}
-
-.panel__more h3 {
-  margin: 0 0 14px;
-  font-size: 20px;
-  font-weight: 400;
-  line-height: 1.2;
-}
-
-.panel__more ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* The type size goes on the ROW, not on the anchor inside it.
-
-   With it on the anchor the `li` kept the body's inherited 15px/1.45 line box and
-   a 10px link floated inside a 22px row — a measured 26px pitch against the
-   mockup's 18. An inline child cannot shrink the line box its parent computed. */
-.panel__more li {
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.panel__more li + li {
-  margin-top: 4px;
-}
-
-/* Underlined, because it is a link to somebody else's site and the card has
-   exactly one other link-shaped thing on it (the button, which is not underlined
-   because it is a button). The label is the url's host — `chron.com`, not "The
-   Houston Chronicle" — for the reason `.panel__chip` gives: a domain-to-masthead
-   lookup is §3.4's join-on-names trap wearing display clothing. */
-.panel__more a {
-  color: #ffffff;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  overflow-wrap: anywhere;
-}
-
-.panel__more a:hover {
-  opacity: 0.85;
-}
-
 /* The ranked list, and the only part of the region card that scrolls.
 
    **The rule above it is a margin, not a border on the header**, so the line stops
@@ -1255,7 +1190,7 @@ main .bubbles {
   justify-content: flex-end;
   /* Above the list rather than inside it, and the list's own rule already
      separates the two — so no border here. */
-  padding: 10px 18px 16px;
+  padding: 16px 30px 16px;
 }
 
 /* "Zoom to Texas ›". A button that moves the camera, drawn as text because the
@@ -1271,7 +1206,7 @@ main .bubbles {
   background: none;
   color: #ffffff;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.2;
   letter-spacing: -0.02em;
   cursor: pointer;
