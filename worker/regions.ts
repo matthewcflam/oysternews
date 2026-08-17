@@ -29,7 +29,7 @@
  * is what makes that enforceable rather than aspirational.
  */
 
-import type { RegionIndex, RegionStory, StoryGroup } from "../lib/types.ts";
+import type { RegionEntry, RegionIndex, RegionStory, StoryGroup } from "../lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
 /**
@@ -37,7 +37,7 @@ import { compareGroups } from "./rank.ts";
  * the declarations live where the browser can reach them without a `.ts`-suffixed
  * import (§0). `lib/types.ts` carries the rules those two types encode.
  */
-export type { RegionIndex, RegionStory };
+export type { RegionEntry, RegionIndex, RegionStory };
 
 /**
  * How many stories a region keeps.
@@ -69,16 +69,45 @@ function rowOf(group: StoryGroup): RegionStory {
  * Sorted here rather than trusting the caller: `budget.ts` returns groups in
  * whatever order its tile walk produced, and a panel that silently depends on
  * an upstream sort is a bug waiting for someone to reorder a pipeline stage.
+ *
+ * **`total` and `sources` count the pool, not the rows (2026-08-16).** The panel
+ * header says "248 stories today · 39 sources", and the rows are capped at ten,
+ * so those two numbers cannot be derived from what is published — 68 of 163
+ * regions in a measured run exceed the cap, and the largest holds 977. They are
+ * therefore counted here, over every group filed under the key, and the cap is
+ * applied only to `stories`. That is the whole reason the value stopped being a
+ * bare array.
+ *
+ * The domain set is dropped before the entry is returned: it is the counting
+ * apparatus, not a field. Publishing 39 domain strings per region to render the
+ * number 39 would multiply the index's size for no reader.
  */
-export function buildRegionIndex(groups: StoryGroup[], topN = REGION_TOP_N): RegionIndex {
-  const index: RegionIndex = {};
+export function buildRegionIndex(
+  groups: StoryGroup[],
+  topN = REGION_TOP_N,
+  /*
+   * The return type is the NARROW one, not `RegionIndex`. `RegionIndex` is a
+   * union that includes the legacy bare-array form because that is what a
+   * browser may *read*; nothing writes it any more, and typing the builder as
+   * the union would force every caller and every test to narrow a shape this
+   * function can never produce.
+   */
+): Record<string, RegionEntry> {
+  const index: Record<string, RegionEntry> = {};
+  const domains = new Map<string, Set<string>>();
 
   const add = (key: string, group: StoryGroup) => {
     if (!key) return;
-    const rows = (index[key] ??= []);
+    const entry = (index[key] ??= { stories: [], total: 0, sources: 0 });
+    entry.total += 1;
+    // A group with no domain is counted as a story and not as a source. It has
+    // no publisher to be distinct from, and `""` would otherwise read as one.
+    if (group.domain) {
+      (domains.get(key) ?? domains.set(key, new Set()).get(key)!).add(group.domain);
+    }
     // Bounded as we go rather than sliced at the end: the pool is ~40,700
     // groups at a full window and most of them belong to one of four countries.
-    if (rows.length < topN) rows.push(rowOf(group));
+    if (entry.stories.length < topN) entry.stories.push(rowOf(group));
   };
 
   for (const group of [...groups].sort(compareGroups)) {
@@ -89,14 +118,24 @@ export function buildRegionIndex(groups: StoryGroup[], topN = REGION_TOP_N): Reg
     if (group.adm1 && group.adm1 !== group.countryCode) add(group.adm1, group);
   }
 
+  for (const [key, set] of domains) index[key].sources = set.size;
+
   return index;
 }
 
-/** Regions covered, and the total rows — what the run summary reports. */
+/**
+ * Regions covered, and the total rows — what the run summary reports.
+ *
+ * **No compatibility shim here, deliberately.** It is handed the index this
+ * module just built, which is always the current shape; the legacy bare-array
+ * form can only reach a *browser*, holding a manifest from before this change.
+ * That normalisation lives in `lib/regions.ts` alone, where it can be reached,
+ * rather than in two copies of which one gets fixed.
+ */
 export function indexStats(index: RegionIndex): { regions: number; rows: number } {
-  const keys = Object.keys(index);
+  const entries = Object.values(index) as RegionEntry[];
   return {
-    regions: keys.length,
-    rows: keys.reduce((total, key) => total + index[key].length, 0),
+    regions: entries.length,
+    rows: entries.reduce((total, entry) => total + entry.stories.length, 0),
   };
 }

@@ -7,16 +7,19 @@
  *
  * 1. **§2.6 is link-out only** — title, source, link, never article text.
  *    `PanelStory` is the whole of what the panel may render, and `panelStory()`
- *    is the only door into it: it reads five named fields off a tile feature and
+ *    is the only door into it: it reads eight named fields off a tile feature and
  *    drops everything else, so a property that started carrying prose upstream
  *    cannot reach the DOM. §7 critical gap 2 asked for that to be a test rather
  *    than a review note; `story.test.ts` is that test.
- * 2. **§5.2 decision 3: the geotag-confidence treatment, pin half.** The panel
- *    names the place the rule picked and says it was picked automatically. The
- *    measurement behind that choice — mention count does not predict correctness,
- *    pooled n=73, 50.0% against 70.9%, Fisher p=0.152 — is unchanged by the move,
- *    so the treatment stays uniform and `placementLine` still refuses to grade a
- *    pin by salience or domain count.
+ * 2. **§5.2 decision 3: the geotag-confidence treatment, pin half.** The card
+ *    names the place the rule picked; that a rule picked it, and how often the
+ *    rule is right, moved to /about on 2026-08-16 behind "How does this work?".
+ *    The measurement behind the treatment — mention count does not predict
+ *    correctness, pooled n=73, 50.0% against 70.9%, Fisher p=0.152 — is unchanged
+ *    by that move, so the treatment stays uniform and `placementLine` still
+ *    refuses to grade a pin by salience or domain count. **It is still exported
+ *    and still tested**: what changed is which surface says it, not whether it is
+ *    said, and deleting it would be dropping a measured disclosure by accident.
  *
  * The one thing the panel adds over the popup is a *heading*: the mock puts the
  * place at the top, over the image, as the panel's subject. `placeHeading` is
@@ -64,9 +67,46 @@ export type PanelStory = {
    * out to be tracking pixels, which is a different problem.
    */
   image: string;
+  /**
+   * Other outlets covering the SAME story — "More Reporting" on the card. Empty
+   * for a one-article group, which is 87.2% of them (measured, `theme-audit`), so
+   * the empty case is the normal one and the card omits the section entirely.
+   *
+   * **The eighth field, and the eighth is admitted on the same argument as the
+   * seventh.** A list of urls is more link-out, not article text — the same class
+   * of thing as `url` itself. That is the whole defence, and it has to fit in one
+   * sentence or the field does not belong here.
+   *
+   * **`topic` deliberately did NOT join this list.** The classifier exists and
+   * `worker/topics.ts` computes a display topic per group, but the story card
+   * shows no topic label — chips are a Mode 3 filter over a region's rows. So it
+   * belongs on the leak list rather than in the allowlist, and `story.test.ts`
+   * asserts it is dropped. Decided explicitly, because the plan asked for it to
+   * be decided rather than omitted.
+   *
+   * **Arrives as a delimited string, not an array.** MVT property values are
+   * scalar, so `worker/tiles.ts` writes `coverage.join("\n")`; splitting is this
+   * function's job. Until that pipeline change lands the property is simply
+   * absent, and absent reads the same as empty — which is why the card could be
+   * built before it.
+   */
+  more: string[];
 };
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+
+/**
+ * The scheme filter, applied at the render door.
+ *
+ * `url` itself has been validated in `worker/parse.ts` since the archive was the
+ * boundary, and `more` is validated there too. This is the second lock on the
+ * same door, and it is here rather than only there because these urls are
+ * rendered as `href`s the reader clicks: `javascript:` and `data:` are the two
+ * schemes that turn a link into code, and the cost of checking is one comparison
+ * per row against a pipeline change that could reach the DOM before anyone reads
+ * the diff.
+ */
+const isLinkable = (url: string) => /^https?:\/\//i.test(url);
 
 /**
  * Read a tile feature's properties into a `PanelStory`, or `null`.
@@ -99,60 +139,105 @@ export function panelStory(properties: unknown): PanelStory | null {
     kind: text(source.kind),
     date: text(source.date),
     image: text(source.image),
+    more: text(source.more).split("\n").map(text).filter(isLinkable),
   };
 }
 
 /**
- * Display-only country shortenings for the panel heading.
+ * A coverage link's label: the url's host, without `www.`.
  *
- * **Two entries, and it must stay about that size.** §3.4 is this project's
+ * **It says a domain, not a masthead** — `chron.com`, not "The Houston
+ * Chronicle" — for the same reason `.panel__chip` does. A domain-to-publisher
+ * lookup is §3.4's join-on-names trap wearing display clothing: it fails
+ * silently and plausibly on exactly the outlets nobody checks.
+ *
+ * A url that `URL` cannot parse returns "", and the card drops the row rather
+ * than printing a bare href. `panelStory` has already required `https?:`, so
+ * this is only reachable for a host the parser rejects.
+ */
+export function linkLabel(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Display-only country shortenings for the card's place line.
+ *
+ * **Three entries, and it must stay about that size.** §3.4 is this project's
  * standing warning about joining on names, and a 250-row country table would be
- * exactly that trap wearing a display hat. These two are here because GDELT's
- * FullName spells them at a length that wraps the heading on a 390px phone, and
- * because nothing joins on the output — it is rendered and thrown away.
+ * exactly that trap wearing a display hat. These are here because GDELT's
+ * FullName — and, for the third, Natural Earth's crosswalk name — spell them at a
+ * length that wraps the line on a 390px phone, and because nothing joins on the
+ * output: it is rendered and thrown away.
+ *
+ * The third row exists because the region panel's breadcrumb reads the crosswalk
+ * rather than GDELT, and the two spell the same country differently.
  */
 const SHORT_COUNTRY: Record<string, string> = {
   "United States": "USA",
+  "United States of America": "USA",
   "United Kingdom": "UK",
 };
 
 /**
- * The panel's heading: the place, shortened to its two ends.
+ * One country name, at display length. `SHORT_COUNTRY` with a miss returning the
+ * input, exported so the breadcrumb in `lib/flag.ts` and the place line below it
+ * cannot disagree about how a country is spelled two inches apart on the same
+ * card.
+ */
+export function shortCountry(name: string): string {
+  return SHORT_COUNTRY[name] ?? name;
+}
+
+/**
+ * The card's place line: the whole place, with the country shortened, and
+ * "Somewhere in" where the pipeline only knows the region.
  *
  * GDELT's FullName is `City, Admin-1, Country` for a city and `Admin-1, Country`
- * or bare `Country` above that. The middle is what a reader already infers from
- * the map they are looking at, so the heading keeps the first part and the last —
- * "Anaheim, California, United States" reads "Anaheim, USA".
+ * or bare `Country` above that. All of it is kept — "Anaheim, California, USA".
  *
- * A one-part name is returned as it stands. There is nothing to trim, and
- * duplicating it ("France, France") would be worse than leaving it.
+ * **This replaced `placeHeading`, which kept only the two ends** ("Anaheim,
+ * USA"). That function existed for the 34px heading printed across the hero, on
+ * the argument that the reader infers the middle from the map in front of them.
+ * Mode 2 deleted that heading: the place is now a 12px line inside a 288px
+ * column, where all three parts fit comfortably, and at that size the admin-1 is
+ * the part that distinguishes one Springfield from the next. The shortening
+ * table survives the change because the reason for it — "United States" wrapping
+ * a phone-width line — survives it too.
+ *
+ * **It also absorbed `placementLine`, and the half that mattered came with it.**
+ * That function returned "…· placed automatically", and the card no longer says
+ * that anywhere — "How does this work?" at its foot routes to /about, which
+ * carries the rule, the measured accuracy and the interval rather than four
+ * words. But the OTHER half of it was §2.1's distinction, and dropping that would
+ * have been dropping an honesty feature by accident: a container was chosen
+ * precisely because the story had no usable exact location, so it must not print
+ * as though it had one. The hollow ring in `lib/layers.ts` makes the same claim
+ * visually.
+ *
+ * What is deliberately NOT here is any grading of the pin. §5.2 decision 3 is
+ * measured — mention count does not predict correctness, pooled n=73, 50.0%
+ * against 70.9%, Fisher p=0.152 — so two stories differing only in salience or
+ * domain count read identically, and a per-pin hedge would claim a signal the
+ * audit says is not there.
+ *
+ * A one-part name is returned as it stands.
  */
-export function placeHeading(place: string): string {
-  const parts = place
+export function placeLine(story: Pick<PanelStory, "place" | "kind">): string {
+  const parts = text(story.place)
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
   if (parts.length === 0) return "";
 
-  const last = SHORT_COUNTRY[parts[parts.length - 1]] ?? parts[parts.length - 1];
-  if (parts.length === 1) return last;
-  return `${parts[0]}, ${last}`;
-}
+  const last = parts.length - 1;
+  parts[last] = shortCountry(parts[last]);
 
-/**
- * The placement line — carried over from the popup unchanged.
- *
- * A container says "somewhere in", because that is exactly what §2.1 chose it
- * for: the story had no usable exact location. A pin names the point. Both say
- * the choice was automatic — the accuracy is a property of the rule, and the
- * measurement in this file's header says it is not a property of the individual
- * pin.
- */
-export function placementLine(story: Pick<PanelStory, "place" | "kind">): string {
-  const place = text(story.place);
-  if (!place) return "";
-  const where = story.kind === "CONTAINER" ? `Somewhere in ${place}` : place;
-  return `${where} · placed automatically`;
+  const place = parts.join(", ");
+  return story.kind === "CONTAINER" ? `Somewhere in ${place}` : place;
 }
 
 /**

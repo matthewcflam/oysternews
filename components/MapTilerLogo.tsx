@@ -10,19 +10,23 @@ import { basemap } from "@/lib/basemap";
  * would normally add this. Rendered only for the MapTiler provider: showing
  * their mark over an OpenFreeMap basemap would credit the wrong source.
  *
- * **It is a component because it is drawn twice.** One copy sits bottom-left of
- * the map; a second sits bottom-left inside the story panel, which is full-bleed
- * and covers exactly that corner when open. Two call sites rendering the same
- * requirement is the failure mode this file exists to prevent — the requirement
- * fails silently (the map keeps working, the mark is simply not on screen), so
- * there would be nothing to notice if one copy drifted from the other.
+ * **It used to be drawn twice**, and the second copy is what this file was for:
+ * the panels were full-bleed columns covering the map's bottom-left corner, so
+ * each carried its own copy in its footer, and two call sites rendering the same
+ * requirement is a thing that drifts silently. Modes 2 and 3 made both panels
+ * floating cards ending ~200px above that corner — measured, not assumed — so
+ * there is one copy again and it is the map's own.
+ *
+ * It stays a component: the mark is a plan requirement rather than decoration,
+ * and it is worth one file that says so. If a surface ever covers that corner
+ * again, render this in it rather than moving the anchor.
  */
-export default function MapTilerLogo({ className }: { className?: string }) {
+export default function MapTilerLogo() {
   if (basemap().provider !== "maptiler") return null;
 
   return (
     <a
-      className={className ? `maptiler-logo ${className}` : "maptiler-logo"}
+      className="maptiler-logo"
       href="https://www.maptiler.com"
       target="_blank"
       rel="noopener noreferrer"

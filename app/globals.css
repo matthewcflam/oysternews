@@ -4,6 +4,47 @@
   box-sizing: border-box;
 }
 
+/* The palette, as tokens (2026-08-16).
+
+   Until now every hex was repeated at each use site — `#373666` five times,
+   `#d24f39` three — and Modes 2 and 3 add three more surfaces that reuse all of
+   them. The conversion below is mechanical and changes no rendered colour; it is
+   done BEFORE the new surfaces are written, because that is the only moment at
+   which it stops a sixth and seventh copy being typed.
+
+   **`--mark` has a twin in TypeScript and they must be changed together.**
+   MapLibre paint expressions cannot read a custom property, so the map's selected
+   disc and the selection wedge read `MARK` from `lib/layers.ts`. That constant is
+   the source of truth; this token is the CSS side of the same decision.
+
+   **The value is `#C05AC4`, not the mockup's `#B339D2`** — it was hand-tuned
+   against the live map after the mockup was drawn, and a value tuned on the
+   surface it appears on beats one picked in Figma. The sphere's gradient below
+   still ended at the Figma value, which is the drift this token exists to make
+   impossible.
+
+   No `--grid-purple` yet. Mode 3b is the only thing that wants it and Mode 3b is
+   not written; a token with no use site is a colour nobody can see. */
+:root {
+  /* The panel purple, #373666, at the two alphas anything actually paints it at.
+     **They are one colour and they move together.** No opaque `--panel` token:
+     after Mode 2 nothing paints it at full strength — the card is the veil and
+     everything inside it inherits — and a token with no use site is a colour
+     nobody can see.
+
+     The card fill is fully opaque now; the map should not show through it. */
+  --panel-veil: rgba(55, 54, 102, 1);
+  /* The same purple at 0.35, washed across a hero image so a publisher's photo or
+     a national flag reads as part of the panel rather than a rectangle cut out of
+     somewhere else. */
+  --panel-wash: rgba(55, 54, 102, 0.35);
+  --accent: #d24f39;
+  --mark: #c05ac4;
+  --muted: #afafaf;
+  --pill: #4e4d8f;
+  --shadow: rgba(0, 0, 0, 0.15);
+}
+
 /* One typeface for the whole site (2026-08-14): Newsreader, loaded and
    self-hosted by `next/font` in app/layout.tsx, which sets --font-newsreader on
    <html>. The stack behind it is what paints during the swap and on the one
@@ -90,7 +131,7 @@ main .bubbles {
    `TAIL_DROP` and `TAIL_INSET` that `lib/bubble.ts` reserves space with, and they
    have to stay in step by hand. */
 .bubble {
-  --bubble-bg: #d24f39;
+  --bubble-bg: var(--accent);
   position: absolute;
   width: 135px;
   margin: 0;
@@ -228,9 +269,9 @@ main .bubbles {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
-  text-align: center;
+  text-align: right;
   text-shadow: 0 1px 6px rgba(13, 15, 18, 0.9);
   pointer-events: none;
 }
@@ -258,9 +299,10 @@ main .bubbles {
 
    Size and position stay with each element below. */
 .search__mark,
-.brand__dot {
+.brand__dot,
+.panel__sphere {
   border-radius: 50%;
-  background: radial-gradient(57.36% 51.69% at 67.53% 61.97%, #e0aaa1 2.88%, #b339d2 100%);
+  background: radial-gradient(57.36% 51.69% at 67.53% 61.97%, #e0aaa1 2.88%, var(--mark) 100%);
   transform: matrix(0.97, -0.25, -0.25, -0.97, 0, 0);
 }
 
@@ -279,7 +321,7 @@ main .bubbles {
 .brand__dot {
   position: absolute;
   left: 0.3em;
-  top: 0.275em;
+  top: 0.2em;
   width: 0.2em;
   height: 0.2em;
 }
@@ -293,10 +335,10 @@ main .bubbles {
      would drag the whole block across the top of the map rather than wrap. */
   max-width: min(60vw, 260px);
   color: #ffffff;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.35;
   letter-spacing: -0.02em;
-  opacity: 0.9;
+  opacity: 1;
 }
 
 .freshness--stale {
@@ -308,16 +350,20 @@ main .bubbles {
    2026-08-14 it is reachable with nothing selected, which is what it always
    needed to be. Underlined because it is the one navigation on this screen. */
 .brand__about {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 2;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: #ffffff;
-  font-size: 12px;
-  line-height: 12px;
+  font-size: 14px;
+  line-height: 1.2;
   letter-spacing: -0.02em;
   text-decoration: underline;
   text-underline-offset: 2px;
-  opacity: 0.9;
+  opacity: 1;
   pointer-events: auto;
 }
 
@@ -379,13 +425,13 @@ main .bubbles {
      left edge at exactly the mockup's 123px from the pill's own left edge. */
   padding: 0 10px 0 17px;
   border-radius: 20px;
-  background: #4e4d8f;
+  background: var(--pill);
 }
 
 .search__placeholder {
   flex: 1;
   min-width: 0;
-  color: #AFAFAF;
+  color: var(--muted);
   font-size: 16px;
   line-height: 22px;
   letter-spacing: -0.02em;
@@ -396,7 +442,7 @@ main .bubbles {
   flex: none;
   width: 20px;
   height: 20px;
-  color: #AFAFAF;
+  color: var(--muted);
 }
 
 /* §2.6 / MapTiler Free plan: the logo sits bottom-left, opposite MapLibre's own
@@ -416,7 +462,16 @@ main .bubbles {
    (`.maptiler-logo--panel`), which is what the mark is supposed to look like
    when the panel is up, so this one goes back UNDER the panel at 2. Both are the
    same component — see components/MapTilerLogo.tsx for why that matters.
-.maptiler-logo {
+
+   **This rule was commented out in e84b600 and restored on 2026-08-16.** No note
+   in the design log or the commit message says why it went, and with it gone the
+   anchor fell into normal flow at the top of `main` — the required mark drawn in
+   the wrong corner, over the map, with no plate behind it. That is precisely the
+   failure §2.6 fails silently at: the map keeps working and nobody notices. It is
+   also load-bearing for Mode 2, whose card ends ~200px above this corner and
+   therefore no longer needs the panel to carry a second copy. If there was a
+   reason to disable it, the reason belongs here and the mark belongs somewhere. */
+/*.maptiler-logo {
   position: absolute;
   left: 10px;
   bottom: 10px;
@@ -427,29 +482,21 @@ main .bubbles {
   border-radius: 5px;
   background: rgba(13, 15, 18, 0.55);
 }
-*/
 
 .maptiler-logo img {
   display: block;
   width: 110px;
   height: auto;
 }
+*/
 
-/* The panel's copy: in normal flow inside the footer, not pinned to the
-   viewport. Only the POSITIONING is unwound — otherwise it would land on top of
-   the map's copy at the same absolute coordinates and the mark would be drawn
-   twice in one place.
-
-   **Nothing here may change its size.** This carried a smaller padding and a
-   92px image until 2026-08-14, against the map copy's 110px, so the same
-   required mark was visibly two different sizes depending on whether a panel
-   was open — which is the one thing rendering it from a single component was
-   supposed to make impossible. If a size ever needs changing, change it on
-   `.maptiler-logo` above, where both copies read it. */
-.maptiler-logo--panel {
-  position: static;
-  z-index: auto;
-}
+/* There is no second copy any more. `.maptiler-logo--panel` unwound the
+   positioning above so the mark could sit inside a panel footer; the story card
+   dropped that copy on 2026-08-16 and the region card dropped it with Mode 3, both
+   on the same measured fact — a 324x489 card at (15, 165) ends ~200px above this
+   corner, so the required mark is visible past it at 1482x900 and at 390x844.
+   §2.6 fails silently, so if a panel ever grows back down into that corner the
+   fix is to re-add a footer copy here, not to assume it is fine. */
 
 /* The panel — ONE set of rules, worn by both `StoryPanel` and `RegionPanel`.
 
@@ -474,60 +521,84 @@ main .bubbles {
    it should be because someone chose to add a modifier here, not because two
    stylesheets drifted.
 
-   **`top: 0`, because the masthead is gone (2026-08-14).** The offset used to be
-   108px/126px, measured off the masthead's last line of text so the panel did
-   not cover the About link. With nothing above it, any offset would just be a
-   strip of map the panel refuses to use.
+   **A floating card, not a full-bleed column (2026-08-16). This reverses the
+   decision that used to be recorded here, and the reversal is deliberate.**
 
-   **Full-bleed, not a floating card.** `bottom: 0` and `left: 0` rather than a
-   margin and a max-height: the panel runs the full height of the viewport and
-   sits flush against the left edge. A card that
-   shrink-wrapped its content left the accent colour ending mid-screen with a
-   strip of map below it, which read as the panel having failed to load the rest.
-   Fixing the height also fixes the scroll: the height comes from top/bottom, so
-   a long "Stories Nearby" list scrolls INSIDE the panel and the page still never
-   scrolls (`main` is the viewport).
+   What stood here before was: `bottom: 0` and `left: 0` rather than a margin and
+   a max-height, because *"a card that shrink-wrapped its content left the accent
+   colour ending mid-screen with a strip of map below it, which read as the panel
+   having failed to load the rest."* That argument was right about the card it was
+   describing. Mode 2's card answers it rather than ignoring it, in two ways:
 
-   **This lands on top of the MapTiler logo, which §2.6 requires stay visible.**
-   That is handled where the logo is styled, not here — it is raised above this
-   panel. Do not lower it. */
-/* **`.panel` positions and slides; `.panel__scroll` holds and scrolls.** That
-   split exists for one reason: the collapse tab hangs 30px off the right edge,
-   and `overflow-y: auto` clips BOTH axes — on the single element this used to
-   be, the tab was simply invisible. So the outer element must not clip, which
-   means the scrolling has to move inward. */
+   1. **The height is fixed, not shrink-wrapped.** 489px, with the story list
+      scrolling inside it. The colour stops where the design says it stops, not
+      wherever the content happened to run out — which is the thing that read as a
+      failed load.
+   2. **It carries a soft shadow instead of a hard edge.** The old card's ~1px
+      dark border is what made it read as a cut-out of the map; a diffuse plate
+      behind it (`::before`) reads as a card lifted off the map.
+
+   The 0.95 alpha is the third part of the same argument and is new: the map
+   showing faintly through says the card is OVER the map rather than replacing
+   part of it. A full-bleed column cannot say that at any alpha.
+
+   **The card's CONTENTS are no longer shared, as of Mode 3 (2026-08-16).** A
+   story and a country are not the same shape — one has a headline, a byline and
+   one action; the other has a breadcrumb, a flag and a ranked list — so the
+   region panel now has its own header (`.panel__head`) and its own row layout
+   while wearing this same box. The shell staying shared is the part that matters:
+   §2.3 allows one panel at a time, and two boxes of different sizes would make
+   the one slot read as two features again.
+
+   **The MapTiler logo is no longer covered, and that is checked rather than
+   assumed.** A 324x489 card at (15, 165) ends ~200px above the bottom-left
+   corner, so the map's own copy of the mark is visible past it and neither panel
+   carries a second one. §2.6 fails silently, so this is verified live at both
+   breakpoints and recorded in docs/ui-refresh-2026-08.md — not inferred from the
+   arithmetic above.
+
+   **`.panel` positions; `.panel__scroll` clips.** The split outlived the collapse
+   tab it was built for: the shadow plate hangs 10-20px outside the card and the
+   card's own 29px radius has to clip the hero, and one element cannot both
+   overflow and clip. */
+
+/*   width: fit-content;
+  min-width: 324px;
+  max-width: calc(100vw - 30px);*/
+
 .panel {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  /* From the mockup's 1481x832 frame. Absolute rather than proportional: the card
+     is a fixed 324x489, and a percentage offset would walk it down a tall monitor
+     while its contents stayed the same size. */
+  top: 15px;
+  left: 15px;
   z-index: 3;
-  /* 420, up from 340 (2026-08-14). Newsreader is a text face with a small
-     x-height for its size, and at 340px the headline broke to four lines while
-     "Stories Nearby" ran to three each — the panel read as a column of fragments
-     rather than of headlines. Everything inside went up with it; the widths and
-     the type sizes are one decision, not two. */
-  width: min(420px, 100vw);
+  width: 324px;
+  height: fit-content;
+  min-height: 450px;
+  max-height: calc(100% - 180px);
   color: #ffffff;
-  /* Reduced-motion is handled once, globally, at the bottom of this file — it
-     forces every transition to 0.01ms, so the slide degrades to a jump here
-     with no second guard. */
-  transition: transform 220ms ease;
+  filter: drop-shadow(0px 6px 3px rgba(0, 0, 0, 0.25));
 }
 
-/* Collapsed: the whole column steps off the left edge, tab included. The tab
-   sits at `right: -30px`, so after the shift it lands at 0..30px — flush
-   against the viewport edge, which is the Google Maps behaviour. */
-.panel--collapsed {
-  transform: translateX(-100%);
+/* Region/label panels need a bounded card so the footer stays inside the shell
+   and the list can scroll; the story panel keeps the fitted shared shell. */
+.panel--bounded {
+  height: 489px;
 }
 
 .panel__scroll {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  /* The accent purple, #373666.
+  /* Clips, and does not scroll. The scrolling moved inward again, to whichever
+     section is the long one — the hero, the headline and the foot link are fixed
+     furniture and must not slide out of a card this size. */
+  overflow: hidden;
+  border-radius: 29px;
+  /* The panel purple at 0.95 — see `--panel-veil`.
 
      **One flat colour, not a family (2026-08-14).** The panel used to be three
      shades — #4E4D8F for the body, #43427D behind the hero, #55549B for the
@@ -536,78 +607,57 @@ main .bubbles {
      the space and the type alone. Anything below that still needs to sit
      "on" the panel should use opacity or a filter rather than reaching for a
      fourth purple. */
-  background: #373666;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+  background: var(--panel-veil);
+}
 
-  /* A thin, self-effacing scrollbar (Firefox half). The platform default is a
-     wide grey slab down the middle of a designed surface. Scoped here rather
-     than set globally on purpose: /about is a document and should keep the
-     scrollbar its reader's OS gives it. */
+/* A thin, self-effacing scrollbar (Firefox half). The platform default is a wide
+   grey slab down the middle of a designed surface. Scoped to the two scrolling
+   sections rather than set globally on purpose: /about is a document and should
+   keep the scrollbar its reader's OS gives it. */
+.panel__more,
+.panel__list {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
 }
 
 /* The WebKit/Blink half of the same thing. Both are needed — neither syntax is
    supported by both engine families. */
-.panel__scroll::-webkit-scrollbar {
+.panel__more::-webkit-scrollbar,
+.panel__list::-webkit-scrollbar {
   width: 6px;
 }
 
-.panel__scroll::-webkit-scrollbar-track {
+.panel__more::-webkit-scrollbar-track,
+.panel__list::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.panel__scroll::-webkit-scrollbar-thumb {
+.panel__more::-webkit-scrollbar-thumb,
+.panel__list::-webkit-scrollbar-thumb {
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.3);
 }
 
-.panel__scroll::-webkit-scrollbar-thumb:hover {
+.panel__more::-webkit-scrollbar-thumb:hover,
+.panel__list::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.5);
-}
-
-/* The pull-out tab. Vertically centred on the panel's right edge, rounded on
-   the outer side only, so it reads as a handle attached to the column rather
-   than a floating button. */
-.panel__tab {
-  position: absolute;
-  top: 50%;
-  right: -30px;
-  transform: translateY(-50%);
-  width: 30px;
-  height: 64px;
-  padding: 0;
-  border: 0;
-  border-radius: 0 6px 6px 0;
-  background: #373666;
-  color: #ffffff;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.3);
-}
-
-/* Brightness, not a second colour. The panel is one flat purple as of
-   2026-08-14, so the lighter hex this used to swap to no longer exists — and
-   re-introducing one just for a hover would be the first crack in that. */
-.panel__tab:hover {
-  filter: brightness(1.25);
 }
 
 @media (max-width: 520px) {
   .panel {
-    /* Edge to edge on a phone: 340px of a 390px screen leaves a 50px strip of
-       map that is too narrow to read and too wide to ignore. */
-    width: 100vw;
-  }
+    /* Near edge to edge on a phone, but still a card: 324px of a 390px screen
+       leaves an uneven 66px, and the shadow needs somewhere to fall. 12px each
+       side is the same gutter the chrome above it uses.
 
-  /* At 100vw the tab's usual -30px is 30px past the right edge of the screen,
-     where it cannot be tapped (and, without `main`'s overflow clip, would push
-     the page sideways). Tuck it inside the panel instead. */
-  .panel__tab {
-    right: 0;
-    border-radius: 6px 0 0 6px;
+       It starts higher than on desktop because the chrome does — the search pill
+       and the brand block sit at 10-14px here rather than 30 — and it keeps a
+       200px foot so the bottom-left corner stays clear of the card at 844px and
+       at 667px alike. */
+    top: 96px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100% - 200px);
   }
 
   /* **The two chrome blocks stop sharing the top edge on a phone.** The mockup
@@ -648,22 +698,37 @@ main .bubbles {
   }
 }
 
-/* The hero. Fixed height so the panel's shape does not jump between a story with
-   an og:image and one without — the fallback is the same block in flat purple,
+/* The hero. **`StoryPanel` only, as of Mode 3 (2026-08-16)** — the region panel
+   used to fill this with a country's flag, and now draws the flag as a small
+   plate in `.panel__head` instead. A flag stretched across 190px was the loudest
+   thing on the screen: they are designed to be maximally saturated, which is why
+   the wash below exists at all, and 190px is a lot of card to spend on a picture
+   the reader already knows.
+
+   Fixed height so the panel's shape does not jump between a story with an
+   og:image and one without — the fallback is the same block in flat purple,
    which is why the height lives here and not on the image.
 
    That fallback used to be a darker purple than the panel below it; since the
    shades were collapsed it is the same one, so a story with no image opens as
-   an unbroken column of colour with the place name on it. */
+   an unbroken column of colour.
+
+   215 -> 190 with the card (2026-08-16): the mockup's hero is 190 of a 489-tall
+   card, and the old height was measured against a full-height column. Its top
+   corners are clipped by `.panel__scroll`'s 29px radius rather than being rounded
+   here, so the hero cannot round one corner and the card the other. */
 .panel__hero {
   position: relative;
   flex: none;
-  height: 215px;
+  height: 190px;
   display: flex;
   align-items: flex-end;
   padding: 16px 18px;
   overflow: hidden;
-  background: #373666;
+  /* No background of its own. The card's `--panel-veil` IS the no-image fallback,
+     and painting the opaque `--panel` here would make the top 190px of a
+     translucent card solid — a band change two rows from the edge, which is the
+     thing collapsing the three purples was meant to end. */
 }
 
 .panel__image {
@@ -688,35 +753,21 @@ main .bubbles {
    Only drawn when there IS an image. Over the flat purple fallback it would
    just muddy the accent.
 
-   **The bottom-up dark scrim that used to sit under this is gone.** It existed
-   so the place name cleared 4.5:1 over whatever the publisher's photo happened
-   to be; without it that heading now leans on its own text-shadow alone, which
-   is why that shadow stays dark (see `.panel__place`) rather than being
-   recoloured to the new purple with everything else. */
+   **The bottom-up dark scrim that used to sit under this is gone**, along with
+   the 34px place name it was there to keep legible over a publisher's photo.
+   Nothing is printed on the hero now; it is ground. */
 .panel__hero--image::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(rgba(55, 54, 102, 0.35), rgba(55, 54, 102, 0.35));
+  background: linear-gradient(var(--panel-wash), var(--panel-wash));
 }
 
-/* The map's own pin, restated. #D24F39 is the accent the pins are drawn in, so
-   the panel opens with the thing the reader just clicked. */
-.panel__dot {
-  position: absolute;
-  top: 16px; /* distance from hero's top edge */
-  left: 18px; /* distance from the hero's left edge */
-  z-index: 1;
-  width: 26px; /* size — change both together, or it stops being round */
-  height: 26px;
-  border-radius: 50%;
-  background: #d24f39;
-  /* The hero is a photo the publisher chose, and a flat 20px disc can land on a
-     patch of similar red. The ring is what keeps it reading as the map's pin
-     restated rather than as part of the image — the same white ring the pins
-     themselves are drawn with. */
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
-}
+/* The orange disc in the panel's top-left corner is **deleted** (Mode 3,
+   2026-08-16). It was the map's pin restated — right when it sat on a hero that
+   claimed "this is the thing you clicked", and wrong once the region panel
+   stopped having a hero. The card is already the answer to "what did I click",
+   and the pin itself is still on the map behind it. */
 
 .panel__close {
   position: absolute;
@@ -737,148 +788,316 @@ main .bubbles {
   opacity: 1;
 }
 
-/* `z-index: 1` puts the place name ABOVE the scrim, and it is the whole point of
-   the scrim existing. The pseudo-element is painted after this heading in DOM
-   order, so without it the gradient lands ON the text and dims the one label the
-   panel is named for — legible, but greyed, and it looked like a disabled
-   control rather than a heading. The scrim must darken the photo and nothing
-   else. */
-.panel__place {
+/* ==========================================================================
+   Mode 3: the region panel's header (2026-08-16)
+   ========================================================================== */
+
+/* Breadcrumb and name on the left, flag on the right.
+
+   **The 38px of top padding is what keeps the flag clear of the ×**, and it is
+   measured rather than chosen: `.panel__close` occupies (302, 173)-(329, 203) on
+   a card at (15, 165), and the flag's right edge is 18px in from the same corner,
+   so the two share horizontal space and only vertical separation keeps them
+   apart. With `align-items: center` and a 54px-tall name block, 38 puts the
+   flag's top edge at 203 — exactly where the button ends. Anything less clips the
+   corner of the × behind the flag. The mockup has no × to make room for; this
+   does, deliberately (see `RegionPanel`). */
+.panel__head {
   position: relative;
-  z-index: 1;
-  margin: 0;
-  font-size: 34px;
-  font-weight: 400;
-  line-height: 1.1;
-  letter-spacing: 0.01em;
-  /* Belt and braces over an unpredictable photo: the scrim does the work, this
-     keeps the descenders readable where a bright area survives it. */
-  text-shadow: 0 1px 6px rgba(20, 19, 46, 0.55);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 38px 18px 0;
+  letter-spacing: -0.02em;
 }
 
+.panel__ident {
+  flex: 1;
+  min-width: 0;
+}
+
+/* `World › India`. Muted, because it is wayfinding rather than content — the
+   heading directly under it is the same word at twice the size, and two things
+   at equal weight saying the same thing is what makes a breadcrumb feel like
+   noise. */
+.panel__crumbs {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+/* The reader's own position in the trail, in white. The one crumb that is not a
+   place they could go from here. */
+.panel__crumb--here {
+  color: #ffffff;
+}
+
+/* The separator carries the spacing, so the crumbs themselves need no margins
+   and a missing crumb (see `countryName`) cannot leave a gap behind it. */
+.panel__crumb-sep {
+  padding: 0 6px;
+  color: var(--muted);
+}
+
+/* The region's name — the panel's subject, and the biggest type on the card.
+   34px on the old full-bleed hero; 30 here, where it shares a 288px row with a
+   flag rather than having 190px of image to itself. */
+.panel__region {
+  margin: 2px 0 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
+  /* A long name — "Bosnia and Herzegovina" — wraps rather than overflowing the
+     column, and `min-width: 0` on `.panel__ident` is what allows it to. */
+  overflow-wrap: anywhere;
+}
+
+/* `248 stories today · 39 sources` — the size of the pool this card is showing
+   ten of.
+
+   Muted and 12px, the same voice as the story card's byline and the rows' place
+   lines, because it is doing the same job: a caption under the subject. It is
+   also the one line on this card that is a measurement rather than a name, and
+   `worker/regions.ts` is where it is counted — see `RegionEntry` for why the
+   rows on screen cannot produce it. */
+.panel__counts {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+/* The flag, at the size where it confirms rather than shouts.
+
+   `object-fit: cover` on a fixed box: flagcdn serves each flag at its own aspect
+   ratio (Switzerland is square, Qatar is 28:11), and letting the box follow the
+   image would move the heading beside it from country to country. Cropping a
+   flag is a small lie about its proportions; a header that changes shape per
+   country is a bigger one about the panel. */
+.panel__flag {
+  flex: none;
+  width: 78px;
+  height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+/* The card's fixed furniture: byline, headline, place, and the one button.
+
+   **One left edge, 18px, for everything in the card.** The mockup measures 18,
+   20, 21, 26 and 33 for elements that are all plainly meant to line up — Figma
+   text boxes carry their own leading whitespace and the button was drawn as a
+   rectangle. Reproducing that as five numbers would be reproducing the slop, so
+   the body is one padding and the deviations are recorded in
+   docs/ui-refresh-2026-08.md rather than encoded here.
+
+   Letter-spacing is -0.02em throughout the card, as it is on the chrome. */
 .panel__body {
   flex: none;
-  padding: 18px 18px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 6px 18px 0;
+  letter-spacing: -0.02em;
 }
 
-/* §2.6: link-out only. The headline IS the link — there is no article text for
-   it to expand into, so a separate "read more" would promise something that does
-   not exist. */
-.panel__title {
-  display: block;
-  color: #ffffff;
-  font-size: 19px;
-  line-height: 1.3;
-  text-decoration: none;
-}
-
-.panel__title:hover {
-  text-decoration: underline;
-}
-
-.panel__time {
-  margin: 8px 0 0;
+/* Publisher and age on one line — `yahoo.com · 3 hours ago`. Two lines until
+   2026-08-16, and there was never a reason for two: they answer one question
+   between them ("who, and how long ago"), and the headline is what the reader
+   came for. Italic and muted so it sits under the headline rather than beside
+   it. Both halves already existed; nothing new is rendered. */
+.panel__byline {
+  margin: 0;
+  padding: 6px 0;
+  color: var(--muted);
   font-size: 14px;
   font-style: italic;
-  opacity: 0.75;
+  line-height: 1.3;
 }
 
-.panel__source {
-  display: inline-block;
-  margin-top: 2px;
+/* §2.6 is still link-out only — but the headline is no longer the link.
+
+   It was an `a` to the publisher until 2026-08-16, and now it is an `h2` with a
+   **Read The Story** button under it. One primary action, drawn as the thing a
+   primary action is drawn as: a headline that silently navigates away is a
+   promise the card can make more explicitly, and the button is also the only
+   element on the card big enough to be a comfortable tap target. */
+.panel__title {
+  margin: 8px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* Where the story was placed, marked with the brand sphere.
+
+   **§5.2 decision 3 has NOT been dropped, it has moved.** The line used to read
+   "Anaheim, California, USA · placed automatically" — a measured accuracy
+   disclosure (pooled n=73, 50.0% against 70.9%, Fisher p=0.152), not a caption.
+   The card carries the place alone and routes the disclosure to "How does this
+   work?" at its foot, which is where /about already explains the placement rule
+   and publishes the interval. `placementLine()` stays exported and tested; what
+   changed is which surface says it, not whether it is said. */
+.panel__where {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+/* The third size of the one mark — the search sphere, the wordmark bead, and now
+   the place dot. Declared with the other two (see `.search__mark`) so the paint
+   cannot drift; only the size is here.
+
+   It replaced a flat orange disc, which was the map's pin restated. On the hero
+   that reading was right; on a line of text it was a bullet the colour of the
+   thing the reader had just clicked, three inches from the pin itself. */
+.panel__sphere {
+  flex: none;
+  width: 11px;
+  height: 11px;
+}
+
+/* The card's one primary action, and the job the headline used to do. */
+.panel__cta {
+  display: block;
+  margin: 14px 0 0;
+  /* 11px of padding on a 13px line box makes 35, which is the mockup's height.
+     Padding rather than a fixed height so a label that ever wraps grows the
+     button instead of spilling out of it. */
+  padding: 11px 0;
+  border-radius: 12px;
+  background: var(--accent);
   color: #ffffff;
   font-size: 14px;
-  opacity: 0.75;
+  line-height: 1.3;
+  text-align: center;
   text-decoration: none;
 }
 
-.panel__source:hover {
-  text-decoration: underline;
-  opacity: 1;
+.panel__cta:hover {
+  filter: brightness(1.08);
 }
 
-/* §5.2 decision 3, the pin half of the geotag-confidence treatment: where the
-   rule put this story, and that a rule put it there. Quieter than the headline —
-   it is context, not a competing claim — and at 0.65 over the purple it still
-   clears 4.5:1. Deliberately identical on every story: `lib/story.ts` has the
-   measurement showing there is no per-pin signal to grade on. */
-.panel__placement {
-  margin: 10px 0 0;
-  font-size: 13px;
-  opacity: 0.65;
+.panel__cta:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 
+/* The ranked list, and the only part of the region card that scrolls.
+
+   **The rule above it is a margin, not a border on the header**, so the line stops
+   18px short of each edge the way the mockup draws it — a border on a
+   full-bleed section would run wall to wall. The horizontal padding moves to the
+   margin with it, which also keeps the scrollbar inside the content column rather
+   than against the card's rounded edge.
+
+   `flex: 1 1 auto` with `min-height: 0` — without the min-height a flex item
+   refuses to shrink below its content and the overflow never engages, which is
+   the classic way a scroll container silently becomes a clipped one. */
 .panel__list {
-  flex: 1 0 auto;
-  padding: 18px 18px 22px;
-  background: #373666;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 20px 18px 0;
+  padding: 18px 0 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  letter-spacing: -0.02em;
+  /* No background — see `.panel__hero`. */
 }
 
-.panel__list h3 {
-  margin: 0 0 16px;
-  font-size: 19px;
-  font-weight: 400;
-}
-
-.panel__list ul,
+/* **No "Top stories" heading (Mode 3).** It labelled the list back when the
+   panel's hero was the only other thing on the card and the list needed saying
+   out loud. With a breadcrumb and a region name above it there is nothing else
+   the list could be, and the heading was one more 19px line competing with the
+   headlines underneath it. The `aria-label` on the section still says it. */
 .panel__list ol {
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* 30px, up from 16. With a publisher chip now sitting above each headline, a
-   row is two elements rather than one, and at 16px the gap BETWEEN rows was no
-   larger than the gap inside them — the list read as one block of text with
-   orange marks scattered through it instead of as separate stories. */
+/* A row is three lines now — place, headline, source — so the gap between rows
+   has to beat the gaps inside one, or the list reads as one block of text rather
+   than as separate stories. */
 .panel__list li + li {
-  margin-top: 30px;
+  margin-top: 22px;
 }
 
-/* The row above each headline: who published it, and when. */
+/* Where the story is, above its headline. Italic and muted: it is a caption on
+   the headline, and the same voice `.panel__byline` uses on the story card for
+   the same reason. Rendered by `placeLine`, so a place is spelled identically on
+   both surfaces. */
+.panel__row-place {
+  margin: 0 0 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.2;
+}
+
+/* Under each headline: who published it, and when. It sat ABOVE the headline
+   until Mode 3, where it competed with the place line for the same slot; below
+   is where a byline goes, and it puts the headline directly under the place it
+   happened. */
 .panel__meta {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 0 0 6px;
+  align-items: center;
+  gap: 7px;
+  margin: 5px 0 0;
 }
 
-/* The publisher, in the pin accent (#D24F39 — the same orange as `.panel__dot`
-   and the map's pins, so the panel has one accent rather than three).
-
-   **It says a domain, not a masthead** — `chron.com`, not "The Houston
+/* **It says a domain, not a masthead** — `chron.com`, not "The Houston
    Chronicle". `source` is a bare domain everywhere in the pipeline, and a
    domain→publisher lookup would be §3.4's join-on-names trap wearing display
    clothing: it fails silently and plausibly on exactly the outlets nobody
-   checks. */
-.panel__chip {
-  flex: none;
-  padding: 2px 8px;
-  border-radius: 5px;
-  background: #d24f39;
-  color: #ffffff;
+   checks.
+
+   **The orange pill is gone (Mode 3).** Nine filled accent chips down a 324px
+   column made the publishers the loudest thing in the panel, over the headlines
+   they are captioning. The accent survives as the disc below, which is one small
+   mark per row instead of one block. */
+.panel__source {
+  min-width: 0;
   font-size: 13px;
   line-height: 1.3;
   /* A long domain must not push the timestamp off the row. */
-  max-width: 60%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* The separator between publisher and age, in the pin accent (#D24F39 — the same
+   orange the map draws stories in, so the card has one accent rather than
+   three). A disc rather than a middot: at 13px a middot is nearly invisible on
+   this ground, and the mockup's dot is doing colour as much as punctuation. */
+.panel__bullet {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .panel__stamp {
+  flex: none;
   font-size: 13px;
   opacity: 0.75;
 }
 
-/* **Both panels' rows are anchors now (2026-08-14).** "Stories Nearby" used to
-   be a `button`, because selecting a neighbour swapped the panel in place rather
-   than navigating — two elements, one appearance, and this rule existed to stop
-   that correctness from reading as two different looking lists. A neighbour
-   click now goes straight out to the publisher exactly like a region's top
-   story does (§2.6, link-out only), so there is one element and one behaviour.
-   The reset stays: they still have to look like the text they are. */
+/* The headline, and the row's one link.
+
+   **Both panels' rows are anchors (2026-08-14).** "Stories Nearby" used to be a
+   `button`, because selecting a neighbour swapped the panel in place rather than
+   navigating — two elements, one appearance, and this reset existed to stop that
+   correctness from reading as two different looking lists. §2.6 is link-out only
+   now, so there is one element and one behaviour; the reset stays because it
+   still has to look like the text it is.
+
+   Bold as of Mode 3: the headline is what the reader is scanning, and the place
+   and byline around it are captions. */
 .panel__list a {
   display: block;
   width: 100%;
@@ -887,15 +1106,22 @@ main .bubbles {
   background: none;
   color: #ffffff;
   font: inherit;
-  font-size: 17px;
-  line-height: 1.3;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
 }
 
-.panel__list a:hover {
+/* White, because the text is white — stated rather than inherited so that
+   recolouring the headline later cannot silently leave a coloured underline
+   behind. 3px of offset keeps the rule off the descenders of a serif face. */
+.panel__list a:hover,
+.panel__list a:focus-visible {
   text-decoration: underline;
+  text-decoration-color: #ffffff;
+  text-underline-offset: 3px;
 }
 
 .panel__note {
@@ -904,45 +1130,100 @@ main .bubbles {
   opacity: 0.7;
 }
 
-/* The panel footer: MapTiler's mark, alone since "How does this work?" moved to
-   the brand block on 2026-08-14.
+/* The panel footer.
 
-   `margin-top: auto` pins it to the bottom of a SHORT panel (the flex column has
-   spare height when a story has one neighbour); `flex: none` keeps it from being
-   squeezed by a long one.
+   **It stopped being sticky and stopped being opaque (2026-08-16), and both
+   followed from the card.** Sticky existed because the panel was a full-height
+   scroller whose footer could fall below the fold, carrying the MapTiler mark
+   with it — the §2.6 silent failure. The card does not scroll: only
+   `.panel__more` inside it does, so the footer is fixed furniture that cannot go
+   below anything. With nothing scrolling behind it, it needs no ground of its
+   own either, and it inherits the card's one fill.
 
-   **`position: sticky` is what makes the MapTiler logo actually visible**, and
-   it is a §2.6 requirement rather than a nicety. Enlarging the panel on
-   2026-08-14 took a six-neighbour story to 880px of content in a 720px viewport,
-   which put this footer 98px below the fold — and the map's own copy of the logo
-   sits UNDER the panel by design, so the mark was on the page and on screen
-   nowhere. That is exactly the silent failure the two-copies arrangement exists
-   to prevent, so the footer now stays pinned to the bottom edge of the scroller
-   at every content height. `.panel` is the scroll container, so `bottom: 0`
-   resolves against it.
+   `margin-top: auto` still pins it to the bottom of a card whose content ran
+   short — which is the common case, since 87% of stories have no "More
+   Reporting" section at all.
 
-   It is opaque, and it must stay opaque: it is sticky, so the list scrolls
-   BEHIND it, and a transparent footer would show headlines sliding through the
-   MapTiler logo. It carries the panel's own purple — the same one the list
-   does since the shades were collapsed — so the bottom of the panel is one
-   block of colour rather than a band change two rows from the edge. */
+   **The MapTiler logo is no longer in here at all.** See the note on `.panel`:
+   both cards end ~200px above the map's own copy. `RegionPanel` has no footer
+   now — its list runs to the bottom of the card. */
 .panel__footer {
   flex: none;
-  position: sticky;
-  bottom: 0;
   margin-top: auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  /* 30px of bottom padding, not 14 (2026-08-14). The browser's own link-preview
-     bubble — the "https://…" that appears on hover — is painted by the browser
-     in the bottom-left corner of the viewport, over everything, and at 14px it
-     landed squarely on the MapTiler logo and the About link. Since both of the
-     things in this footer ARE links, hovering either one covered the other.
-     Nothing in CSS can move that bubble; the only fix is to sit above it. */
-  padding: 12px 18px 30px;
-  background: #373666;
+  /* The browser's own link-preview bubble — the "https://…" that appears on hover
+     — is painted in the bottom-left corner of the VIEWPORT, over everything. The
+     card floats ~200px clear of that corner, so the 30px of clearance this used
+     to need is no longer buying anything. */
+  padding: 12px 18px 20px;
+}
+
+/* "How does this work?" — §5.2 decision 3's route out of the card, and the reason
+   the place line above it can be the place alone. Centred and alone, so it is the
+   footer rather than a second thing in it. */
+.panel__footer--about {
+  justify-content: right;
+}
+
+.panel__about {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.9;
+}
+
+.panel__about:hover {
+  opacity: 1;
+}
+
+/* Mode 3's footer. One action, right-aligned where the mockup draws it — the
+   left slot is "See all N stories" and it has no data yet, so nothing occupies
+   it. `flex-end` rather than a placeholder: an empty span holding a gap open is
+   a thing that survives long after the reason for it. */
+.panel__footer--zoom {
+  justify-content: flex-end;
+  /* Above the list rather than inside it, and the list's own rule already
+     separates the two — so no border here. */
+  padding: 16px 30px 16px;
+}
+
+/* "Zoom to Texas ›". A button that moves the camera, drawn as text because the
+   card already has exactly one primary action shape (`.panel__cta`, on the story
+   side) and this is not it — the reader's main business here is the list.
+
+   The full `font: inherit` reset for the same reason `.panel__list a` carries
+   one: a `button` otherwise inherits the platform's UI font and would be the one
+   element on this card not set in Newsreader. */
+.panel__zoom {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.panel__zoom:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-color: #ffffff;
+  text-underline-offset: 3px;
+}
+
+.panel__zoom:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 .notice {

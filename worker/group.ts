@@ -81,18 +81,34 @@ export function cellOf(lat: number, lon: number): string {
   return `${Math.floor(lat / CELL_DEGREES)}:${Math.floor(lon / CELL_DEGREES)}`;
 }
 
-/** Themes appearing on more than `ceiling` of articles carry no grouping signal. */
-export function overCommonThemes(articles: PlacedArticle[], ceiling = THEME_CEILING): Set<string> {
-  const documentFrequency = new Map<string, number>();
+/**
+ * How many articles carry each theme. Distinct per article — a theme mentioned
+ * nine times in one document is one document.
+ *
+ * **Extracted from `overCommonThemes` on 2026-08-16 and exported**, because the
+ * topic classifier needs the counts themselves rather than the set above the
+ * ceiling: it ranks a story's themes by specificity, and "how rare is this
+ * theme" is the same measurement grouping already makes. Computing it twice
+ * would be two passes over ~26,000 articles for one answer, and two places for
+ * "distinct per article" to be got wrong differently.
+ */
+export function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const article of articles) {
     for (const theme of new Set(article.themes)) {
-      documentFrequency.set(theme, (documentFrequency.get(theme) ?? 0) + 1);
+      counts.set(theme, (counts.get(theme) ?? 0) + 1);
     }
   }
+  return counts;
+}
+
+/** Themes appearing on more than `ceiling` of articles carry no grouping signal. */
+export function overCommonThemes(articles: PlacedArticle[], ceiling = THEME_CEILING): Set<string> {
+  const counts = documentFrequency(articles);
 
   const limit = ceiling * Math.max(articles.length, 1);
   const common = new Set<string>();
-  for (const [theme, count] of documentFrequency) {
+  for (const [theme, count] of counts) {
     if (count > limit) common.add(theme);
   }
   return common;

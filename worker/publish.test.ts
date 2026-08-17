@@ -380,6 +380,56 @@ describe("publish", () => {
     expect(remaining).toContain("archives/regions-old.json");
   });
 
+  /**
+   * The other half of the test above, and the half that was missing.
+   *
+   * That one asserts the *retained* case only — both keys survive because the
+   * publication is still inside `KEEP_ARCHIVES`. Its name promised "and prunes
+   * both when they age out" and nothing checked it, which is how the store came
+   * to hold every region index ever published: `publish` listed with
+   * `ARCHIVE_PREFIX` (`archives/stories-`), and `archivesToPrune` can only
+   * delete keys the listing returned. The stories archive was swept, its index
+   * was invisible, and the `pruned` count looked correct throughout.
+   *
+   * Four publications, so the first falls out of the 3-deep window.
+   */
+  it("prunes a region index left by a generation that has aged out", async () => {
+    const seed: Record<string, string> = {
+      [HISTORY_KEY]: JSON.stringify(
+        [1, 2, 3].map((n) => ({
+          stamp: String(n),
+          archive: `archives/stories-gen${n}.pmtiles`,
+          regions: `archives/regions-gen${n}.json`,
+          groups: 3_000,
+        })),
+      ),
+    };
+    for (const n of [1, 2, 3]) {
+      seed[`archives/stories-gen${n}.pmtiles`] = `gen${n}`;
+      seed[`archives/regions-gen${n}.json`] = `gen${n}`;
+    }
+    const store = memoryStore(seed);
+
+    const result = await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(),
+      regions: {},
+      watermark: "4",
+      now: NOW,
+    });
+    expect(result.published).toBe(true);
+
+    const remaining = await store.list(ARCHIVE_DIR);
+    // Generation 1 is now four publications back, outside KEEP_ARCHIVES.
+    expect(remaining).not.toContain("archives/stories-gen1.pmtiles");
+    expect(remaining).not.toContain("archives/regions-gen1.json");
+    // And the two still inside the window are untouched — a sweep that widened
+    // far enough to delete a live index would be a worse bug than the leak.
+    expect(remaining).toContain("archives/regions-gen2.json");
+    expect(remaining).toContain("archives/regions-gen3.json");
+  });
+
   it("leaves the previous manifest intact when the archive upload fails", async () => {
     const store = memoryStore({ [MANIFEST_KEY]: '{"archive":"archives/stories-old.pmtiles"}' });
     store.failOn = ARCHIVE_PREFIX;
