@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { linkLabel, placeLine, publishedAt, type PanelStory } from "@/lib/story";
+import { placeLine, publishedAt, type PanelStory } from "@/lib/story";
 
 
 /**
@@ -109,24 +109,6 @@ export default function StoryPanel({ story, onClose }: StoryPanelProps) {
   /** "Anaheim, California, USA", or "Somewhere in Texas, USA" — see `placeLine`. */
   const place = placeLine(story);
 
-  /**
-   * The coverage links, labelled and de-duplicated by label.
-   *
-   * The worker already emits one url per distinct domain, so this changes nothing
-   * on well-formed data — it is here because the card renders the *label*, and
-   * two rows reading `chron.com` twice would look like a bug in the card rather
-   * than a change upstream. A url whose host will not parse is dropped rather
-   * than printed as a bare href.
-   */
-  const coverage: { url: string; label: string }[] = [];
-  const seen = new Set<string>();
-  for (const url of story.more) {
-    const label = linkLabel(url);
-    if (!label || seen.has(label)) continue;
-    seen.add(label);
-    coverage.push({ url, label });
-  }
-
   return (
     <aside className="panel" aria-label={story.title || "Story"}>
       {/* `.panel` positions and carries the shadow; this element clips to the
@@ -197,28 +179,6 @@ export default function StoryPanel({ story, onClose }: StoryPanelProps) {
             Read The Story
           </a>
         </div>
-
-        {/*
-          **Omitted entirely when there is nothing to put in it**, which is the
-          common case rather than the degraded one: 87.2% of groups are a single
-          article and carry no coverage at all (measured — see the theme audit).
-          An empty "More Reporting" heading over a blank space would read as a
-          failed fetch on nine cards out of ten.
-        */}
-        {coverage.length > 0 && (
-          <section className="panel__more" aria-label="More reporting">
-            <h3>More Reporting</h3>
-            <ul>
-              {coverage.map((link) => (
-                <li key={link.url}>
-                  <a href={link.url} target="_blank" rel="noopener noreferrer">
-                    {link.label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
 
         {/*
           §5.2 decision 3's route out of the card. The placement disclosure used
