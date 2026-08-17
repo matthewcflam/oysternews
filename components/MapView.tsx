@@ -51,8 +51,14 @@ import {
 } from "@/lib/layers";
 import { loadManifest } from "@/lib/manifest";
 import { PIN_PIXEL_RATIO, trianglePin } from "@/lib/pin";
-import { nearbyBox, nearbyStories } from "@/lib/nearby";
-import { loadRegionIndex, storiesFor } from "@/lib/regions";
+import {
+  FIT_PADDING,
+  MAX_FIT_ZOOM,
+  bboxFor,
+  loadRegionBboxes,
+  type BboxTable,
+} from "@/lib/region-bbox";
+import { entryFor, loadRegionIndex } from "@/lib/regions";
 import { panelStory, type PanelStory } from "@/lib/story";
 import {
   EMPTY_SPIDER,
@@ -133,21 +139,22 @@ export default function MapView() {
   const provider = basemap().provider;
 
   /**
-   * The selected story and its neighbours.
+   * The selected story.
    *
    * **This is what the map popup used to be.** A click no longer anchors a box to
-   * the dot it hit; it opens the left panel, which is the same slot §2.3's region
+   * the dot it hit; it opens the panel, which is the same slot §2.3's region
    * panel uses. Holding the selection in React state rather than in a MapLibre
    * `Popup` is what lets the panel be a component with a testable content model
    * (`lib/story.ts`) instead of an HTML string.
    *
-   * `nearby` is captured at click time, not recomputed as the camera moves. The
-   * list answers "what was around the story when you opened it", and a list that
-   * reshuffled under a pan would be a moving target in a panel the reader is
-   * reading.
+   * **`nearby` went with "Stories Nearby" (2026-08-16).** The card's list is
+   * "More Reporting" — other outlets on the same story — and that rides the
+   * story's own `more` field rather than a second `queryRenderedFeatures` over a
+   * radius. So the state, the radius query, `lib/nearby.ts` and its test are all
+   * deleted rather than left wired to nothing, the same treatment `samePlacement`
+   * and `anchorBubbles` got when they were orphaned.
    */
   const [story, setStory] = useState<PanelStory | null>(null);
-  const [nearby, setNearby] = useState<PanelStory[]>([]);
 
   /**
    * The open story's url, and the spider's redraw, both held for `markSelected`.
@@ -179,21 +186,22 @@ export default function MapView() {
    */
   const [tops, setTops] = useState<TopStory[]>([]);
 
-  /**
-   * The panel, slid off the left edge but still selected.
+  /*
+   * **The collapse tab is gone (2026-08-16), and so is the state behind it.**
    *
-   * **Held here rather than inside the panels**, because `StoryPanel` and
-   * `RegionPanel` are two components sharing one slot: state owned by either of
-   * them would reset the moment the reader went from a pin to a country label,
-   * and the tab would spring back open for no reason the reader could name.
+   * `PanelTab`, `collapsed` and `onToggleCollapse` existed to slide a full-height
+   * column off the left edge so the reader could see the map underneath it. Mode
+   * 2 made the panel a 324x489 card that covers about a twelfth of a desktop
+   * viewport — there is no longer anything worth reclaiming, and a control whose
+   * whole purpose was reclaiming it is a control that answers a question nobody
+   * has.
    *
-   * It is deliberately NOT the same thing as "no selection". Collapsed keeps the
-   * story, the outline and the top-5 highlight exactly as they were and only
-   * moves the column out of the way; closing throws all of that away. The tab and
-   * the × are different controls because they answer different questions — "let
-   * me see the map" and "I'm done with this story".
+   * **Dismissal did not go with it**, which is the part that would have been easy
+   * to lose: the tab and the × answered different questions, and only the tab's
+   * question expired. There are three ways to close a panel — `Escape` below, a
+   * click on the map background (the miss path in the click handler), and the ×
+   * in the card itself.
    */
-  const [collapsed, setCollapsed] = useState(false);
 
   /**
    * §2.3's region panel. `regionsUrl` is optional on the manifest — one
@@ -204,6 +212,15 @@ export default function MapView() {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [index, setIndex] = useState<RegionIndex | null>(null);
   const [indexFailed, setIndexFailed] = useState(false);
+
+  /**
+   * Mode 3's "Zoom to Texas" table. Committed and static, so it has no
+   * `unavailable` state of its own: a failed fetch leaves this `null`, and the
+   * panel simply does not draw the button. There is nothing to tell the reader —
+   * the map is fine and the two other ways to reach a region (drag, wheel) are
+   * the ones they were already using.
+   */
+  const [bboxes, setBboxes] = useState<BboxTable | null>(null);
 
   /**
    * Clear the outline and the selection pin from outside the map effect — the
@@ -255,6 +272,39 @@ export default function MapView() {
   };
 
   /**
+   * Fly the camera to the selected region's bounds.
+   *
+   * **This is the zoom §2.3 deliberately took OUT of the label click, put back
+   * as a thing the reader asks for.** Clicking a label used to move the camera;
+   * that was removed because the panel answers the question directly and the
+   * move was one nobody requested. A button is the other half of that argument —
+   * the reader who does want to go there now has a way to say so, and the
+   * reader who does not is still left where they were.
+   *
+   * The panel stays open and the outline stays drawn: the region is still the
+   * selection, and closing the thing that explains where you just flew to would
+   * be a strange reward for pressing it.
+   *
+   * `fitBounds`, not `flyTo` with a computed zoom: the box is the datum, and
+   * asking MapLibre to fit it accounts for the viewport's aspect ratio, which a
+   * zoom number cannot. `MAX_FIT_ZOOM` is why a small region does not overshoot
+   * the archive's z12 ceiling.
+   */
+  const zoomToRegion = () => {
+    const map = mapRef.current;
+    const box = bboxFor(bboxes, selection?.id ?? "");
+    if (!map || !box) return;
+
+    map.fitBounds(
+      [
+        [box[0], box[1]],
+        [box[2], box[3]],
+      ],
+      { padding: FIT_PADDING, maxZoom: MAX_FIT_ZOOM },
+    );
+  };
+
+  /**
    * Close the story panel and drop the container outline it drew.
    *
    * Shares `clearRegion`'s outline clearing rather than duplicating it: §2.2
@@ -263,7 +313,6 @@ export default function MapView() {
    */
   const clearStory = () => {
     setStory(null);
-    setNearby([]);
     clearRegion();
   };
 
@@ -276,12 +325,13 @@ export default function MapView() {
    * the other does not and the map starts behaving differently depending on
    * which half of the same mark the reader hit.
    *
-   * `at` is where the triangle goes and `point` is where the neighbours are
-   * measured from. They are separate because a bubble click lands 100px away
-   * from its own pin, and "stories near this story" must not mean "stories near
-   * the corner of a box".
+   * `at` is where the triangle goes. It took a second argument, the screen point
+   * the neighbours were measured from, until "Stories Nearby" was replaced by
+   * "More Reporting" on 2026-08-16 — the card's list is a property of the story
+   * rather than of where on the map it was clicked, so there is nothing left to
+   * measure a radius from.
    */
-  const selectStory = (selected: PanelStory, at: [number, number], point: { x: number; y: number }) => {
+  const selectStory = (selected: PanelStory, at: [number, number]) => {
     const map = mapRef.current;
     if (!map) return;
 
@@ -293,32 +343,14 @@ export default function MapView() {
      * two the map is claiming is selected.
      */
     clearRegion();
-    /**
-     * A selection always re-opens the panel. Leaving it collapsed would make the
-     * click produce NO visible response at all — the panel is off screen, so a
-     * new story would swap in where nobody can see it, and the map would look
-     * broken rather than busy.
-     */
-    setCollapsed(false);
     showPin(map, at);
     // After `clearRegion`, which has just taken the fill off whatever was open.
     markSelected(selected.url);
-
-    /**
-     * "Stories Nearby": a second query over the same layers, this time across a
-     * box rather than a point. Run here, once per selection, rather than on
-     * `idle` with everything else — the neighbours of a story are a property of
-     * the gesture, not of the viewport, and recomputing them on every camera
-     * settle would rewrite a list the reader is reading.
-     */
-    const layers = CLICKABLE_LAYER_IDS.filter((id) => map.getLayer(id));
-    const around = map.queryRenderedFeatures(nearbyBox(point), { layers });
 
     // §2.6 (link-out only) and §5.2 decision 3 (the pin half of the
     // geotag-confidence treatment) both live in `lib/story.ts`, where they are
     // tested rather than reviewed.
     setStory(selected);
-    setNearby(nearbyStories(around, selected.url));
   };
 
   /**
@@ -343,6 +375,63 @@ export default function MapView() {
       cancelled = true;
     };
   }, [selection, regionsUrl, index]);
+
+  /**
+   * The bbox table, on the same trigger and for the same reason: ~140 KB that
+   * nothing needs until a region panel is open.
+   *
+   * A separate effect from the index above rather than a second `then` inside
+   * it, because the two are independent — the index comes from the manifest and
+   * can be unavailable; this comes from the deploy and cannot. Chaining them
+   * would make a missing `regionsUrl` also cost the reader the zoom button.
+   */
+  useEffect(() => {
+    if (!selection || bboxes) return;
+    let cancelled = false;
+
+    loadRegionBboxes()
+      .then((loaded) => {
+        if (!cancelled) setBboxes(loaded);
+      })
+      .catch(() => {
+        // Silent by design — see the `bboxes` state. The button is simply absent.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selection, bboxes]);
+
+  /**
+   * `Escape` closes whichever panel is open.
+   *
+   * **One of the three dismissals, and the one that had never been wired.** The
+   * card, the click-away and this were all listed together as the affordances
+   * that survive the collapse tab's deletion; the other two already existed, and
+   * this did not — it was assumed. Keyboard dismissal is also the only one of the
+   * three a reader who never touches the mouse has.
+   *
+   * Bound only while something is open, so the map does not carry a global
+   * keydown listener to do nothing with. `story` wins over `selection` in the
+   * same order the render does — §2.3 allows one panel, and a story click clears
+   * the region, so the two can only disagree for the frame in between.
+   */
+  useEffect(() => {
+    if (!story && !selection) return;
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (story) clearStory();
+      else clearRegion();
+    };
+
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // `clearStory` and `clearRegion` are re-created every render and close over
+    // nothing that outlives it; what decides whether the key is live is the
+    // selection, which is what this depends on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [story, selection]);
 
   useEffect(() => {
     if (!container.current) return;
@@ -781,10 +870,8 @@ export default function MapView() {
           const [feature] = map.queryRenderedFeatures(event.point, { layers });
 
           setStory(null);
-          setNearby([]);
           clearRegion();
           clearOutline();
-          setCollapsed(false);
 
           // A pin is hit-tested FIRST and wins the tap, even where it sits over
           // a country label. The pin is the smaller, more deliberate target.
@@ -820,7 +907,6 @@ export default function MapView() {
             feature.geometry.type === "Point"
               ? (feature.geometry.coordinates as [number, number])
               : [event.lngLat.lng, event.lngLat.lat],
-            event.point,
           );
         });
 
@@ -885,13 +971,7 @@ export default function MapView() {
         map={ready}
         stories={tops}
         selectedUrl={story?.url ?? null}
-        onSelect={(selected, at) => {
-          const map = mapRef.current;
-          if (!map) return;
-          // The neighbours are measured from the PIN, not from the bubble that
-          // was clicked — see `selectStory`.
-          selectStory(selected, at, map.project(at));
-        }}
+        onSelect={(selected, at) => selectStory(selected, at)}
       />
 
       {/*
@@ -900,33 +980,30 @@ export default function MapView() {
         the region and a region click can only happen where no story was hit.
         The story is rendered first so that guarantee is visible here too.
       */}
-      {story && (
-        <StoryPanel
-          story={story}
-          nearby={nearby}
-          onClose={clearStory}
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((open) => !open)}
-        />
-      )}
+      {story && <StoryPanel story={story} onClose={clearStory} />}
 
       {!story && selection && (
         <RegionPanel
           name={selection.name}
           regionId={selection.id}
-          stories={storiesFor(index, selection.id)}
+          entry={entryFor(index, selection.id)}
           status={panelStatus}
+          /* `null` hides the button — see `zoomToRegion` and `bboxFor`. */
+          onZoom={bboxFor(bboxes, selection.id) ? zoomToRegion : null}
           onClose={clearRegion}
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((open) => !open)}
         />
       )}
       {/*
-        §2.6's logo, bottom-left of the MAP. The story panel is full-bleed and
-        covers this corner, so it renders a second copy of the same component in
-        its own footer — see `MapTilerLogo`. This one no longer sits above the
-        panel (its z-index dropped from 4 to 2 on 2026-08-14); the panel's copy
-        is what keeps the requirement met while a story is open.
+        §2.6's logo, bottom-left of the MAP, and as of 2026-08-16 it is the ONLY
+        copy: both cards end ~200px above this corner, so the mark is visible past
+        either of them. Mode 2's card carries "How does this work?" in its footer
+        instead, and Mode 3's region card has no footer at all — see
+        `MapTilerLogo` for what the second copy was for.
+
+        **This rule was commented out in globals.css and restored on 2026-08-16.**
+        Without it the anchor fell into normal flow at the top of `main`, which is
+        exactly the silent §2.6 failure the two-copy arrangement was built to
+        prevent. Do not disable it again without saying where the mark went.
       */}
       <MapTilerLogo />
       {provider === "openfreemap" && (
