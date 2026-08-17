@@ -119,9 +119,15 @@ export default function About() {
           A <strong>container</strong> is the honest form of &quot;somewhere in
           here.&quot; It draws at the middle of a country or region, and clicking
           it outlines that region in red rather than pretending to a street
-          address. The popup says which it is: a pin names the place, a container
-          says <em>somewhere in</em> it, and both say the placement was made
-          automatically.
+          address. The story card says which it is: a pin names the place, a
+          container says <em>somewhere in</em> it.
+        </p>
+        <p>
+          <strong>Every placement on this map was made automatically</strong>, by
+          the rule above and by nothing else. No editor checked any of them. The
+          card used to say so on every story, in four words under the headline;
+          it now sends you here instead, where the same fact comes with the
+          measurement below it rather than on its own.
         </p>
         <p>
           That last rule — dropping a city mentioned once — is the one change

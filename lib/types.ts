@@ -185,8 +185,38 @@ export type RegionStory = {
   place: string;
 };
 
-/** region id (`PK`, `USCA`) -> its top stories, best first. */
-export type RegionIndex = Record<string, RegionStory[]>;
+/**
+ * What one region's panel gets: the rows it can draw, and the two counts that
+ * describe the part it cannot.
+ *
+ * **The counts exist because the rows are capped and the header must not lie.**
+ * `REGION_TOP_N` is 10, and 68 of 163 regions in a measured run hold more than
+ * that — so counting the rows on screen would print "10 stories today" for a
+ * country with 977. The panel's `248 stories today · 39 sources` is a claim about
+ * the pool, and only the worker, which sees the pool, can make it.
+ *
+ * Both are computed BEFORE the cap and over the same set of groups the rows are
+ * drawn from, so `stories.length <= total` always holds.
+ */
+export type RegionEntry = {
+  /** Best first, capped at `REGION_TOP_N`. */
+  stories: RegionStory[];
+  /** Every group filed under this region in the window, uncapped. */
+  total: number;
+  /** Distinct publishing domains across those groups. */
+  sources: number;
+};
+
+/**
+ * region id (`PK`, `USCA`) -> its entry.
+ *
+ * **The value was a bare `RegionStory[]` until 2026-08-16**, and an index
+ * published before that change is still a valid index — the browser reads both
+ * shapes (`lib/regions.ts`, `regionEntry`) for the same reason `regionsUrl` is
+ * optional on the manifest: a run publishes every four hours, and the map must
+ * not break in the gap between a deploy and the next one.
+ */
+export type RegionIndex = Record<string, RegionEntry | RegionStory[]>;
 
 /** What publish.ts writes next to the archive; the browser reads this, never GDELT (§2.6). */
 export type Manifest = {

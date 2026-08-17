@@ -97,7 +97,7 @@ const WHITE = "#ffffff";
  * `app/globals.css` states it a third time, inside a gradient, where a variable
  * would not help — a gradient stop cannot be imported.
  */
-export const MARK = "#B339D2";
+export const MARK = "#C05AC4";
 
 /**
  * The white ring, as a share of the footprint radius — measured off the identity

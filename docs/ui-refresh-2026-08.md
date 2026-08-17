@@ -3,9 +3,11 @@
 `HANDOFF.md` is closed as of this session. This file carries the notes for the UI
 state refresh; the map/worker pipeline history stays where it is.
 
-The user is specifying the refresh in four parts. **Section 0 (General) and
-mode 1 (Browse) are implemented and are what this document covers.** Modes 2
-(Story Selected) and 3 (Label Selected) are still to be specified.
+The user is specifying the refresh in four parts. **Section 0 (General), mode 1
+(Browse) and mode 2 (Story Selected) are implemented and are what this document
+covers.** Mode 3 (Label Selected) is specified — see
+`docs/modes-2-3-handoff.md` and the plan it points at — but not built; the region
+panel currently wears mode 2's card shell with its old contents inside it.
 
 ---
 
@@ -74,8 +76,11 @@ returned 54 features, 0 containers, kinds `["PIN"]`.
 
 A 52×34 wedge with a flat top edge and its **point at the bottom**, which is what
 lands on the map coordinate. The body hangs above; the story's orange circle stays
-visible underneath the tip. It is painted `MARK` (`#B339D2`), not `ACCENT` — the
-selection has to be distinguishable from the orange it is sitting on top of.
+visible underneath the tip. It is painted `MARK`, not `ACCENT` — the selection
+has to be distinguishable from the orange it is sitting on top of. (This section
+read `#B339D2`, the mockup's value; `MARK` was hand-tuned to **`#C05AC4`** and
+Part E made that the one purple across the wedge, the disc and the brand sphere.
+See §2G.)
 
 - **It replaced a right triangle** whose point was the bottom-right corner. That
   one read as the corner of something rather than as an arrow, and at 40px it was
@@ -581,3 +586,210 @@ There are still **no component tests** — vitest runs `environment: "node"` and
 `include` is `worker|lib|scripts` only. Everything in 0B and 0C is verified by
 eye and by live DOM queries, not by suite. That is unchanged from before this
 work, but it is now covering more surface.
+
+---
+
+# Mode 2 â€” Story Selected (2026-08-16)
+
+The full plan is at `.claude/plans/mode-2-story-selected-lovely-puffin.md`; the
+pipeline half of it (`coverage`, `topic`, per-region counts, full-list shards) is
+**not built**, and `docs/modes-2-3-handoff.md` carries its state. This section is
+the UI half, which was deliberately built first â€” see "Why the order changed"
+there.
+
+## 2A. The panel became a floating card, reversing Section 0
+
+`globals.css` recorded, at length, why the panel was full-bleed:
+
+> **Full-bleed, not a floating card.** `bottom: 0` and `left: 0` rather than a
+> margin and a max-height: [â€¦] A card that shrink-wrapped its content left the
+> accent colour ending mid-screen with a strip of map below it, which read as the
+> panel having failed to load the rest.
+
+That argument was right about the card it described, and the mockup's card is not
+that card. It answers the objection three ways rather than ignoring it:
+
+1. **The height is fixed, not shrink-wrapped.** 489px, with the story list
+   scrolling inside. The colour stops where the design says it stops, not
+   wherever the content ran out â€” which is the thing that read as a failed load.
+2. **A soft shadow replaces a hard edge.** The old card's ~1px dark border is
+   what made it read as a cut-out of the map. The mockup's `Rectangle 26` â€” 10px
+   of `rgba(0,0,0,0.1)` at radius 38, biased 20px downward â€” reads as a card
+   lifted off the map instead. It is drawn as a `::before` element, not a
+   `box-shadow`, so `getBoundingClientRect` can check it.
+3. **The fill is 0.95, not 1.** The map showing faintly through is what says the
+   card is *over* the map rather than replacing part of it. A full-bleed column
+   cannot say that at any alpha.
+
+**The cost is accepted, not hidden:** on a card with no "More Reporting" â€” 87.2%
+of stories, measured â€” there is ~75px of empty card between the button and the
+foot link. That is what "fixed height" buys, and shrink-wrapping it is the thing
+Section 0 already rejected.
+
+## 2B. Geometry, measured live
+
+Mockup frame 1481Ã—832; the card's own origin is (15, 165). Measured with
+`getBoundingClientRect` at **1482Ã—900** on a real story
+(*"At least six people dead from days of stormsâ€¦"*, theguardian.com), with three
+injected coverage links so the "More Reporting" rows could be measured at all.
+
+| Element | Mockup | Rendered | |
+| --- | --- | --- | --- |
+| shadow plate | 5, 161, 344Ã—513, r38 | âˆ’10/âˆ’4/âˆ’10/âˆ’20 inset, r38 | âœ“ |
+| card | 15, 165, 324Ã—489, r29 | 15, 165, 324Ã—489, r29 | âœ“ |
+| hero | 15, 160, 322Ã—190 | 15, 165, 324Ã—190 | +5y, +2w |
+| source Â· age | 35, 361 | 33, 361 | âˆ’2x |
+| headline | 36, 383, 286w | 33, 383, 288w | âˆ’3x |
+| place sphere | 41, 448, 11.45px | 33, 474, 11px (13 transformed) | see below |
+| place text | 53, 451 | 50, 472 | see below |
+| Read The Story | 33, 476, 289Ã—35, r12 | 33, 501, 288Ã—35, r12 | see below |
+| More Reporting | 33, 528 | 33, 553 | see below |
+| coverage rows | y 562, 580 | y 593, 611, 629 | 18px pitch âœ“ |
+| How does this work? | 211, 624 | 127, 624, centred | see below |
+
+**The x deviations are the mockup's slop, not a layout bug.** It measures 18, 20,
+21, 26 and 33 for elements that plainly line up; Figma text boxes carry their own
+leading whitespace and the button was drawn as a rectangle. The card uses **one
+18px body padding** for all of it, which is why nothing is more than 3px off and
+why there is one number to change rather than five.
+
+**Everything below the headline is shifted +25y because this story's headline
+runs to three lines and the mockup's runs to two.** 218 + 3Ã—24 + 17 = 307 against
+the mockup's 283. Content-driven, so it is not chased.
+
+**"How does this work?" is centred on the card** (127 + 101/2 = 177.5 against the
+card's centre of 177), where the mockup puts it at x=211 â€” which is centred on
+nothing. The plan called for centred and centred is what shipped.
+
+At **390Ã—844** the card is `left/right: 12px` (366 wide) at `top: 96px`, which is
+the same 489 height against a shorter chrome. Card bottom 585; the map's own
+MapTiler mark measured at (10, 791, 126Ã—43), clear by 206px.
+
+## 2C. Two things measurement caught that review would not have
+
+**The place sphere had no gradient.** `.panel__sphere` was written with a comment
+saying it shares one declaration with `.search__mark` and `.brand__dot` â€” and it
+was never added to that selector list. It rendered as an invisible 11px box.
+`getComputedStyle(...).backgroundImage` returned `"none"`; by eye, on a
+translucent purple card, a missing 11px dot is not something you notice.
+
+**The coverage rows were at a 26px pitch against the mockup's 18.** The type size
+was on the `<a>`, so each `<li>` kept the body's inherited 15px/1.45 line box and
+a 10px link floated inside a 22px row. An inline child cannot shrink the line box
+its parent computed. Moving `font-size` to the `li` fixed it to exactly 18.
+
+Both are Â§11 failures â€” green tests, clean build, wrong pixels.
+
+## 2D. What the card deletes
+
+**`PanelTab` and the `collapsed` state, from both panels and from `MapView`.**
+They existed to slide a full-height column off the left edge so the reader could
+see the map. A card covering a twelfth of the viewport is not covering anything
+worth reclaiming.
+
+**Dismissal did not go with it**, which is the part that would have been easy to
+lose: the tab and the Ã— answered different questions and only the tab's question
+expired. Three ways out, all verified live â€” `Escape` (**newly wired; it had
+never existed**), a click on the map background, and the Ã— on the hero.
+
+**The panel footer's MapTiler logo, for `StoryPanel` only.** Â§2.6 requires the
+mark stay visible and fails silently when it does not, so this was checked rather
+than reasoned: the map's own copy measures (10, 847) at 1482Ã—900 and (10, 791) at
+390Ã—844, against card bottoms of 654 and 585. `RegionPanel` keeps its copy until
+Mode 3 is drawn and the same check is done for it.
+
+**`.maptiler-logo`'s positioning block turned out to be commented out**, disabled
+in `e84b600` (Mode 1) with no note in this document or in the commit message.
+Without it the anchor fell into normal flow at the top of `main` â€” the required
+mark drawn in the wrong corner, over the map, with no plate. It is restored, and
+the comment now says so. This is exactly the silent failure the two-copy
+arrangement was built to prevent, and it had been live since Mode 1 shipped.
+
+**`lib/nearby.ts`, its test, and the second `queryRenderedFeatures`.** "Stories
+Nearby" is replaced by "More Reporting" â€” other outlets on *this* story rather
+than other stories near this one. The first was a geographic accident of what the
+map had rendered; the second is a fact about the story. Same treatment
+`samePlacement` and `anchorBubbles` got when they were orphaned.
+
+## 2E. `PanelStory` grew to eight fields, and one field was kept out on purpose
+
+`lib/story.ts` warns that the allowlist is the Â§2.6 enforcement point and that "a
+list that grows quietly enforces nothing". It grew from six to seven for `image`;
+it is eight now, for `more`. The defence is the same one sentence: **a list of
+urls is more link-out, not article text â€” the same class of thing as `url`.**
+`story.test.ts` pins the eight names and adds the `javascript:`/`data:` filter.
+
+**`topic` is on the leak list, by decision rather than by omission.** The
+classifier exists in `worker/topics.ts`, but the story card shows no topic label
+â€” chips filter a region's rows, which is Mode 3. The test asserts it is dropped,
+so if the card ever grows a topic the assertion fails and the decision gets taken
+again rather than drifting.
+
+## 2F. `placementLine` was absorbed, not deleted
+
+The line read *"Anaheim, California, USA Â· placed automatically"*. The card no
+longer says that: "How does this work?" at its foot routes to `/about`, which
+carries the rule, the measured accuracy and the interval â€” more than four words
+ever said. Â§5.2 decision 3 is a **measured disclosure** (pooled n=73, 50.0%
+against 70.9%, Fisher p=0.152), so moving it needed the destination checked; the
+About page's placement section now states it outright rather than describing what
+the panel says.
+
+**The other half of that function had to survive, and nearly did not.** Â§2.1's
+"Somewhere in" is what a container *is* â€” the placement rule chose one precisely
+because the story had no usable exact location â€” so it moved into `placeLine`
+rather than going with the wording around it. `placeLine` also replaced
+`placeHeading`, which kept only the two ends of a name for the 34px hero heading
+that Mode 2 deletes; at 12px in a 288px column all three parts fit, and the
+admin-1 is what separates one Springfield from the next.
+
+## 2G. Part E â€” colour tokens
+
+`app/globals.css` had no custom properties: `#373666` appeared five times and
+`#d24f39` three. The tokens went in **before** the new surfaces, which is the
+only moment at which that stops a sixth and seventh copy being typed. Purely
+mechanical, and no rendered colour changed except the one below.
+
+`--panel-veil`, `--panel-wash`, `--accent`, `--mark`, `--muted`, `--pill`,
+`--shadow`. **No opaque `--panel`**: after Mode 2 nothing paints the purple at
+full strength â€” the card is the veil and the hero, list and footer inherit it
+rather than each painting their own ground â€” and a token with no use site is a
+colour nobody can see. Mode 3b's `#3A3867` is not here for the same reason.
+
+**One drift resolved.** The mark sphere's gradient ended at the mockup's
+`#B339D2` while `lib/layers.ts` had been hand-tuned to `MARK = "#C05AC4"` against
+the live map. The tuned value wins â€” it was picked on the surface it appears on â€”
+so the wedge, the selected disc and the sphere are one purple again. Measured
+after: `rgb(192, 90, 196)`. **`--mark` and `lib/layers.ts`'s `MARK` are twins and
+must move together**; MapLibre paint expressions cannot read a custom property,
+so the constant stays the source of truth and the token carries a comment saying
+so.
+
+## Verification performed â€” Mode 2
+
+- `npx tsc --noEmit` clean; `npx next build` clean, 4 routes prerendered.
+- `npx vitest run`: **372 passing, 24 files.** Down from 385/26 by exactly the 7
+  cases in the deleted `lib/nearby.test.ts` and the net change in `story.test.ts`.
+  `scripts/tippecanoe-min-version.test.ts` fails 6/7 â€” pre-existing on this
+  machine, its bash script cannot be spawned with a Windows path.
+- Live at **1482Ã—900** and **390Ã—844**: the geometry table above; card open from a
+  bubble click; `Escape`, Ã—, and click-away each verified to unmount the panel;
+  "More Reporting" rendered with three injected links (host labels, `www.`
+  stripped, underlined, 18px pitch, section scrolls with `scrollHeight` 1197 in a
+  228px box); the section **absent** on a real story, which is the normal state.
+- Region panel opened on India: same card, 10 rows, list scrolling inside
+  (`scrollHeight` 1197 > `clientHeight` 228 â€” no clipped-without-scroll
+  regression), flag hero intact, its MapTiler copy still rendered, no tab.
+- `console --errors` shows only the WebGL perf warnings and the pre-existing
+  MapTiler `Sea labels` / `transportation:road_` warnings.
+
+### Not verified
+
+- **A story whose `og:image` fails or is a beacon** â€” the `onError` and
+  `MIN_IMAGE_WIDTH` paths are unchanged but were not re-exercised in the card.
+- **Real coverage links.** Everything measured for "More Reporting" used injected
+  data, because `worker/group.ts` does not emit the field yet. The layout is
+  proven at three entries; it is not proven against real hosts.
+- **A container story.** `placeLine`'s "Somewhere in" branch is unit-tested but
+  unreachable live â€” containers are filtered off the map (`NOT_CONTAINER`).
+

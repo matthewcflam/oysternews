@@ -593,7 +593,25 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   });
   await store.putText(HISTORY_KEY, `${JSON.stringify(updated)}\n`, "application/json", 0);
 
-  const stored = await store.list(ARCHIVE_PREFIX);
+  /**
+   * **The whole directory, not the stories prefix.**
+   *
+   * `archivesToPrune` filters on `ARCHIVE_DIR` and its comment claims that
+   * sweeping the whole directory "is what makes adding a second content-hashed
+   * artefact safe". That was only ever half true: a filter can delete nothing
+   * the listing did not return, and this call used `ARCHIVE_PREFIX`
+   * (`archives/stories-`). So the second artefact arrived on 2026-08-13 and
+   * **no `archives/regions-*.json` was ever pruned** — one 1.24 MB orphan per
+   * run, every four hours, for as long as the index has existed.
+   *
+   * The bug was invisible from the outside: retention of the *archives* worked,
+   * `pruned` counted a plausible number, and the map never noticed. It only
+   * shows up as a storage bill.
+   *
+   * `assertStoreReachable` deliberately keeps the narrower prefix — it is a
+   * reachability probe billed as an advanced operation, not a sweep.
+   */
+  const stored = await store.list(ARCHIVE_DIR);
   const stale = archivesToPrune(stored, updated);
   for (const old of stale) await store.remove(old);
 
