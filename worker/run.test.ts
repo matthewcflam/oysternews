@@ -117,6 +117,8 @@ function summary(patch: Partial<RunSummary> = {}): RunSummary {
     overflow: 20,
     regions: 300,
     regionRows: 2400,
+    cityShards: 40,
+    cityRecords: 900,
     published: true,
     bandRelaxed: false,
     violations: [],

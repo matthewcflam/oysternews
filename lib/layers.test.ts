@@ -304,6 +304,7 @@ describe("firstPlaceLabelLayerId", () => {
   // source-layer; OpenFreeMap puts everything in `place`.
   const maptiler = [
     { id: "Water", "source-layer": "water" },
+    { id: "City labels", "source-layer": "city_label" },
     { id: "State labels z2", "source-layer": "state_label" },
     { id: "Country labels", "source-layer": "country_label" },
   ];
@@ -315,8 +316,9 @@ describe("firstPlaceLabelLayerId", () => {
 
   it("finds the FIRST place-label layer on either provider", () => {
     // First, not last: inserting before the topmost place-label layer is what
-    // puts our headlines under all of them.
-    expect(firstPlaceLabelLayerId(maptiler)).toBe("State labels z2");
+    // puts our headlines under all of them — city labels included (§4), or the
+    // new clickable targets would be the ones our headlines erase.
+    expect(firstPlaceLabelLayerId(maptiler)).toBe("City labels");
     expect(firstPlaceLabelLayerId(openfreemap)).toBe("label_country_1");
   });
 
@@ -385,6 +387,17 @@ describe("hitLayers", () => {
     expect(HIT_LAYER_FOR.state).toBe(REGION_HIT_ID);
     expect(OUTLINE_LAYER_FOR.country).toBe(COUNTRY_OUTLINE_ID);
     expect(OUTLINE_LAYER_FOR.state).toBe(REGION_OUTLINE_ID);
+  });
+
+  it("has no hit or outline layer for city or continent (§4)", () => {
+    // A city resolves through a published shard, not a polygon; a continent
+    // through a closed name table — neither has a hit layer to look up, and
+    // neither draws an outline (a city is a point, and a continent's would be
+    // ~50 country outlines filled red).
+    expect(HIT_LAYER_FOR.city).toBeUndefined();
+    expect(HIT_LAYER_FOR.continent).toBeUndefined();
+    expect(OUTLINE_LAYER_FOR.city).toBeUndefined();
+    expect(OUTLINE_LAYER_FOR.continent).toBeUndefined();
   });
 });
 

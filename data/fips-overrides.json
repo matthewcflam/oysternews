@@ -12,16 +12,18 @@
     "RE and SV are included pre-emptively: HANDOFF.md §3.4 observed them in a larger",
     "sample than the two bundles above, and an unused override costs nothing.",
     "",
-    "iso is ISO 3166-1 alpha-2. name is for logs and container labels."
+    "iso is ISO 3166-1 alpha-2. name is for logs and container labels.",
+    "continent is one of Natural Earth's seven inhabited-continent names, added",
+    "2026-08-21 for §4's continent labels — see scripts/build-crosswalk.ts."
   ],
   "fips": {
-    "IS": { "iso": "IL", "name": "Israel" },
-    "NO": { "iso": "NO", "name": "Norway" },
-    "RB": { "iso": "RS", "name": "Serbia" },
-    "OD": { "iso": "SS", "name": "South Sudan" },
-    "WE": { "iso": "PS", "name": "West Bank" },
-    "GP": { "iso": "GP", "name": "Guadeloupe" },
-    "RE": { "iso": "RE", "name": "Réunion" },
-    "SV": { "iso": "SJ", "name": "Svalbard" }
+    "IS": { "iso": "IL", "name": "Israel", "continent": "Asia" },
+    "NO": { "iso": "NO", "name": "Norway", "continent": "Europe" },
+    "RB": { "iso": "RS", "name": "Serbia", "continent": "Europe" },
+    "OD": { "iso": "SS", "name": "South Sudan", "continent": "Africa" },
+    "WE": { "iso": "PS", "name": "West Bank", "continent": "Asia" },
+    "GP": { "iso": "GP", "name": "Guadeloupe", "continent": "North America" },
+    "RE": { "iso": "RE", "name": "Réunion", "continent": "Africa" },
+    "SV": { "iso": "SJ", "name": "Svalbard", "continent": "Europe" }
   }
 }

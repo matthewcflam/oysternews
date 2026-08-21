@@ -15,7 +15,10 @@ import { Protocol } from "pmtiles";
 import type { FeatureCollection } from "geojson";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { DEFAULT_CENTER, DEFAULT_ZOOM, basemap } from "@/lib/basemap";
-import { firstLabel, labelAnchor, labelName } from "@/lib/labels";
+import { CITY_SNAP_KM, loadCityShard, nearestCity } from "@/lib/cities";
+import { CONTINENT_BBOX, continentIdFor } from "@/lib/continents";
+import { countryName, fipsForIso } from "@/lib/flag";
+import { firstLabel, labelAnchor, labelName, type LabelLevel } from "@/lib/labels";
 import {
   BOUNDARIES_ARCHIVE,
   BOUNDARIES_SOURCE_ID,
@@ -70,7 +73,7 @@ import {
   type Stack,
 } from "@/lib/spiderfy";
 import { sameKeys, topKeys } from "@/lib/top";
-import type { RegionIndex } from "@/lib/types";
+import type { CityShard, RegionIndex } from "@/lib/types";
 import MapTilerLogo from "./MapTilerLogo";
 import RegionPanel from "./RegionPanel";
 import StoryBubbles, { type TopStory } from "./StoryBubbles";
@@ -99,10 +102,37 @@ import StoryPanel from "./StoryPanel";
  */
 const WORKER_URL = "/maplibre-gl-worker.mjs";
 
-/** What a label click resolved to: an id the outline archive can draw, and a heading. */
-type Selection = { id: string; name: string };
+/**
+ * What a label click resolved to.
+ *
+ * `country` and `state` carry an id the outline archive can draw, same as
+ * before §4. `continent` carries a `CONT:XX` id (`lib/continents.ts`) into the
+ * same region index, and draws no outline (`selectRegionAt`). `city` carries
+ * no id of its own — nothing basemap-side has one — only the country FIPS its
+ * shard is keyed by and the label's own anchor, which `nearestCity` snaps to
+ * a published record.
+ */
+type Selection =
+  | { kind: "country" | "state"; id: string; name: string }
+  | { kind: "continent"; id: string; name: string }
+  | { kind: "city"; country: string; name: string; at: [number, number] };
 
 const NO_PIN: FeatureCollection = { type: "FeatureCollection", features: [] };
+
+/**
+ * The city record a selection resolves to, or `null` when there is none yet
+ * (still loading, the shard has nothing this country, or nothing is within
+ * `CITY_SNAP_KM`). Pure and outside the component so `zoomToRegion` and the
+ * panel's render can both call it without duplicating the match.
+ */
+function cityRecordFor(
+  selection: Selection | null,
+  cityShard: { country: string; shard: CityShard } | null,
+) {
+  if (!selection || selection.kind !== "city") return null;
+  if (cityShard?.country !== selection.country) return null;
+  return nearestCity(cityShard.shard, selection.at, CITY_SNAP_KM);
+}
 
 /**
  * Drop the selection triangle at a coordinate, or clear it with `null`.
@@ -209,9 +239,21 @@ export default function MapView() {
    * unavailable, not broken, and the map must go on working without it.
    */
   const [regionsUrl, setRegionsUrl] = useState<string | null>(null);
+  /** §4: absent or 1 means the region index predates `CONT:*` keys — a continent click must read `unavailable`, not a fetch that resolves to an honestly empty entry. */
+  const [regionsVersion, setRegionsVersion] = useState<number>(1);
+  /** §4: URL prefix of the per-country city shards. `null` for a manifest published before city shards existed — the same optionality `regionsUrl` already has. */
+  const [citiesBase, setCitiesBase] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [index, setIndex] = useState<RegionIndex | null>(null);
   const [indexFailed, setIndexFailed] = useState(false);
+  /**
+   * §4's city shard, kept alongside the country it was fetched for so a shard
+   * still in flight for a NEW selection is never read as the answer for it —
+   * two fast clicks in different countries must not show one country's
+   * cities under the other's heading for a frame.
+   */
+  const [cityShard, setCityShard] = useState<{ country: string; shard: CityShard } | null>(null);
+  const [cityShardFailed, setCityShardFailed] = useState(false);
 
   /**
    * Mode 3's "Zoom to Texas" table. Committed and static, so it has no
@@ -298,12 +340,41 @@ export default function MapView() {
   EC: [-100.0, -5.5, -70.0, 2.5],
 };
 
+/** Degrees of padding around a city's coordinate — there is no polygon to fit, only a point. */
+const CITY_ZOOM_PAD = 0.12;
+
+/**
+ * The box `zoomToRegion` would fit for the current selection, or `null` when
+ * there is nothing to fit yet — which is also what gates the button's
+ * presence (`onZoom={zoomTargetFor(...) ? zoomToRegion : null}` below), so
+ * the two can never disagree about whether "Zoom to" does anything.
+ */
+const zoomTargetFor = (
+  current: Selection | null,
+): [number, number, number, number] | null => {
+  if (!current) return null;
+  switch (current.kind) {
+    case "country":
+    case "state":
+      return BBOX_OVERRIDES[current.id] ?? bboxFor(bboxes, current.id);
+    case "continent":
+      return CONTINENT_BBOX[current.id as keyof typeof CONTINENT_BBOX] ?? null;
+    case "city": {
+      const record = cityRecordFor(current, cityShard);
+      if (!record) return null;
+      return [
+        record.lon - CITY_ZOOM_PAD,
+        record.lat - CITY_ZOOM_PAD,
+        record.lon + CITY_ZOOM_PAD,
+        record.lat + CITY_ZOOM_PAD,
+      ];
+    }
+  }
+};
+
 const zoomToRegion = () => {
   const map = mapRef.current;
-  const id = selection?.id ?? "";
-
-  // Check the lookup table first, fallback to standard bbox calculation
-  const box = BBOX_OVERRIDES[id] ?? bboxFor(bboxes, id);
+  const box = zoomTargetFor(selection);
 
   if (!map || !box || box.length < 4) return;
 
@@ -417,6 +488,33 @@ const zoomToRegion = () => {
   }, [selection, bboxes]);
 
   /**
+   * §4's city shard, fetched lazily per country on the first city click in it.
+   *
+   * Skips the fetch when the cache already holds that country's shard —
+   * `loadCityShard` itself memoizes per URL, so this guard is purely to avoid
+   * re-running the effect body on every unrelated selection change, not to
+   * avoid a real network request.
+   */
+  useEffect(() => {
+    if (!selection || selection.kind !== "city" || !citiesBase) return;
+    if (cityShard?.country === selection.country) return;
+    let cancelled = false;
+    setCityShardFailed(false);
+
+    loadCityShard(citiesBase, selection.country)
+      .then((shard) => {
+        if (!cancelled) setCityShard({ country: selection.country, shard });
+      })
+      .catch(() => {
+        if (!cancelled) setCityShardFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selection, citiesBase, cityShard]);
+
+  /**
    * `Escape` closes whichever panel is open.
    *
    * **One of the three dismissals, and the one that had never been wired.** The
@@ -466,8 +564,20 @@ const zoomToRegion = () => {
       zoom: DEFAULT_ZOOM,
       // §3.1: 2D Mercator, no globe projection.
       renderWorldCopies: true,
+      // ...and no 3D either. NavigationControl ships with showCompass:false, so
+      // a camera that had been tilted or spun would have no control to put it
+      // back north-up. Right-drag rotate and ctrl/two-finger pitch are off here;
+      // the pinch and keyboard paths below have no constructor flag.
+      dragRotate: false,
+      pitchWithRotate: false,
+      touchPitch: false,
       attributionControl: { compact: false },
     });
+
+    // Leaves pinch-zoom and arrow-key panning intact; removes only the rotation
+    // component of each.
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
 
     // Bottom-right (2026-08-14), not top-right: the freshness stamp took that
     // corner when the masthead was removed, and the two would overlap there.
@@ -551,6 +661,8 @@ const zoomToRegion = () => {
         map.addImage(PIN_IMAGE_ID, trianglePin(), { pixelRatio: PIN_PIXEL_RATIO });
 
         setRegionsUrl(manifest.regionsUrl ?? null);
+        setRegionsVersion(manifest.regionsVersion ?? 1);
+        setCitiesBase(manifest.citiesBase ?? null);
 
         // Outlines go under the stories, which go under the labels. Order is
         // asserted in layers.test.ts. The hit targets paint nothing, and go
@@ -809,13 +921,22 @@ const zoomToRegion = () => {
 
         /**
          * §2.3's label gesture: a click that hit no pin may still have hit a
-         * country or state label.
+         * place label — country, state, and as of §4, city or continent.
          *
-         * **The label gives the level; our own polygons give the id.** State
-         * labels carry no region code on either provider, and joining
-         * "California" to `USCA` by name is §3.4's join trap wearing a new hat
-         * (§2.3). So the id comes from hit-testing `boundaries.pmtiles`, which
-         * makes it by construction an id the outline archive can draw.
+         * **The label gives the level; our own polygons give the id, for
+         * country and state.** State labels carry no region code on either
+         * provider, and joining "California" to `USCA` by name is §3.4's join
+         * trap wearing a new hat (§2.3). So the id comes from hit-testing
+         * `boundaries.pmtiles`, which makes it by construction an id the
+         * outline archive can draw.
+         *
+         * **City and continent have no polygon to hit-test at all** — neither
+         * is in `HIT_LAYER_FOR` (`lib/layers.ts`). A city resolves by finding
+         * its country (from the label's own `iso_a2`, falling back to the
+         * country hit-test) and snapping to the nearest record in that
+         * country's published shard (`lib/cities.ts`) once it loads. A
+         * continent resolves through the closed name table
+         * (`lib/continents.ts`) — nothing to hit-test, nothing to fetch.
          *
          * The camera does not move. That is the deliberate change from the
          * original §2.3 — the panel surfaces the region's stories directly, so
@@ -825,9 +946,6 @@ const zoomToRegion = () => {
         const selectRegionAt = (event: MapMouseEvent) => {
           const label = firstLabel(map.queryRenderedFeatures(event.point));
           if (!label) return;
-
-          const hitLayer = HIT_LAYER_FOR[label.level];
-          if (!map.getLayer(hitLayer)) return;
 
           /**
            * The LABEL's anchor, not the click point: a country's name is drawn
@@ -842,19 +960,63 @@ const zoomToRegion = () => {
            */
           const anchor = labelAnchor(label.feature);
           const points = anchor ? [map.project(anchor), event.point] : [event.point];
+          const fallback: [number, number] = [event.lngLat.lng, event.lngLat.lat];
+
+          if (label.level === "continent") {
+            const id = continentIdFor(labelName(label.feature));
+            if (!id) return;
+            // No outline (§4: ~50 red country outlines is a fill, not a
+            // click-reveal), just the triangle marking what was clicked.
+            showPin(map, anchor ?? fallback);
+            setSelection({ kind: "continent", id, name: labelName(label.feature) });
+            return;
+          }
+
+          if (label.level === "city") {
+            const iso = label.feature.properties?.iso_a2;
+            let country = typeof iso === "string" ? fipsForIso(iso) : null;
+
+            if (!country) {
+              const countryHit = HIT_LAYER_FOR.country;
+              if (countryHit && map.getLayer(countryHit)) {
+                for (const point of points) {
+                  const [polygon] = map.queryRenderedFeatures(point, { layers: [countryHit] });
+                  const id = polygon?.properties?.id;
+                  if (typeof id === "string" && id) {
+                    country = id;
+                    break;
+                  }
+                }
+              }
+            }
+
+            // Natural Earth and the basemap disagree about what exists there
+            // (a coastal or island label whose polygon test lands on water),
+            // or `iso_a2` named a country the crosswalk does not carry. No
+            // shard to fetch, so no click to answer.
+            if (!country) return;
+
+            showPin(map, anchor ?? fallback);
+            setSelection({ kind: "city", country, name: labelName(label.feature), at: anchor ?? fallback });
+            return;
+          }
+
+          const hitLayer = HIT_LAYER_FOR[label.level];
+          if (!hitLayer || !map.getLayer(hitLayer)) return;
 
           for (const point of points) {
             const [polygon] = map.queryRenderedFeatures(point, { layers: [hitLayer] });
             const id = polygon?.properties?.id;
             if (typeof id !== "string" || !id) continue;
 
-            map.setFilter(OUTLINE_LAYER_FOR[label.level], matchId(id));
+            const outlineLayer = OUTLINE_LAYER_FOR[label.level];
+            if (outlineLayer) map.setFilter(outlineLayer, matchId(id));
             // On the label's own anchor where there is one, so the triangle
             // lands on the name the reader clicked rather than on the pixel
             // they happened to hit. A region has no orange circle of its own,
             // so here the triangle is the whole mark.
-            showPin(map, anchor ?? [event.lngLat.lng, event.lngLat.lat]);
-            setSelection({ id, name: labelName(label.feature) });
+            showPin(map, anchor ?? fallback);
+            setSelection({ kind: label.level, id, name: labelName(label.feature) });
             return;
           }
 
@@ -971,6 +1133,61 @@ const zoomToRegion = () => {
    */
   const panelStatus = !regionsUrl || indexFailed ? "unavailable" : index ? "ready" : "loading";
 
+  /**
+   * What `RegionPanel` gets, branched by `selection.kind`.
+   *
+   * Country and state are untouched — `entryFor(index, id)` and the status
+   * derived above, exactly as before §4.
+   *
+   * Continent reads the SAME index under its `CONT:XX` key
+   * (`worker/regions.ts`), but a manifest older than `regionsVersion: 2` has
+   * never written one — its `entryFor` would resolve to an honestly empty
+   * entry, which here would be a LIE ("no stories in Europe today") rather
+   * than the truth ("this run predates continents"). `regionsVersion` is what
+   * tells the two apart.
+   *
+   * City has no `regionId` and no outline; its entry is the matched
+   * `CityRecord` reshaped to `RegionEntry`'s three fields, its own loading
+   * state tracks the shard fetch rather than the region index, and its
+   * heading is the MATCHED record's name — never the clicked label's own
+   * text, because two cities can sit inside each other's snap radius
+   * (`lib/cities.ts`) and showing one's rows under the other's name would be
+   * a silent mislabel, the one failure mode this project is built to avoid.
+   */
+  const cityRecord = cityRecordFor(selection, cityShard);
+  const zoomBox = zoomTargetFor(selection);
+  const onZoom = zoomBox ? zoomToRegion : null;
+
+  const panel = !selection
+    ? null
+    : selection.kind === "city"
+      ? {
+          name: cityRecord?.name ?? selection.name,
+          regionId: "",
+          entry: cityRecord
+            ? { stories: cityRecord.stories, total: cityRecord.total, sources: cityRecord.sources }
+            : { stories: [], total: 0, sources: 0 },
+          status: (!citiesBase || cityShardFailed
+            ? "unavailable"
+            : cityShard?.country === selection.country
+              ? "ready"
+              : "loading") as "loading" | "ready" | "unavailable",
+          flagCode: selection.country,
+          trail: [countryName(selection.country), cityRecord?.adm1Name ?? ""].filter(Boolean),
+          onZoom,
+        }
+      : {
+          name: selection.name,
+          regionId: selection.id,
+          entry: entryFor(index, selection.id),
+          status: (selection.kind === "continent" && regionsVersion < 2
+            ? "unavailable"
+            : panelStatus) as "loading" | "ready" | "unavailable",
+          flagCode: undefined,
+          trail: undefined,
+          onZoom,
+        };
+
   return (
     <>
       <div ref={container} className="map" />
@@ -996,14 +1213,16 @@ const zoomToRegion = () => {
       */}
       {story && <StoryPanel story={story} onClose={clearStory} />}
 
-      {!story && selection && (
+      {!story && panel && (
         <RegionPanel
-          name={selection.name}
-          regionId={selection.id}
-          entry={entryFor(index, selection.id)}
-          status={panelStatus}
-          /* `null` hides the button — see `zoomToRegion` and `bboxFor`. */
-          onZoom={bboxFor(bboxes, selection.id) ? zoomToRegion : null}
+          name={panel.name}
+          regionId={panel.regionId}
+          entry={panel.entry}
+          status={panel.status}
+          flagCode={panel.flagCode}
+          trail={panel.trail}
+          /* `null` hides the button — see `zoomTargetFor`. */
+          onZoom={panel.onZoom}
           onClose={clearRegion}
         />
       )}

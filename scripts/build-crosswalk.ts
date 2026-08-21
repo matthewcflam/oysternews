@@ -31,12 +31,33 @@ type Feature = {
     ISO_A2?: string;
     ISO_A2_EH?: string;
     NAME?: string;
+    CONTINENT?: string;
   };
 };
 
 /** Natural Earth writes -99 rather than null for "no value". */
 const value = (raw: string | undefined): string =>
   raw && raw !== "-99" ? raw.trim() : "";
+
+/**
+ * Natural Earth's seven inhabited continents, read straight through —
+ * `lib/continents.ts` owns the mapping onto `CONT:` ids. "Seven seas (open
+ * ocean)" (9 island features with no inhabited continent) maps to "" and is
+ * dropped rather than mapped, the same choice `value()` makes for -99: an
+ * unknown continent is not Antarctica.
+ */
+const CONTINENT_NAMES = new Set([
+  "Africa",
+  "Antarctica",
+  "Asia",
+  "Europe",
+  "North America",
+  "Oceania",
+  "South America",
+]);
+
+const continentOf = (raw: string | undefined): string =>
+  raw && CONTINENT_NAMES.has(raw) ? raw : "";
 
 async function naturalEarth(): Promise<Feature[]> {
   await mkdir(path.dirname(CACHE), { recursive: true });
@@ -53,9 +74,10 @@ async function naturalEarth(): Promise<Feature[]> {
 async function main(): Promise<void> {
   const features = await naturalEarth();
 
-  const fips: Record<string, { iso: string; name: string }> = {};
+  const fips: Record<string, { iso: string; name: string; continent: string }> = {};
   const collisions: string[] = [];
   let noIso = 0;
+  let noContinent = 0;
 
   for (const feature of features) {
     const code = value(feature.properties.FIPS_10);
@@ -67,13 +89,15 @@ async function main(): Promise<void> {
     // still tag a story there, and a known name beats an unknown code.
     const iso = value(feature.properties.ISO_A2) || value(feature.properties.ISO_A2_EH);
     const name = value(feature.properties.NAME);
+    const continent = continentOf(feature.properties.CONTINENT);
     if (!iso) noIso++;
+    if (!continent) noContinent++;
 
     if (fips[code]) {
       collisions.push(`${code}: ${fips[code].name} / ${name}`);
       continue; // first wins; the report below makes the choice visible
     }
-    fips[code] = { iso, name };
+    fips[code] = { iso, name, continent };
   }
 
   const payload = {
@@ -90,6 +114,7 @@ async function main(): Promise<void> {
   features            ${features.length}
   FIPS codes mapped   ${Object.keys(fips).length}
   without an ISO code ${noIso}
+  without a continent ${noContinent}
   collisions          ${collisions.length}${collisions.map((c) => `\n    ${c}`).join("")}
 
   wrote ${path.relative(REPO_ROOT, OUTPUT)}`);

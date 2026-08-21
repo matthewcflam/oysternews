@@ -31,10 +31,36 @@ const openfreemapState = {
   geometry: { type: "Point", coordinates: [-119.4, 36.7] },
 };
 
+const maptilerCity = {
+  sourceLayer: "city_label",
+  properties: { name: "Chicago", "name:en": "Chicago", iso_a2: "US", rank: 4 },
+  geometry: { type: "Point", coordinates: [-87.6, 41.9] },
+};
+
+const maptilerContinent = {
+  sourceLayer: "continent_label",
+  properties: { name: "AFRICA", "name:en": "Africa" },
+  geometry: { type: "Point", coordinates: [20.0, 5.0] },
+};
+
+const openfreemapCity = {
+  sourceLayer: "place",
+  properties: { name: "Chicago", class: "city" },
+  geometry: { type: "Point", coordinates: [-87.6, 41.9] },
+};
+
+const openfreemapContinent = {
+  sourceLayer: "place",
+  properties: { name: "Africa", class: "continent" },
+  geometry: { type: "Point", coordinates: [20.0, 5.0] },
+};
+
 describe("labelLevelOf", () => {
   it("reads MapTiler's separate label source-layers", () => {
     expect(labelLevelOf(maptilerCountry)).toBe("country");
     expect(labelLevelOf(maptilerState)).toBe("state");
+    expect(labelLevelOf(maptilerCity)).toBe("city");
+    expect(labelLevelOf(maptilerContinent)).toBe("continent");
   });
 
   it("reads OpenFreeMap's single place layer by class", () => {
@@ -42,6 +68,8 @@ describe("labelLevelOf", () => {
     // Accepting `place` wholesale would make every village a region click.
     expect(labelLevelOf(openfreemapCountry)).toBe("country");
     expect(labelLevelOf(openfreemapState)).toBe("state");
+    expect(labelLevelOf(openfreemapCity)).toBe("city");
+    expect(labelLevelOf(openfreemapContinent)).toBe("continent");
   });
 
   it("accepts MapTiler's disputed-country labels as countries", () => {
@@ -52,10 +80,15 @@ describe("labelLevelOf", () => {
     ).toBe("country");
   });
 
-  it("refuses city, village and continent labels on both providers", () => {
-    expect(labelLevelOf({ sourceLayer: "place", properties: { class: "city" } })).toBeNull();
+  it("refuses village, town and suburb labels on both providers", () => {
+    // These sit inside a city's own snap radius (`lib/cities.ts`) — accepting
+    // them would print the parent city's stories under a suburb's name, the
+    // same join-by-name trap this file avoids for states, worn as a radius.
     expect(labelLevelOf({ sourceLayer: "place", properties: { class: "village" } })).toBeNull();
-    expect(labelLevelOf({ sourceLayer: "place", properties: { class: "continent" } })).toBeNull();
+    expect(labelLevelOf({ sourceLayer: "place", properties: { class: "town" } })).toBeNull();
+    expect(labelLevelOf({ sourceLayer: "place", properties: { class: "suburb" } })).toBeNull();
+    expect(labelLevelOf({ sourceLayer: "town_label", properties: { class: "town" } })).toBeNull();
+    expect(labelLevelOf({ sourceLayer: "place_label", properties: { class: "village" } })).toBeNull();
     expect(labelLevelOf({ sourceLayer: "place_label", properties: { class: "city" } })).toBeNull();
   });
 

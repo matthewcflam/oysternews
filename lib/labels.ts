@@ -30,12 +30,29 @@
  *
  * ```
  *   maptiler     country_label  z2-12   country_disputed_label z4-12
- *                state_label    z2-11
- *   openfreemap  place/country  z0-9    place/state            z5-8
+ *                state_label    z2-11   city_label     z4-14
+ *                continent_label z0-3 (styled max z2)
+ *   openfreemap  place/country  z0-9    place/state    z5-8
+ *                place/city (+town/village)   place/continent
  * ```
+ *
+ * **City and continent, added 2026-08-21 (§4).** Verified live against the
+ * MapTiler style the same day: `city_label` carries `{name, iso_a2, rank,
+ * capital}` and backs both plain and capital city labels; `continent_label`
+ * carries only `{name}`. Neither carries an id or an admin code, which is why
+ * `MapView.tsx` cannot hit-test a polygon for either — a city resolves by
+ * fetching that country's published shard and snapping to the nearest
+ * indexed city (`lib/cities.ts`), and a continent resolves through the closed
+ * seven-name table in `lib/continents.ts`.
+ *
+ * **`town_label`, `place_label` (village/suburb/neighbourhood) stay refused,
+ * deliberately.** They sit inside a city's own snap radius, so accepting them
+ * would print the parent city's stories under a suburb's name — the same
+ * "join by name" trap this file already avoids for state labels, worn as a
+ * radius instead of a string.
  */
 
-export type LabelLevel = "country" | "state";
+export type LabelLevel = "country" | "state" | "city" | "continent";
 
 /**
  * The shape this module needs out of a MapLibre feature. Deliberately structural
@@ -62,6 +79,8 @@ const MAPTILER_LAYERS: Record<string, LabelLevel> = {
   country_label: "country",
   country_disputed_label: "country",
   state_label: "state",
+  city_label: "city",
+  continent_label: "continent",
 };
 
 /** OpenMapTiles: one `place` layer, `class` is the discriminator. */
@@ -69,6 +88,8 @@ const OPENMAPTILES_LAYER = "place";
 const OPENMAPTILES_CLASSES: Record<string, LabelLevel> = {
   country: "country",
   state: "state",
+  city: "city",
+  continent: "continent",
 };
 
 /**

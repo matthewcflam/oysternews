@@ -523,6 +523,8 @@ const PLACE_LABEL_SOURCE_LAYERS = [
   "country_label",
   "country_disputed_label",
   "state_label",
+  "city_label",
+  "continent_label",
   "place",
 ];
 
@@ -623,14 +625,27 @@ export const REGION_HIT_ID = "region-hit";
  * (`lib/labels.ts`), the id comes from the polygon under it — **no name matching
  * anywhere** (§2.3, §3.4), so the id is by construction one the outline archive
  * can draw.
+ *
+ * **Partial, not total.** `city` and `continent` (§4) have no entry: a city
+ * resolves through a published shard (`lib/cities.ts`), not a polygon, and a
+ * continent resolves through the closed name table (`lib/continents.ts`) —
+ * neither has a hit layer to look up. The absence of a key is that answer.
  */
-export const HIT_LAYER_FOR: Record<LabelLevel, string> = {
+export const HIT_LAYER_FOR: Partial<Record<LabelLevel, string>> = {
   country: COUNTRY_HIT_ID,
   state: REGION_HIT_ID,
 };
 
-/** Which outline layer to draw for a level, once the hit gave an id. */
-export const OUTLINE_LAYER_FOR: Record<LabelLevel, string> = {
+/**
+ * Which outline layer to draw for a level, once the hit gave an id.
+ *
+ * No `city` entry, deliberately: a city is a point, and a region drawn around
+ * it would claim the opposite — the same rule a PIN already follows
+ * (`MapView.tsx`). No `continent` entry either — see `MapView.tsx`'s
+ * `selectRegionAt`: a continent's outline would be ~50 country outlines
+ * filled red, the opposite of §2.2's click-reveal-only line.
+ */
+export const OUTLINE_LAYER_FOR: Partial<Record<LabelLevel, string>> = {
   country: COUNTRY_OUTLINE_ID,
   state: REGION_OUTLINE_ID,
 };

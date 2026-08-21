@@ -65,6 +65,36 @@ const FIPS_TO_NAME: Record<string, string> = Object.fromEntries(
 );
 
 /**
+ * The inverse of `FIPS_TO_ISO`, for §4's city shard lookup: `city_label`
+ * carries `iso_a2` (verified against the live style 2026-08-21), and a
+ * country's shard is keyed by FIPS like everything else this project
+ * publishes.
+ *
+ * First writer wins on a collision — `MERGED` is iterated crosswalk-then-
+ * overrides, so an override's ISO code claims the shard over whichever FIPS
+ * code the generated crosswalk happened to visit first for the same ISO.
+ */
+const ISO_TO_FIPS: Record<string, string> = {};
+for (const [fips, entry] of MERGED) {
+  const iso = entry.iso.toUpperCase();
+  if (iso && !(iso in ISO_TO_FIPS)) ISO_TO_FIPS[iso] = fips;
+}
+for (const [fips, entry] of Object.entries(
+  (overrides as { fips: Record<string, CrosswalkRow> }).fips,
+)) {
+  const iso = entry.iso.toUpperCase();
+  if (iso) ISO_TO_FIPS[iso] = fips;
+}
+
+/** A country's FIPS code from its ISO 3166-1 alpha-2, or `null` when unknown. */
+export function fipsForIso(iso: string): string | null {
+  return ISO_TO_FIPS[(iso ?? "").trim().toUpperCase()] ?? null;
+}
+
+/** A region id shaped like a FIPS country or admin-1 code — two letters, optionally followed by two more alphanumerics. Everything else (a `CONT:XX` continent id, a city's empty id) is not. */
+const FIPS_SHAPE = /^[A-Z]{2}([A-Z0-9]{2})?$/;
+
+/**
  * The flag for a region id, or `null` when there is not one to draw.
  *
  * `null` is a normal answer in three cases, and the panel treats all three the
@@ -109,8 +139,14 @@ export function flagUrl(regionId: string): string | null {
  * Shortened through `shortCountry` so a breadcrumb and a story row two inches
  * below it cannot spell the same country two different ways — the crosswalk says
  * "United States of America" where GDELT says "United States".
+ *
+ * **Refuses anything not FIPS-shaped**, rather than blindly slicing the first
+ * two characters. §4 introduced ids this function was never meant to see — a
+ * continent's `CONT:EU` sliced to `"CO"` and returned "Colombia", putting
+ * `World › Colombia › Europe` in the breadcrumb. The guard is the fix.
  */
 export function countryName(regionId: string): string {
-  const fips = (regionId ?? "").trim().toUpperCase().slice(0, 2);
-  return shortCountry(FIPS_TO_NAME[fips] ?? "");
+  const trimmed = (regionId ?? "").trim().toUpperCase();
+  if (!FIPS_SHAPE.test(trimmed)) return "";
+  return shortCountry(FIPS_TO_NAME[trimmed.slice(0, 2)] ?? "");
 }

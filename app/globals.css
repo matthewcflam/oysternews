@@ -300,11 +300,11 @@ main .bubbles {
    Size and position stay with each element below. */
 .search__mark,
 .brand__dot,
-.panel__sphere {
+/*.panel__sphere {
   border-radius: 50%;
   background: radial-gradient(57.36% 51.69% at 67.53% 61.97%, #e0aaa1 2.88%, var(--mark) 100%);
   transform: matrix(0.97, -0.25, -0.25, -0.97, 0, 0);
-}
+}*/
 
 /* The bead sits in the counter of the "O".
 

@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "data");
 
-export type Country = { iso: string; name: string };
+export type Country = { iso: string; name: string; continent?: string };
 
 export type RefData = {
   /** FIPS 10-4 -> ISO + name, crosswalk with overrides applied. */

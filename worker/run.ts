@@ -53,6 +53,8 @@ import {
 } from "./publish.ts";
 import { rankGroups } from "./rank.ts";
 import { buildRegionIndex, indexStats } from "./regions.ts";
+import { buildCityIndex, cityIndexStats } from "./cities.ts";
+import { continentIdFor } from "../lib/continents.ts";
 import { type RefData, assertUsable, loadRefData, sourceCountry } from "./refdata.ts";
 import { appendShards, pruneShards, readPool } from "./state.ts";
 import { buildTiles } from "./tiles.ts";
@@ -145,6 +147,9 @@ export type RunSummary = {
   /** §2.3's panel index: regions covered and total rows. */
   regions: number;
   regionRows: number;
+  /** §4's per-country city shards: countries with at least one clustered city, and clusters total. */
+  cityShards: number;
+  cityRecords: number;
   published: boolean;
   /** The count band stood down because publication had been blocked past 2× cadence. */
   bandRelaxed: boolean;
@@ -231,10 +236,18 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   const { groups: budgeted, overflow } = assignMinzoom(ranked);
   const countryTop = countryTopGroups(budgeted);
 
+  // Continent id from a group's own country FIPS, via the crosswalk's
+  // `continent` column (§4). "" for anything the crosswalk cannot place —
+  // `buildRegionIndex` files nothing under an empty key.
+  const continentOf = (fips: string): string =>
+    continentIdFor(data.countries.get(fips)?.continent) ?? "";
+
   // Built from the budgeted groups, which is every group in the window — the
   // panel deliberately reaches stories the z12 ceiling drops (§2.4 overflow).
-  const regions = buildRegionIndex(budgeted);
+  const regions = buildRegionIndex(budgeted, undefined, continentOf);
   const regionStats = indexStats(regions);
+  const cities = buildCityIndex(budgeted);
+  const cityStats = cityIndexStats(cities);
 
   // --- tiles ---------------------------------------------------------------
   await buildTiles(budgeted, countryTop, WORK_DIR, ARCHIVE_PATH);
@@ -245,6 +258,7 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     archivePath: ARCHIVE_PATH,
     groups: budgeted,
     regions,
+    cities,
     watermark: newestFetched,
     now,
   });
@@ -283,6 +297,8 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     // a `rows` meaning parsed GKG rows. Spreading silently overwrote it.
     regions: regionStats.regions,
     regionRows: regionStats.rows,
+    cityShards: cityStats.shards,
+    cityRecords: cityStats.cities,
     published: result.published,
     bandRelaxed: result.published ? result.bandRelaxed : false,
     violations: result.published ? [] : result.violations,
@@ -306,6 +322,7 @@ export function formatSummary(summary: RunSummary): string {
     `pool         ${summary.poolSize} articles from ${summary.shardsRead} shards (${summary.duplicatesDropped} dupes, ${summary.badLines} bad lines)`,
     `groups       ${summary.groups} groups, ${summary.tier1Groups} tier-1, ${summary.countryTop} country-top, ${summary.overflow} overflow`,
     `panel        ${summary.regions} regions indexed, ${summary.regionRows} rows`,
+    `cities       ${summary.cityShards} country shards, ${summary.cityRecords} clustered cities`,
   ];
 
   // §8: a schema change shows up here first, as a nonzero short-row count.

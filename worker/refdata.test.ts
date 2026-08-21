@@ -86,7 +86,7 @@ describe("the FIPS trap (§3.4)", () => {
   it("covers Israel, which Natural Earth has no FIPS_10 for at all", () => {
     // 1.7% of all location mentions in the measured sample — the largest single
     // hole, and the reason data/fips-overrides.json exists.
-    expect(data.countries.get("IS")).toEqual({ iso: "IL", name: "Israel" });
+    expect(data.countries.get("IS")).toEqual({ iso: "IL", name: "Israel", continent: "Asia" });
   });
 
   it("knows the oceans are not gaps", () => {
