@@ -268,6 +268,22 @@ describe("archivesToPrune", () => {
   it("ignores keys outside the archive prefix", () => {
     expect(archivesToPrune(["state/run-1.jsonl", MANIFEST_KEY], [])).toEqual([]);
   });
+
+  it("keeps every key under a live city-shard directory (§4)", () => {
+    // §4: a run's own shards must not look unreferenced the moment they
+    // finish uploading — see the comment on `entry.cities` in publish.ts.
+    const dir = `${ARCHIVE_DIR}cities-abcd1234/`;
+    const stored = [`${dir}US.json`, `${dir}IN.json`, `${dir}FR.json`];
+    const history: HistoryEntry[] = [{ stamp: "1", archive: "archives/stories-x.pmtiles", cities: dir, groups: 100 }];
+    expect(archivesToPrune(stored, history)).toEqual([]);
+  });
+
+  it("prunes a whole city-shard directory once its generation ages out", () => {
+    const dir = `${ARCHIVE_DIR}cities-old11111/`;
+    const stored = [`${dir}US.json`, `${dir}IN.json`];
+    // Nothing in a 3-deep history references this directory any more.
+    expect(archivesToPrune(stored, [])).toEqual(stored);
+  });
 });
 
 describe("nextHistory", () => {
@@ -310,6 +326,7 @@ describe("publish", () => {
       "archive",
       "generatedAt",
       "regionsUrl",
+      "regionsVersion",
       "stats",
       "url",
       "watermark",
@@ -351,6 +368,93 @@ describe("publish", () => {
     expect(store.writes.indexOf(MANIFEST_KEY)).toBeGreaterThan(
       store.writes.findIndex((key) => key.startsWith(REGIONS_PREFIX)),
     );
+  });
+
+  it("publishes nothing when a run has no cities, and the manifest omits citiesBase", async () => {
+    const store = memoryStore();
+    const result = await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(),
+      regions: {},
+      watermark: "1",
+      now: NOW,
+    });
+    expect(result.published).toBe(true);
+    if (!result.published) return;
+    expect(result.manifest.citiesBase).toBeUndefined();
+    expect([...store.data.keys()].some((key) => key.includes("cities-"))).toBe(false);
+  });
+
+  it("uploads every city shard before it flips the manifest, and points citiesBase at the directory", async () => {
+    const store = memoryStore();
+    const result = await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(),
+      regions: {},
+      cities: {
+        US: [{ name: "Chicago", adm1Name: "Illinois", lat: 41.9, lon: -87.6, total: 5, sources: 2, stories: [] }],
+        IN: [{ name: "Mumbai", adm1Name: "Maharashtra", lat: 19.1, lon: 72.9, total: 3, sources: 1, stories: [] }],
+      },
+      watermark: "1",
+      now: NOW,
+    });
+
+    expect(result.published).toBe(true);
+    if (!result.published) return;
+
+    const manifestIndex = store.writes.indexOf(MANIFEST_KEY);
+    const shardIndices = store.writes
+      .map((key, i) => [key, i] as const)
+      .filter(([key]) => key.includes("cities-"))
+      .map(([, i]) => i);
+
+    expect(shardIndices).toHaveLength(2);
+    expect(Math.max(...shardIndices)).toBeLessThan(manifestIndex);
+    expect(result.manifest.citiesBase).toMatch(/^https:\/\/blob\.example\/archives\/cities-[0-9a-f]{8}\/$/);
+
+    const dir = result.manifest.citiesBase!.replace("https://blob.example/", "");
+    expect(JSON.parse(String(store.data.get(`${dir}US.json`)))[0].name).toBe("Chicago");
+    expect(JSON.parse(String(store.data.get(`${dir}IN.json`)))[0].name).toBe("Mumbai");
+  });
+
+  it("retains a city-shard directory inside KEEP_ARCHIVES, and prunes one four generations back", async () => {
+    // Same shape as "prunes a region index left by a generation that has aged
+    // out" just below: seed three prior generations, publish a fourth, and
+    // check generation 1 (now outside the 3-deep window) is gone while
+    // generations 2 and 3 (still inside it) survive.
+    const seed: Record<string, string> = {
+      [HISTORY_KEY]: JSON.stringify(
+        [1, 2, 3].map((n) => ({
+          stamp: String(n),
+          archive: `archives/stories-gen${n}.pmtiles`,
+          cities: `archives/cities-gen${n}/`,
+          groups: 3_000,
+        })),
+      ),
+    };
+    for (const n of [1, 2, 3]) {
+      seed[`archives/stories-gen${n}.pmtiles`] = `gen${n}`;
+      seed[`archives/cities-gen${n}/US.json`] = `gen${n}`;
+    }
+    const store = memoryStore(seed);
+
+    const result = await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(),
+      regions: {},
+      cities: { US: [{ name: "Chicago", adm1Name: "IL", lat: 41.9, lon: -87.6, total: 1, sources: 1, stories: [] }] },
+      watermark: "4",
+      now: NOW,
+    });
+    expect(result.published).toBe(true);
+
+    const remaining = await store.list(ARCHIVE_DIR);
+    expect(remaining).not.toContain("archives/cities-gen1/US.json");
+    expect(remaining).toContain("archives/cities-gen2/US.json");
+    expect(remaining).toContain("archives/cities-gen3/US.json");
   });
 
   it("retains an archive and its index together, and prunes both when they age out", async () => {

@@ -71,15 +71,29 @@ import type { RegionEntry } from "@/lib/types";
 export type RegionPanelProps = {
   /** The label's own text, for the heading. Display only — nothing joins on it. */
   name: string;
-  /** FIPS region id the outline is drawn from, shown when the name is missing. */
+  /** FIPS region id the outline is drawn from, shown when the name is missing. `""` for a city — a city draws no outline (§4) and has no id of its own. */
   regionId: string;
-  /** Rows plus the two pool counts — already normalised by `entryFor`. */
+  /** Rows plus the two pool counts — already normalised by `entryFor` (or already shaped like a `RegionEntry` for a city). */
   entry: RegionEntry;
   /** `unavailable` covers both "this manifest predates the index" and a failed fetch. */
   status: "loading" | "ready" | "unavailable";
   /** `null` when the boundary set has no box for this id — the button is then absent. */
   onZoom: (() => void) | null;
   onClose: () => void;
+  /**
+   * The flag is drawn from this code rather than from `regionId` when given —
+   * a city has no `regionId` of its own but shows its country's flag. Falls
+   * back to `regionId`, which is exactly today's behaviour for a country or a
+   * state.
+   */
+  flagCode?: string;
+  /**
+   * Caller-built breadcrumb between "World" and the heading — `["USA",
+   * "Illinois"]` for a city, `[]` for a continent. Omitted (not just empty)
+   * falls back to today's derivation from `regionId`'s length, which is what
+   * a country or a state click still passes.
+   */
+  trail?: string[];
 };
 
 export default function RegionPanel({
@@ -89,6 +103,8 @@ export default function RegionPanel({
   status,
   onZoom,
   onClose,
+  flagCode,
+  trail: trailOverride,
 }: RegionPanelProps) {
   const { stories, total, sources } = entry;
   /**
@@ -104,27 +120,30 @@ export default function RegionPanel({
    * inherit the previous one's flag for a frame, and does not need an effect to
    * clear it.
    */
-  const url = flagUrl(regionId);
+  const url = flagUrl(flagCode ?? regionId);
   const [failed, setFailed] = useState<string | null>(null);
   const flag = url && url !== failed ? url : null;
 
   const heading = name || regionId;
 
   /**
-   * `World › India`, or `World › USA › California`.
+   * `World › India`, `World › USA › California`, or — with `trailOverride` —
+   * `World › USA › Illinois › Chicago` (§4's city) and `World › Europe` (§4's
+   * continent, no country to name).
    *
-   * The parent crumb is only drawn for an admin-1 — a country's own crumb IS the
-   * heading, and `World › India › India` says nothing twice. `flagUrl` uses the
-   * same length test for the same reason: two characters is a country and four
-   * is a subdivision, which is exactly how `boundaries.pmtiles` distinguishes
-   * them.
+   * The parent crumb is only drawn for an admin-1 when nothing overrides it —
+   * a country's own crumb IS the heading, and `World › India › India` says
+   * nothing twice. `flagUrl` uses the same length test for the same reason:
+   * two characters is a country and four is a subdivision, which is exactly
+   * how `boundaries.pmtiles` distinguishes them.
    *
    * Filtered rather than conditionally assembled, because `countryName` returns
    * "" for a code the crosswalk does not carry and a missing crumb has to
    * disappear rather than render as a gap between two separators.
    */
   const parent = regionId.trim().length === 2 ? "" : countryName(regionId);
-  const trail = ["World", parent, heading].filter(Boolean);
+  const middle = trailOverride ?? [parent];
+  const trail = ["World", ...middle, heading].filter(Boolean);
 
   /**
    * `248 stories today · 39 sources`, or "" when there is nothing honest to say.

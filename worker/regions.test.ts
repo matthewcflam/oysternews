@@ -99,6 +99,35 @@ describe("buildRegionIndex", () => {
   });
 });
 
+describe("buildRegionIndex — continents (§4)", () => {
+  it("files under a continent key when a resolver is supplied", () => {
+    const index = buildRegionIndex([group({ countryCode: "US", adm1: "USCA" })], undefined, () => "CONT:NA");
+    expect(Object.keys(index).sort()).toEqual(["CONT:NA", "US", "USCA"]);
+    expect(index["CONT:NA"].stories[0].title).toBe("A headline");
+  });
+
+  it("files nothing when the resolver returns \"\"", () => {
+    const index = buildRegionIndex([group()], undefined, () => "");
+    expect(Object.keys(index).sort()).toEqual(["US", "USCA"]);
+  });
+
+  it("files nothing without a resolver — every existing caller keeps today's two-level index", () => {
+    const index = buildRegionIndex([group()]);
+    expect(Object.keys(index).sort()).toEqual(["US", "USCA"]);
+  });
+
+  it("cannot collide with a 2- or 4-char FIPS id", () => {
+    const index = buildRegionIndex(
+      [group({ countryCode: "US", adm1: "USCA" }), group({ countryCode: "FR", adm1: "" })],
+      undefined,
+      (fips) => (fips === "US" ? "CONT:NA" : "CONT:EU"),
+    );
+    for (const key of Object.keys(index)) {
+      expect(key === "CONT:NA" || key === "CONT:EU" || /^[A-Z]{2}([A-Z0-9]{2})?$/.test(key)).toBe(true);
+    }
+  });
+});
+
 describe("indexStats", () => {
   it("counts regions and total rows", () => {
     const index = buildRegionIndex([

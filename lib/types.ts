@@ -218,6 +218,29 @@ export type RegionEntry = {
  */
 export type RegionIndex = Record<string, RegionEntry | RegionStory[]>;
 
+/**
+ * One city's entry in a §4 city shard: a `RegionEntry` plus what a country- or
+ * admin-1-level entry does not need — a coordinate to snap a label click to,
+ * and the admin-1 name for the panel's breadcrumb.
+ *
+ * `RegionEntry`'s fields keep their contract exactly: `total`/`sources` are
+ * counted over the whole GDELT cluster before the `stories` cap, so the
+ * panel's counts line is never a lie about a city any more than about a
+ * country (`worker/regions.ts`).
+ */
+export type CityRecord = RegionEntry & {
+  /** Display name — what the panel heads with, not the clicked label's own text (§4: two nearby cities must not borrow each other's name). */
+  name: string;
+  /** Median of the cluster's member coordinates — robust to one mis-geocoded member. */
+  lat: number;
+  lon: number;
+  /** Second comma segment of GDELT's FullName ("Portland, OREGON, United States"), for the breadcrumb. "" when there is none. */
+  adm1Name: string;
+};
+
+/** One country's published city shard: every city clustered under it, unordered — the browser sorts by distance, not by rank. */
+export type CityShard = CityRecord[];
+
 /** What publish.ts writes next to the archive; the browser reads this, never GDELT (§2.6). */
 export type Manifest = {
   /** Content-hashed archive key, e.g. "stories-a1b2c3d4.pmtiles". */
@@ -233,6 +256,17 @@ export type Manifest = {
    * than failing over a panel it cannot open yet.
    */
   regionsUrl?: string;
+  /**
+   * `2` once `regionsUrl`'s index carries `CONT:*` keys (§4). Absent or `1`
+   * means a manifest predating continents — the browser must treat a
+   * continent click as `unavailable`, not as a fetch that returns `entryFor`'s
+   * empty shape, which would print "no stories" over a continent that simply
+   * has not been indexed yet. The same problem `regionsUrl`'s optionality
+   * solves one level up.
+   */
+  regionsVersion?: number;
+  /** URL prefix of §4's per-country city shards; the browser appends `<FIPS>.json`. Optional for the same reason `regionsUrl` is — a manifest published before city shards existed must not break the map. */
+  citiesBase?: string;
   /** ISO timestamp of the run that produced it — drives the §2.3 freshness stamp. */
   generatedAt: string;
   /** Newest GKG bundle included, YYYYMMDDHHMMSS. */

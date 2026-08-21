@@ -32,7 +32,7 @@
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import type { Manifest, StoryGroup } from "../lib/types.ts";
+import type { CityShard, Manifest, StoryGroup } from "../lib/types.ts";
 import { stampToMs } from "./fetch.ts";
 import type { RegionIndex } from "./regions.ts";
 import type { ShardStore } from "./state.ts";
@@ -42,7 +42,15 @@ export const MANIFEST_KEY = "manifest.json";
 export const ARCHIVE_DIR = "archives/";
 export const ARCHIVE_PREFIX = `${ARCHIVE_DIR}stories-`;
 export const REGIONS_PREFIX = `${ARCHIVE_DIR}regions-`;
+/** One directory per run, one shard per country beneath it — see `publishCities`. */
+export const CITIES_PREFIX = `${ARCHIVE_DIR}cities-`;
 export const HISTORY_KEY = "state/publish-history.json";
+
+/** §4's regions-index format version. Bump when a new key namespace (e.g. `CONT:*`) is added, so an old manifest's index is read as `unavailable` rather than as confidently empty. */
+export const REGIONS_VERSION = 2;
+
+/** Shard uploads run concurrently in pools this size — 121 sequential PUTs would add 12-36s to a run. */
+const CITY_UPLOAD_CONCURRENCY = 8;
 
 /** The manifest is a stable key and must not be cached long; the archives are immutable. */
 export const MANIFEST_MAX_AGE = 60;
@@ -152,6 +160,13 @@ export type HistoryEntry = {
    * run referenced no index" rather than crashing or pruning a live key.
    */
   regions?: string;
+  /**
+   * The city-shard directory published with that archive (e.g.
+   * `archives/cities-a1b2c3d4/`), or absent for a run before §4 or a run with
+   * no PIN groups at all. A directory, not 121 keys — `archivesToPrune` keeps
+   * every key that starts with a live entry's prefix.
+   */
+  cities?: string;
   groups: number;
 };
 
@@ -244,6 +259,7 @@ export function archivesToPrune(
   keep = KEEP_ARCHIVES,
 ): string[] {
   const live = new Set<string>();
+  const liveDirs: string[] = [];
   for (const entry of history.slice(-keep)) {
     live.add(entry.archive);
     // An archive and its region index are one publication and are retained as
@@ -251,8 +267,19 @@ export function archivesToPrune(
     // makes adding a second content-hashed artefact safe: a new prefix nobody
     // updated the pruner for would otherwise accumulate for ever.
     if (entry.regions) live.add(entry.regions);
+    // City shards publish as a directory of ~121 keys under one content-hashed
+    // prefix, not as a single key — `entry.cities` names the prefix, and every
+    // key beneath it is live. Without this, a run's own shards look unreferenced
+    // the moment they finish uploading, because none of their individual keys
+    // is `entry.archive` or `entry.regions`, and the very next prune call — the
+    // one this same run makes after its manifest flip — deletes every one of
+    // them before a browser can ever fetch one.
+    if (entry.cities) liveDirs.push(entry.cities);
   }
-  return stored.filter((key) => key.startsWith(ARCHIVE_DIR) && !live.has(key));
+  return stored.filter(
+    (key) =>
+      key.startsWith(ARCHIVE_DIR) && !live.has(key) && !liveDirs.some((dir) => key.startsWith(dir)),
+  );
 }
 
 export function nextHistory(
@@ -447,6 +474,8 @@ export type PublishInput = {
   groups: StoryGroup[];
   /** §2.3's region panel index, published beside the archive. */
   regions: RegionIndex;
+  /** §4's per-country city shards. Absent or empty publishes no city artefact and leaves `manifest.citiesBase` unset — a manifest a pre-§4 browser already knows how to treat as "city panels unavailable". */
+  cities?: Record<string, CityShard>;
   /** Newest GKG bundle included, YYYYMMDDHHMMSS. */
   watermark: string;
   /** Injected so a test can pin it; the run passes `new Date()`. */
@@ -528,6 +557,25 @@ export async function readHistory(store: ArchiveStore): Promise<HistoryEntry[]> 
  * Note that the invariants run against the groups the archive was built FROM,
  * before a byte is uploaded: a rejected run costs nothing and leaves no orphan.
  */
+/**
+ * Run `worker(item)` over `items` with at most `limit` in flight. A shard
+ * upload is one round trip and nothing else, so a plain pool is enough — no
+ * queue library, no backoff, and a rejection propagates through `Promise.all`
+ * exactly the way one failed upload should: it fails the run before the
+ * manifest flip, leaving nothing published rather than a half-uploaded shard
+ * set with a live directory prefix nothing has actually written.
+ */
+async function pooled<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      await worker(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+}
+
 export async function publish(input: PublishInput): Promise<PublishResult> {
   const { store, archivePath, groups, watermark } = input;
   const now = input.now ?? new Date();
@@ -564,10 +612,34 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     ARCHIVE_MAX_AGE,
   );
 
+  // City shards, uploaded before the manifest for the same reason the archive
+  // and the region index are: everything the flip is about to point at must
+  // already exist. One content-hashed directory covers all of them so
+  // retention (`archivesToPrune`) tracks one prefix instead of ~121 keys.
+  const cities = input.cities ?? {};
+  const countryCodes = Object.keys(cities).sort();
+  let citiesDir: string | undefined;
+  let citiesBase: string | undefined;
+
+  if (countryCodes.length > 0) {
+    const citiesHash = contentHash(
+      Buffer.from(countryCodes.map((code) => `${code}:${JSON.stringify(cities[code])}`).join("\n")),
+    );
+    citiesDir = `${CITIES_PREFIX}${citiesHash}/`;
+
+    await pooled(countryCodes, CITY_UPLOAD_CONCURRENCY, async (code) => {
+      const body = `${JSON.stringify(cities[code])}\n`;
+      await store.putText(`${citiesDir}${code}.json`, body, "application/json", ARCHIVE_MAX_AGE);
+    });
+    citiesBase = store.urlOf(citiesDir);
+  }
+
   const manifest: Manifest = {
     archive: key,
     url,
     regionsUrl,
+    regionsVersion: REGIONS_VERSION,
+    ...(citiesBase ? { citiesBase } : {}),
     generatedAt: now.toISOString(),
     watermark,
     stats: {
@@ -589,6 +661,7 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     stamp: watermark,
     archive: key,
     regions: regionsKey,
+    ...(citiesDir ? { cities: citiesDir } : {}),
     groups: stats.groups,
   });
   await store.putText(HISTORY_KEY, `${JSON.stringify(updated)}\n`, "application/json", 0);

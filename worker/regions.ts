@@ -61,10 +61,12 @@ function rowOf(group: StoryGroup): RegionStory {
 /**
  * Build the index.
  *
- * **A story is filed under both its country and its admin-1**, so clicking
- * "California" and clicking "United States" both find it. The two namespaces
- * cannot collide — FIPS country codes are two characters and admin-1 codes are
- * four (see `place.ts`'s `regionIdFor`) — so one flat map serves both levels.
+ * **A story is filed under its country, its admin-1, and (when a resolver is
+ * supplied) its continent**, so clicking "California", "United States" and
+ * "North America" all find it. The three namespaces cannot collide — FIPS
+ * country codes are two characters, admin-1 codes are four (see `place.ts`'s
+ * `regionIdFor`), and continent ids are `CONT:XX` (`lib/continents.ts`) — so
+ * one flat map serves all three levels.
  *
  * Sorted here rather than trusting the caller: `budget.ts` returns groups in
  * whatever order its tile walk produced, and a panel that silently depends on
@@ -85,6 +87,13 @@ function rowOf(group: StoryGroup): RegionStory {
 export function buildRegionIndex(
   groups: StoryGroup[],
   topN = REGION_TOP_N,
+  /**
+   * A group's country FIPS -> its continent id, or "" for "file nowhere". No
+   * default beyond "file no continent key at all" — a caller that does not
+   * pass one (every existing test, `worker/run.ts` before §4) gets exactly
+   * today's two-level index, not a silently empty third level.
+   */
+  continentOf: (countryCode: string) => string = () => "",
   /*
    * The return type is the NARROW one, not `RegionIndex`. `RegionIndex` is a
    * union that includes the legacy bare-array form because that is what a
@@ -116,6 +125,7 @@ export function buildRegionIndex(
     // produces for a country container — filing it twice would make a country's
     // own key appear to be an admin-1 region.
     if (group.adm1 && group.adm1 !== group.countryCode) add(group.adm1, group);
+    add(continentOf(group.countryCode), group);
   }
 
   for (const [key, set] of domains) index[key].sources = set.size;

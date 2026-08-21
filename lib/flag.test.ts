@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countryName, flagUrl } from "./flag";
+import { countryName, fipsForIso, flagUrl } from "./flag";
 
 describe("flagUrl", () => {
   it("maps a FIPS country code to its ISO flag", () => {
@@ -64,5 +64,36 @@ describe("countryName", () => {
   it("returns '' for a code the crosswalk does not carry, so the crumb drops", () => {
     expect(countryName("ZZ")).toBe("");
     expect(countryName("")).toBe("");
+  });
+
+  /**
+   * §4 regression: a naive `.slice(0, 2)` reads `CONT:EU`'s first two
+   * characters as the FIPS code "CO" — Colombia — and the breadcrumb would
+   * read `World › Colombia › Europe`. Anything not FIPS-shaped must refuse
+   * rather than slice.
+   */
+  it("refuses a continent id rather than slicing it", () => {
+    expect(countryName("CONT:EU")).toBe("");
+    expect(countryName("CONT:EU")).not.toBe("Colombia");
+  });
+});
+
+describe("fipsForIso", () => {
+  it("round-trips flagUrl's own mapping", () => {
+    expect(fipsForIso("RU")).toBe("RS"); // Russia's FIPS code, not Serbia's
+    expect(fipsForIso("GB")).toBe("UK");
+  });
+
+  it("reads the overrides, not just the generated crosswalk", () => {
+    expect(fipsForIso("IL")).toBe("IS");
+  });
+
+  it("returns null for an unknown or empty code", () => {
+    expect(fipsForIso("ZZ")).toBeNull();
+    expect(fipsForIso("")).toBeNull();
+  });
+
+  it("is case-insensitive, matching city_label's own iso_a2 casing", () => {
+    expect(fipsForIso("id")).toBe("ID");
   });
 });
