@@ -1,33 +1,15 @@
 /**
- * Publication. I/O — Blob write, manifest, retention (HANDOFF.md §3.3).
- *
- * §7 names the failure path here as one of three critical gaps: *"a partial
- * publish points the manifest at a half-written archive and breaks the map for
- * everyone."* Two properties make that unreachable rather than unlikely:
- *
- * 1. **The archive is content-hashed and written before the manifest.** Its key
- *    is derived from its own bytes, so it is immutable and a re-run of the same
- *    data is a no-op. A failed upload leaves an orphan nobody references; it
- *    never leaves a live pointer to a truncated file.
- * 2. **The manifest flip is the only mutation of a stable key**, and it is the
- *    last write. Until it lands the map keeps serving the previous archive,
- *    which is stale but correct — the one failure mode this project prefers.
- *
- * Retention prunes AFTER the flip (§5), for the same reason: the archive the
- * manifest is about to stop pointing at has to survive until it is unreferenced.
- * Without pruning at all, Hobby storage fills in 48-72 hours.
- *
- * **Output invariants gate everything above.** §8 lists "run succeeds, publishes
- * garbage" as a distinct failure from "run throws", and it is the one no
- * exception will catch: a GDELT schema drift that silently empties `locations`
- * produces a perfectly valid 40-feature archive. On violation this publishes
- * NOTHING — not a smaller archive, not a warning banner — and leaves the
- * previous manifest in place.
- *
- * **The Blob transport is the REST API over `fetch`, not `@vercel/blob`** (§0
- * rule 5: ask before adding dependencies). It is confined to `vercelBlobStore`
- * below, which carries the measurements taken against the live store and the two
- * traps that came out of them.
+ * Publication: Blob write, manifest, retention. Order is: upload the
+ * content-hashed archive (immutable — a re-run of the same data is a
+ * no-op), upload the region index and city shards, then flip the manifest
+ * last, since it's the only mutation of a stable key and the map keeps
+ * serving the previous archive, stale but correct, until it lands. Output
+ * invariants (below) gate all of it — a run that "succeeds" but produces
+ * garbage (e.g. a GDELT schema drift emptying `locations`) publishes
+ * NOTHING and leaves the previous manifest in place. Retention prunes only
+ * after the flip. Blob transport is the REST API over `fetch`, not
+ * `@vercel/blob` — see `vercelBlobStore` for the traps that forced that.
+ * See docs/DESIGN.md#operations.
  */
 
 import { createHash } from "node:crypto";
@@ -42,11 +24,11 @@ export const MANIFEST_KEY = "manifest.json";
 export const ARCHIVE_DIR = "archives/";
 export const ARCHIVE_PREFIX = `${ARCHIVE_DIR}stories-`;
 export const REGIONS_PREFIX = `${ARCHIVE_DIR}regions-`;
-/** One directory per run, one shard per country beneath it — see `publishCities`. */
+/** One directory per run, one shard per country beneath it — see `publish`. */
 export const CITIES_PREFIX = `${ARCHIVE_DIR}cities-`;
 export const HISTORY_KEY = "state/publish-history.json";
 
-/** §4's regions-index format version. Bump when a new key namespace (e.g. `CONT:*`) is added, so an old manifest's index is read as `unavailable` rather than as confidently empty. */
+/** Regions-index format version. Bump when a new key namespace (e.g. `CONT:*`) is added, so an old manifest's index reads as `unavailable` rather than confidently empty. See docs/DESIGN.md#the-manifest-and-regions_version. */
 export const REGIONS_VERSION = 2;
 
 /** Shard uploads run concurrently in pools this size — 121 sequential PUTs would add 12-36s to a run. */
@@ -56,91 +38,50 @@ const CITY_UPLOAD_CONCURRENCY = 8;
 export const MANIFEST_MAX_AGE = 60;
 export const ARCHIVE_MAX_AGE = 31_536_000;
 
-/** Keep the last 3 archives, prune the rest after the manifest flips (§5). */
+/** Keep the last 3 archives, prune the rest after the manifest flips. */
 export const KEEP_ARCHIVES = 3;
 
 /** Enough history to survive a few missed runs without unbounded growth. */
 const HISTORY_LIMIT = 24;
 
-// --- Output invariants (§5, §8) ---------------------------------------------
+// --- Output invariants --------------------------------------------------------
 
 /**
- * The count band: absolute group counts, not a ratio against past runs.
- *
- * **It was self-referential until 2026-08-14 and that is what broke it, twice in
- * one day.** The band used to be `[0.4×, 2.5×]` of the trailing median of up to
- * 24 past runs, which fails for a reason no tuning fixes: a refused run does not
- * append to history (`publish` returns before the history write), so the median
- * that refused a run never moves and the next run is refused identically. Fail-
- * closed becomes fail-forever. It fired on the *lower* bound at 09:11 UTC, when a
- * median of two 1-bundle smoke runs (846, 1467) refused a real 6,718-group run,
- * and on the *upper* bound from 17:13 UTC, when a median of 7,620 — taken while
- * the 24-hour pool was still filling — refused runs of ~20,500 and up. Same
- * defect both times: **a median is a lagging statistic and the pool has a trend
- * in it**, so the reference set describes a past that is not comparable to now.
- *
- * Absolute bounds have no feedback loop at all. They also arm on the very first
- * run, where the old band was inert for want of history — the exact moment a
- * bootstrap mistake ships unguarded.
- *
- * **Where the numbers come from — both ends are measured, not chosen.**
+ * The count band: absolute group counts, not a ratio against past runs (a
+ * trailing-median band failed twice in one day — "fail-closed becomes
+ * fail-forever" when a refused run can't move the history that refused
+ * it). Calibration ladder, each rung measured or derived:
  *
  * ```
  *   1,467   a 1-bundle smoke run (2026-08-12, BUNDLE_CAP=1)
  *   2,000   FLOOR
- *  40,700   steady state: §4's distinct city stories after dedup, per day
+ *  40,700   steady state: distinct city stories after dedup, per day
  *  60,000   CEILING              = 1.47× steady state
- *  75,000   grouping stops merging entirely: ~112,500 records/day (§4)
+ *  75,000   grouping stops merging entirely: ~112,500 records/day
  *                                 × ~67% placed (measured: 1411 rows -> 949)
  * ```
  *
- * The floor sits above a single-bundle run and 20× below steady state, so it
- * catches a collapse and an accidental `BUNDLE_CAP` without ever false-firing.
- * The ceiling sits between steady state and total grouping failure, which is the
- * only interval where an upper bound is informative: **above 75,000 it would
- * stop catching the one failure it exists for**, and below ~50,000 it would
- * refuse ordinary days.
- *
- * **These are calibration constants with a shelf life.** They are correct for
- * GDELT's volume as measured on 2026-08-12/13 and for the current grouping key.
- * Anything that changes either — a looser grouping key, GDELT raising its crawl
- * rate, widening the window past 24 hours — invalidates them. Re-derive from a
- * fresh §4 measurement rather than nudging the ceiling up until runs pass.
+ * These are calibration constants with a shelf life — correct for GDELT's
+ * measured volume and the current grouping key; re-derive rather than nudge
+ * if either changes. See docs/DESIGN.md#the-count-band.
  */
 export const COUNT_BAND_MIN = 2_000;
 export const COUNT_BAND_MAX = 60_000;
-/**
- * A live 24-hour window spans well over a hundred countries (§3.4 observed 168
- * distinct FIPS codes in the audit alone), so this floor only fires when
- * placement has broken globally rather than drifted.
- */
+/** A live window spans well over a hundred countries, so this floor only fires when placement has broken globally rather than drifted. */
 export const MIN_COUNTRIES = 15;
-/** §4: titles are present on 99.7% of records. Below 95% something upstream is wrong. */
+/** Titles are present on ~99.7% of records normally. Below 95% something upstream is wrong. */
 export const MIN_TITLE_RATE = 0.95;
 /** A window that produced nothing is a failure even with no history to compare to. */
 export const MIN_GROUPS = 1;
 
 /**
- * How long the count band may block publication before it stops being a guard
- * and starts being the outage. 8 hours — §8's 2× cadence, the same threshold the
- * UI's stale notice uses.
- *
- * **What this guards against changed on 2026-08-14, and it is still needed.** It
- * was built for a self-poisoning median: a refused run does not append to
- * history, so the median that refused it never moved and the next run was refused
- * identically, for ever. Absolute bounds cannot poison themselves, so that
- * failure mode is gone. What replaces it is a **stale constant** — COUNT_BAND_MAX
- * is calibrated against GDELT volume as measured, and if real volume outgrows it
- * then every run is refused for the same reason with no self-correction at all.
- * That is the same wedge with a slower fuse, and this valve is the only thing
- * between it and a dead map. Past 8 hours the band stands down, the map keeps
- * moving, and the WARN is the signal to go re-derive the constants.
- *
- * **Only the count band relaxes.** MIN_GROUPS, the country floor and the title
- * rate stay armed unconditionally, and they are the ones that actually catch
- * garbage — a placement collapse shows up as too few countries, a parse break as
- * missing titles. The band is the fuzziest of the four and the only one carrying
- * a number that can go out of date without anything in the pipeline noticing.
+ * How long the count band may block publication before it stands down (8h,
+ * the 2x monitoring cadence). Guards against COUNT_BAND_MAX going stale as
+ * real volume grows — without this valve a calibration constant falling
+ * behind reality would refuse every run with no self-correction. Only the
+ * count band relaxes; MIN_GROUPS, the country floor, and the title rate
+ * stay armed unconditionally since they catch real garbage rather than a
+ * volume swing. See docs/DESIGN.md#the-count-band.
  */
 export const BAND_RELAX_AFTER_MS = 8 * 60 * 60 * 1000;
 
@@ -162,9 +103,9 @@ export type HistoryEntry = {
   regions?: string;
   /**
    * The city-shard directory published with that archive (e.g.
-   * `archives/cities-a1b2c3d4/`), or absent for a run before §4 or a run with
-   * no PIN groups at all. A directory, not 121 keys — `archivesToPrune` keeps
-   * every key that starts with a live entry's prefix.
+   * `archives/cities-a1b2c3d4/`), or absent for a run with no city groups.
+   * A directory, not 121 keys — `archivesToPrune` keeps every key that
+   * starts with a live entry's prefix.
    */
   cities?: string;
   groups: number;
@@ -179,18 +120,11 @@ export function statsOf(groups: StoryGroup[]): PublishStats {
   };
 }
 
-/**
- * Every reason this run must not publish, as human-readable lines.
- *
- * Returns all of them rather than the first: a run that fails the count band
- * *and* the country floor is a different diagnosis from one that fails only the
- * band, and the Action log is the only place anyone will read it.
- *
- * **This reads nothing but the run in front of it.** It took no `history`
- * argument until 2026-08-13 and takes none again as of 2026-08-14 — the band's
- * bounds are constants now, and passing history here would imply the guard still
- * derives something from past runs. It does not, and that is the whole fix.
- */
+// Every reason this run must not publish, as human-readable lines. Returns
+// all of them, not just the first, so a run failing both the count band and
+// the country floor gets a distinguishable diagnosis in the Action log.
+// Reads nothing but the run in front of it — no history argument, since the
+// band's bounds are constants now.
 export function checkInvariants(
   stats: PublishStats,
   /** Milliseconds since the last successful publish. Past BAND_RELAX_AFTER_MS the band stands down. */
@@ -244,15 +178,10 @@ export function archiveKey(hash: string): string {
   return `${ARCHIVE_PREFIX}${hash}.pmtiles`;
 }
 
-/**
- * Which archive keys to delete, given everything currently stored and the
- * history *after* this run's entry has been appended.
- *
- * Driven by the history list rather than by upload timestamps: the history is
- * the record of what the manifest has actually pointed at, and an archive that
- * was uploaded but never published (a run that failed its invariants after the
- * upload) should be pruned immediately, not aged out.
- */
+// Which archive keys to delete, given everything stored and the history
+// *after* this run's entry was appended. Driven by history, not upload
+// timestamps: an archive uploaded but never published (invariants failed
+// after upload) should prune immediately, not age out.
 export function archivesToPrune(
   stored: string[],
   history: HistoryEntry[],
@@ -262,18 +191,13 @@ export function archivesToPrune(
   const liveDirs: string[] = [];
   for (const entry of history.slice(-keep)) {
     live.add(entry.archive);
-    // An archive and its region index are one publication and are retained as
-    // one. Sweeping the whole directory rather than the stories prefix is what
-    // makes adding a second content-hashed artefact safe: a new prefix nobody
-    // updated the pruner for would otherwise accumulate for ever.
+    // An archive and its region index are one publication, retained as one.
     if (entry.regions) live.add(entry.regions);
-    // City shards publish as a directory of ~121 keys under one content-hashed
-    // prefix, not as a single key — `entry.cities` names the prefix, and every
-    // key beneath it is live. Without this, a run's own shards look unreferenced
-    // the moment they finish uploading, because none of their individual keys
-    // is `entry.archive` or `entry.regions`, and the very next prune call — the
-    // one this same run makes after its manifest flip — deletes every one of
-    // them before a browser can ever fetch one.
+    // City shards publish as a directory of ~121 keys under one
+    // content-hashed prefix, not a single key — every key beneath
+    // entry.cities is live, or a run's own shards would look unreferenced
+    // the moment they finish uploading and get pruned before a browser
+    // ever fetches one.
     if (entry.cities) liveDirs.push(entry.cities);
   }
   return stored.filter(
@@ -306,19 +230,10 @@ export type ArchiveStore = ShardStore & {
 const BLOB_API = "https://blob.vercel-storage.com";
 const BLOB_API_VERSION = "7";
 
-/**
- * A public store's URL host, derived from the token.
- *
- * `BLOB_READ_WRITE_TOKEN` is `vercel_blob_rw_<storeId>_<secret>`, and a public
- * blob is served at `https://<storeid>.public.blob.vercel-storage.com/<pathname>`
- * with the id lowercased. Verified against the live store on 2026-08-12: the
- * derived URL is byte-identical to the one `put` returns.
- *
- * Deriving it rather than looking it up removes a `list` call from every `get`
- * and every `remove`. That is not just tidiness — Vercel bills `list` as an
- * "advanced operation", so the old shape paid a billable request to discover a
- * URL it could have computed, on every read, forever.
- */
+// A public store's URL host, derived from the token
+// (vercel_blob_rw_<storeId>_<secret> -> https://<storeid>.public.blob...).
+// Derived rather than looked up to avoid a billable `list` call on every
+// get/remove. See docs/DESIGN.md#blob-traps.
 function publicBase(token: string): string {
   const storeId = token.split("_")[3];
   if (!storeId) throw new Error("BLOB_READ_WRITE_TOKEN is not in the expected vercel_blob_rw_<id>_<secret> form");
@@ -326,49 +241,17 @@ function publicBase(token: string): string {
 }
 
 /**
- * Vercel Blob over its REST API.
- *
- * **The store must be created with PUBLIC access.** A private store delivers
- * blobs through a Function instead of by direct URL, which would break §3.2's
- * range-request architecture outright — the browser fetches byte ranges from the
- * PMTiles archive itself. Access mode cannot be changed after a store is
- * created, so this is a store-creation decision, not a code one. A private store
- * fails here with `Cannot use public access on a private store` (measured
- * 2026-08-12).
- *
- * Two headers are load-bearing, both learned the same way:
- *
- * - **`x-add-random-suffix: 0`** — the manifest must live at a stable key for the
- *   browser to find it, and the archive key must be its content hash for
- *   immutability to mean anything. Blob's default appends a random suffix, which
- *   would silently break both.
- * - **`x-allow-overwrite: 1`** — belt and braces, and the reason is a trap for
- *   whoever swaps in the SDK. Vercel documents `put()` as throwing on a pathname
- *   that already exists, but **the REST layer permits the overwrite regardless**
- *   (measured 2026-08-12: a bare PUT over an existing key returned 200). The
- *   guard lives in `@vercel/blob`, client-side. So this header is currently
- *   decorative *here* and mandatory *there*: **anyone replacing this function
- *   with the SDK must pass `allowOverwrite: true`**, or every run after the first
- *   fails at the manifest write, having already uploaded the archive — the §7
- *   gap-1 shape. It is kept rather than dropped in case Vercel moves the check
- *   server-side, which would otherwise break this silently.
- *
- * Measured against the live store on 2026-08-12, all passing: stable keys, text
- * and binary round-trips, `cache-control` honoring `x-cache-control-max-age`,
- * overwrite, delete, and — the ones §3.2's architecture rests on — `206` range
- * responses with a correct `content-range` and `access-control-allow-origin: *`.
- * Note that Vercel caps the CDN's own `s-maxage` at 300s on the archives even
- * though the browser gets `max-age=31536000`; immaterial for content-hashed
- * keys, which never change under a given URL.
- *
- * **`get` reads through the CDN, and the CDN will serve a key you just
- * overwrote.** Measured 2026-08-13: a fresh PUT to `state/publish-history.json`
- * read back as the *previous* body, with `X-Vercel-Cache: HIT` and `Age: 6`,
- * under `cache-control: public, max-age=0, s-maxage=0`. Nothing in the pipeline
- * re-reads a key it wrote in the same run, and at a 4-hourly cadence the cache
- * is long expired, so this is not a live bug — but two runs minutes apart (what
- * smoke-testing looks like) means the second can read the first's pre-write
- * manifest and history. Verify a hand-written key with a cache-busting query.
+ * Vercel Blob over its REST API. The store must be created with PUBLIC
+ * access (fixed at creation, not a code decision) — a private store serves
+ * blobs through a Function instead of a direct URL, which breaks range
+ * requests that pmtiles depends on. `x-add-random-suffix: 0` keeps keys
+ * stable/content-addressed. `x-allow-overwrite: 1` is currently decorative
+ * here (the REST layer permits overwrite regardless) but mandatory if this
+ * is ever swapped for the `@vercel/blob` SDK, whose `put()` throws on an
+ * existing pathname client-side unless `allowOverwrite: true` is passed.
+ * The CDN can also serve a just-overwritten key stale for a few seconds
+ * (bites concurrent smoke-testing, not the real 4-hourly cadence). Full
+ * measurements: docs/DESIGN.md#blob-traps.
  */
 export function vercelBlobStore(token: string): ArchiveStore {
   const headers = () => ({
@@ -472,9 +355,9 @@ export type PublishInput = {
   /** Path to the archive tiles.ts produced. */
   archivePath: string;
   groups: StoryGroup[];
-  /** §2.3's region panel index, published beside the archive. */
+  /** The region panel index, published beside the archive. docs/DESIGN.md#regions */
   regions: RegionIndex;
-  /** §4's per-country city shards. Absent or empty publishes no city artefact and leaves `manifest.citiesBase` unset — a manifest a pre-§4 browser already knows how to treat as "city panels unavailable". */
+  /** Per-country city shards. Absent or empty publishes no city artefact and leaves `manifest.citiesBase` unset. */
   cities?: Record<string, CityShard>;
   /** Newest GKG bundle included, YYYYMMDDHHMMSS. */
   watermark: string;
@@ -486,44 +369,22 @@ export type PublishResult =
   | { published: true; manifest: Manifest; stats: PublishStats; pruned: number; bandRelaxed: boolean }
   | { published: false; violations: string[]; stats: PublishStats };
 
-/**
- * How long since the last successful publish, from the history's own stamps.
- *
- * The stamp is the watermark — the newest GKG bundle that run included — not the
- * wall clock it ran at. For "has publication been blocked for too long" the two
- * are within one run of each other, and using the watermark keeps this readable
- * from the history alone, with no extra field to backfill on an existing store.
- *
- * `Infinity` on an empty or unparseable history, which reads as "nothing has
- * published, so nothing is protecting anything". **Callers must not hand that
- * straight to the relax valve** — an empty history would stand the band down on
- * the first run of a fresh store. `publish` gates on `history.length > 0` for
- * exactly this reason.
- */
+// How long since the last successful publish, using each entry's watermark
+// (not wall clock) so this stays readable from history alone. Returns
+// Infinity on an empty/unparseable history — callers must not hand that
+// straight to the relax valve; publish() gates on history.length > 0.
 export function staleness(history: HistoryEntry[], now: Date): number {
   const stamps = history.map((entry) => stampToMs(entry.stamp)).filter((ms) => !Number.isNaN(ms));
   if (stamps.length === 0) return Number.POSITIVE_INFINITY;
   return now.getTime() - Math.max(...stamps);
 }
 
-/**
- * Fail fast on a token that cannot reach the store.
- *
- * **Every read in this pipeline swallows its own errors**, and each one has a
- * good reason to: `lastWatermark` and `readHistory` both treat a failure as "not
- * written yet", which is the correct reading on a first run and must not block
- * publication. The cost is that a credential failure is invisible until the
- * first *write* — measured 2026-08-13, when a stale `BLOB_READ_WRITE_TOKEN` in
- * the Action secrets sailed past the manifest read, made the run believe it had
- * no watermark and refetch the whole window, and then died four steps later at
- * `appendShards` with a bare 403 from inside `state.ts`. Nothing in that stack
- * trace named the token.
- *
- * One authenticated `list` at startup turns that into one line. It is billed as
- * an "advanced operation", so this must stay at one call per run — which is why
- * it is a named assertion called once from the entry point, and not a check
- * folded into `get`.
- */
+// Fail fast on a token that cannot reach the store. Every read elsewhere in
+// this pipeline swallows its own errors (a first-run "not written yet" is
+// legitimate), which otherwise leaves a bad credential invisible until the
+// first write, several steps later, with a stack trace that names nothing
+// about the token. One authenticated `list` at startup catches it in one
+// line; kept to a single call since `list` is a billed "advanced operation".
 export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
   try {
     await store.list(ARCHIVE_PREFIX);
@@ -551,20 +412,9 @@ export async function readHistory(store: ArchiveStore): Promise<HistoryEntry[]> 
   }
 }
 
-/**
- * Validate, upload, flip, prune. In that order, and the order is the design.
- *
- * Note that the invariants run against the groups the archive was built FROM,
- * before a byte is uploaded: a rejected run costs nothing and leaves no orphan.
- */
-/**
- * Run `worker(item)` over `items` with at most `limit` in flight. A shard
- * upload is one round trip and nothing else, so a plain pool is enough — no
- * queue library, no backoff, and a rejection propagates through `Promise.all`
- * exactly the way one failed upload should: it fails the run before the
- * manifest flip, leaving nothing published rather than a half-uploaded shard
- * set with a live directory prefix nothing has actually written.
- */
+// Run worker(item) over items with at most `limit` in flight. A plain pool
+// is enough for a shard upload (one round trip, nothing else); a rejection
+// propagates through Promise.all, failing the run before the manifest flip.
 async function pooled<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
   let next = 0;
   const lane = async () => {
@@ -576,6 +426,8 @@ async function pooled<T>(items: T[], limit: number, worker: (item: T) => Promise
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
 }
 
+// Validate, upload, flip, prune, in that order. Invariants run against the
+// pre-upload groups, so a rejected run costs nothing and leaves no orphan.
 export async function publish(input: PublishInput): Promise<PublishResult> {
   const { store, archivePath, groups, watermark } = input;
   const now = input.now ?? new Date();
@@ -583,13 +435,9 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const stats = statsOf(groups);
   const history = await readHistory(store);
 
-  // `history.length > 0` is load-bearing, not defensive. `staleness` returns
-  // Infinity on an empty history, so without it the very first run of a fresh
-  // store would relax the band and publish any count at all — which is exactly
-  // the bootstrap moment a mistake most wants to ship through. The valve means
-  // "we have published before and it has been too long since", and with nothing
-  // published there is nothing being blocked. The old BAND_MIN_HISTORY covered
-  // this by accident; now it is the condition itself.
+  // history.length > 0 is load-bearing: staleness() returns Infinity on an
+  // empty history, so without this the very first run of a fresh store
+  // would relax the band and publish any count at all.
   const staleFor = staleness(history, now);
   const bandRelaxed = history.length > 0 && staleFor >= BAND_RELAX_AFTER_MS;
 
@@ -600,9 +448,8 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const key = archiveKey(contentHash(bytes));
   const url = await store.putBinary(key, bytes, ARCHIVE_MAX_AGE);
 
-  // Before the manifest, like the archive, and for the same reason: the flip is
-  // the only thing the browser sees, so everything it will point at has to
-  // already exist. A panel that 404s is a broken feature on a working map.
+  // Uploaded before the manifest flip, like the archive: everything the
+  // flip will point at must already exist.
   const regionsBody = `${JSON.stringify(input.regions)}\n`;
   const regionsKey = `${REGIONS_PREFIX}${contentHash(Buffer.from(regionsBody))}.json`;
   const regionsUrl = await store.putText(
@@ -612,10 +459,9 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     ARCHIVE_MAX_AGE,
   );
 
-  // City shards, uploaded before the manifest for the same reason the archive
-  // and the region index are: everything the flip is about to point at must
-  // already exist. One content-hashed directory covers all of them so
-  // retention (`archivesToPrune`) tracks one prefix instead of ~121 keys.
+  // City shards, uploaded before the manifest for the same reason. One
+  // content-hashed directory covers all of them so retention tracks one
+  // prefix instead of ~121 keys.
   const cities = input.cities ?? {};
   const countryCodes = Object.keys(cities).sort();
   let citiesDir: string | undefined;
@@ -666,24 +512,10 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   });
   await store.putText(HISTORY_KEY, `${JSON.stringify(updated)}\n`, "application/json", 0);
 
-  /**
-   * **The whole directory, not the stories prefix.**
-   *
-   * `archivesToPrune` filters on `ARCHIVE_DIR` and its comment claims that
-   * sweeping the whole directory "is what makes adding a second content-hashed
-   * artefact safe". That was only ever half true: a filter can delete nothing
-   * the listing did not return, and this call used `ARCHIVE_PREFIX`
-   * (`archives/stories-`). So the second artefact arrived on 2026-08-13 and
-   * **no `archives/regions-*.json` was ever pruned** — one 1.24 MB orphan per
-   * run, every four hours, for as long as the index has existed.
-   *
-   * The bug was invisible from the outside: retention of the *archives* worked,
-   * `pruned` counted a plausible number, and the map never noticed. It only
-   * shows up as a storage bill.
-   *
-   * `assertStoreReachable` deliberately keeps the narrower prefix — it is a
-   * reachability probe billed as an advanced operation, not a sweep.
-   */
+  // Must list the whole ARCHIVE_DIR, not a narrower prefix — a filter can
+  // only delete what the listing returned, and a too-narrow listing here
+  // once left every regions-*.json un-pruned for months with no visible
+  // symptom. See docs/DESIGN.md#publication-order.
   const stored = await store.list(ARCHIVE_DIR);
   const stale = archivesToPrune(stored, updated);
   for (const old of stale) await store.remove(old);
@@ -691,17 +523,10 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   return { published: true, manifest, stats, pruned: stale.length, bandRelaxed };
 }
 
-/**
- * Ping the dead-man switch (§8). `run.ts` passes `process.env.HEALTHCHECK_URL`,
- * a healthchecks.io check on a 4-hour period with a 4-hour grace — so silence
- * alerts at 2× cadence, which is the rule §8 actually specifies.
- *
- * Best-effort by design: the run has already published successfully by the time
- * this is called, and failing it would turn a monitoring outage into a data
- * outage. A missed ping raises an alert, which is the correct outcome for
- * "something about this run is not right" — it just must not be the thing that
- * makes the next run's window shorter.
- */
+// Ping the dead-man switch (healthchecks.io, 4h period + 4h grace = the 2x
+// cadence alert rule, docs/DESIGN.md#failure). Best-effort: the run has
+// already published by the time this is called, so a failed ping must not
+// turn a monitoring outage into a data outage.
 export async function pingHealthcheck(url: string | undefined): Promise<boolean> {
   if (!url) return false;
   try {
