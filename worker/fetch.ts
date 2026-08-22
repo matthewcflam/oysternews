@@ -1,23 +1,13 @@
 /**
- * Fetching GKG bundles. I/O (HANDOFF.md §3.3).
- *
- * §3.5: fetch every 15-minute bundle since the last successful watermark,
- * **capped at 12**. A failed run self-heals on the next one — it simply asks for
- * a longer span — and the cap is what stops a week-long outage from turning the
- * recovery run into a 30-minute download that times out the Action.
- *
- * Two constraints that are not preferences:
- *
- * - **HTTP, not HTTPS.** `https://data.gdeltproject.org` fails certificate
- *   verification (§4). This is a public, unauthenticated bulk feed and the URLs
- *   are constructed here rather than taken from input.
- * - **The English feed is `lastupdate.txt`, not `lastupdate-translation.txt`**
- *   (§2.6). That single choice is the entire English-only mechanism. It is
- *   approximately English, not exactly, and the About page says so.
- *
- * Raw GKG is the only access path that works — GEO 2.0 returns 404 on GDELT's
- * own documented example URLs and DOC 2.0 is non-deterministically rate-limited
- * (§4). There is no fallback, which is why parse.ts's canary is `>= 27`.
+ * Fetching GKG bundles. I/O. Fetches every 15-minute bundle since the last
+ * successful watermark, capped at MAX_BUNDLES so a week-long outage can't
+ * turn a recovery run into a download that times out the Action. HTTP, not
+ * HTTPS — `data.gdeltproject.org` fails certificate verification (public,
+ * unauthenticated feed; URLs are constructed here, not from input). The
+ * English feed is `lastupdate.txt`, not `lastupdate-translation.txt` — the
+ * entire English-only mechanism is that one choice, and it's approximate,
+ * not exact. Raw GKG is the only working access path (no fallback), which
+ * is why parse.ts's schema canary fails closed. See docs/DESIGN.md#data-reality.
  */
 
 import { inflateRawSync } from "node:zlib";
@@ -33,14 +23,10 @@ export type Bundle = {
   bytes: number;
 };
 
-/**
- * Minimal single-entry ZIP reader.
- *
- * A GKG bundle is one deflated CSV, so the whole of the format needed is: find
- * the end-of-central-directory record, follow it to the local file header,
- * inflate what follows. Thirty lines against a dependency, for a layout that has
- * not changed since 1989 (§0 rule 5).
- */
+// Minimal single-entry ZIP reader: a GKG bundle is one deflated CSV, so
+// this just finds the end-of-central-directory record, follows it to the
+// local file header, and inflates what follows — no dependency needed for
+// a layout unchanged since 1989.
 export function unzipSingleEntry(archive: Buffer): Buffer {
   const EOCD = 0x06054b50;
   let eocd = -1;
