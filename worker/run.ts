@@ -1,37 +1,13 @@
 /**
- * Orchestration only (HANDOFF.md §3.3). Every decision in the pipeline lives in
- * one of the modules this calls; what is here is the ORDER, and the order is
- * where §5's bullet list says the bugs are.
- *
- * The §3.2 data flow, and why each step sits where it does:
- *
- *   fetch    -> watermark to now, capped at 12 bundles
- *   parse    -> index-scan, V2GCAM never materialized
- *   filter   -> blocklist FIRST, so a blocked domain can never make a group
- *               tier-1-fresh (§5; a one-line ordering guarantee against a
- *               future list edit, not a bug that exists today)
- *   place    -> Rule H; the demonym filter runs inside it, before placement
- *   state    -> append this run's shards, THEN read the pool, so the 24h/48h
- *               union includes what just arrived and is deduped once
- *   group    -> themes + Jaccard + 0.5 cell
- *   rank     -> tier-1-fresh first, then salience
- *   budget   -> per-tile top-K -> monotonic minzoom
- *   tiles    -> tippecanoe, two layers
- *   publish  -> invariants, then archive, then the manifest flip
- *   prune    -> only AFTER the flip, and only if it flipped
- *   ping     -> only after a real publish
- *
- * **The watermark comes from the published manifest, not from local state.** It
- * is therefore the last *successfully published* bundle: a run that fetches,
- * groups, and then fails its invariants does not advance it, and the next run
- * asks for the same span again rather than stepping over a window it never
- * showed anyone. Re-fetching is free — `readPool` dedupes by `(domain, url)`.
- *
- * **Nothing here is silent.** A run that publishes nothing exits non-zero so the
- * Action fails and §8's "run throws" email fires, and it does not ping the
- * healthcheck, so §8's dead-man switch fires too. Those are two independent
- * alarms on the same event, which is the intent: the failure this project is
- * most afraid of is the one nobody notices.
+ * Orchestration only. Every decision lives in one of the modules this
+ * calls; what's here is the ORDER (fetch -> parse -> filter -> place ->
+ * state -> group -> rank -> budget -> tiles -> publish -> prune -> ping).
+ * See docs/DESIGN.md#pipeline for why each step sits where it does. The
+ * watermark comes from the published manifest, not local state, so a run
+ * that fails its invariants does not advance it. A run that publishes
+ * nothing exits non-zero (fails the Action) and skips the healthcheck ping
+ * (fires the dead-man switch) — two independent alarms on one event. See
+ * docs/DESIGN.md#failure.
  */
 
 import path from "node:path";
@@ -72,14 +48,11 @@ export function stampOfDate(date: Date): string {
   );
 }
 
-/**
- * Article + Placement -> the record that gets stored and grouped.
- *
- * Pure, and exported for that reason: this is the only place the three
- * reference-data lookups (source country, tier-1 membership, FIPS validity) are
- * applied to a story, and getting tier-1 membership wrong here would disable
- * §2.5 silently — the comparator would still run, just never on a tier-1 group.
- */
+// Article + Placement -> the record that gets stored and grouped. Pure,
+// exported: the one place source country, tier-1 membership, and FIPS
+// validity are applied to a story — getting tier-1 wrong here would
+// silently disable it downstream (the comparator still runs, just never on
+// a tier-1 group).
 export function toPlaced(
   article: Article,
   placement: Placement,
@@ -108,11 +81,9 @@ export function toPlaced(
   };
 }
 
-/**
- * A FIPS code the crosswalk does not know and §3.4 has not marked as a known
- * non-country. §8 wants these logged loudly and counted, because the degraded
- * behaviour — a plain pin — looks completely normal on the map.
- */
+// A FIPS code the crosswalk doesn't know and hasn't marked as a known
+// non-country. Logged loudly and counted — the degraded behavior (a plain
+// pin) looks completely normal on the map otherwise.
 function unknownFips(placed: PlacedArticle[], data: RefData): Map<string, number> {
   const unknown = new Map<string, number>();
   for (const article of placed) {
@@ -144,10 +115,10 @@ export type RunSummary = {
   tier1Groups: number;
   countryTop: number;
   overflow: number;
-  /** §2.3's panel index: regions covered and total rows. */
+  /** The region panel index: regions covered and total rows. */
   regions: number;
   regionRows: number;
-  /** §4's per-country city shards: countries with at least one clustered city, and clusters total. */
+  /** Per-country city shards: countries with at least one clustered city, and clusters total. */
   cityShards: number;
   cityRecords: number;
   published: boolean;
@@ -202,7 +173,7 @@ export async function run(options: RunOptions): Promise<RunSummary> {
 
   for (const stamp of stamps) {
     const bundle = await fetchBundle(stamp);
-    // GDELT skips slots. A miss is counted, never fatal (§3.5).
+    // GDELT skips slots. A miss is counted, never fatal.
     if (!bundle) continue;
     fetched++;
     newestFetched = stamp > newestFetched ? stamp : newestFetched;
@@ -237,13 +208,13 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   const countryTop = countryTopGroups(budgeted);
 
   // Continent id from a group's own country FIPS, via the crosswalk's
-  // `continent` column (§4). "" for anything the crosswalk cannot place —
+  // `continent` column. "" for anything the crosswalk cannot place —
   // `buildRegionIndex` files nothing under an empty key.
   const continentOf = (fips: string): string =>
     continentIdFor(data.countries.get(fips)?.continent) ?? "";
 
   // Built from the budgeted groups, which is every group in the window — the
-  // panel deliberately reaches stories the z12 ceiling drops (§2.4 overflow).
+  // panel deliberately reaches stories the z12 ceiling drops (see docs/DESIGN.md#tiles-budget).
   const regions = buildRegionIndex(budgeted, undefined, continentOf);
   const regionStats = indexStats(regions);
   const cities = buildCityIndex(budgeted);
@@ -310,8 +281,9 @@ export async function run(options: RunOptions): Promise<RunSummary> {
 }
 
 /**
- * The run summary. This is the only interface §8 has to five of its seven
- * failure modes, so it prints unconditionally, including on the failure path.
+ * The run summary — the only interface docs/DESIGN.md#failure's monitoring
+ * has to most failure modes, so it prints unconditionally, including on
+ * the failure path.
  */
 export function formatSummary(summary: RunSummary): string {
   const lines = [
@@ -325,14 +297,14 @@ export function formatSummary(summary: RunSummary): string {
     `cities       ${summary.cityShards} country shards, ${summary.cityRecords} clustered cities`,
   ];
 
-  // §8: a schema change shows up here first, as a nonzero short-row count.
+  // A schema change shows up here first, as a nonzero short-row count.
   if (summary.shortRows > 0) {
     lines.push(`WARN         ${summary.shortRows} rows failed the schema canary — GDELT may have changed`);
   }
-  // §8: the tier-1 count going to zero is the silent-degradation case. Nothing
-  // else fails when it happens, which is exactly why it is called out.
+  // Tier-1 count going to zero is the silent-degradation case — nothing
+  // else fails when it happens, which is why it's called out here.
   if (summary.groups > 0 && summary.tier1Groups === 0) {
-    lines.push("WARN         no tier-1 groups — §2.5 has degraded to plain salience");
+    lines.push("WARN         no tier-1 groups — ranking has degraded to plain salience");
   }
   for (const [code, count] of summary.unknownFips) {
     lines.push(`WARN         unknown FIPS code ${code} on ${count} stories — needs a data/fips-overrides entry`);
@@ -349,7 +321,7 @@ export function formatSummary(summary: RunSummary): string {
   if (summary.bandRelaxed) {
     lines.push(
       "WARN         count band stood down — blocked past 2× cadence.",
-      "             Re-derive COUNT_BAND_MIN/MAX against a fresh §4 volume",
+      "             Re-derive COUNT_BAND_MIN/MAX against a fresh volume",
       "             measurement; do not nudge them until runs pass.",
     );
   }
