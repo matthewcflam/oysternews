@@ -1,7 +1,6 @@
 /**
- * placeStory() — the single placement rule. PURE (HANDOFF.md §3.3).
- *
- * §2.1, Rule H: **specificity wins unless it is dominated.**
+ * placeStory() — the single placement rule ("Rule H": specificity wins
+ * unless it is dominated). PURE.
  *
  *   drop every location whose name is a demonym
  *   city, adm1, country := most-mentioned location of each level
@@ -12,89 +11,22 @@
  *       otherwise               ->  PIN at the city
  *   else adm1 -> CONTAINER, else country -> CONTAINER, else DROP
  *
- * **Do not replace this with plain specificity-first.** That was the original
- * spec, it scored 54.1% on pins [41.7, 66.0] and 37.5% on containers, and it
- * failed §5.1's pre-registered abort criterion outright — a city mentioned ONCE
- * beat a state mentioned FOUR times (Chicago x1 over Minnesota x4). Nor should
- * it become pure dominance, which overcorrects and sends ~75% of stories to
- * country containers because a domestic article names its own country
- * constantly. Rule H scores 69.7% on pins [52.7, 82.6] and 80.8% on containers
- * out-of-sample. The two margins differ for that reason and are not a knob.
+ * Do not replace this with plain specificity-first or pure dominance — both
+ * were tried and measured worse (54.1%/37.5% and ~75% country-collapse
+ * respectively) against Rule H's 69.7% pins / 80.8% containers
+ * out-of-sample. The weak-city DROP (a city mentioned exactly once) is a
+ * separate, later-measured rule: those pins scored 36.4% vs 77.8% for
+ * everything else, Fisher p=0.023, and it applies only to cities, only
+ * after both dominance margins, and DROPs rather than falling through to a
+ * container (verified: fall-through would have laundered the same noise
+ * into the container number instead of removing it). Full abort-criterion
+ * history, all measured tables, and the accepted volume cost:
+ * docs/DESIGN.md#placement.
  *
- * ---
- *
- * **The weak-city DROP, added 2026-08-14 — the one shape that survived a judged
- * sample.** A city that is mentioned *once* is not evidence that the story is
- * about that city; it is evidence that GDELT scattered single mentions and the
- * rule picked whichever came first. The trace has said so since it existed
- * (`winnerMentions === 1`), and `place:audit` sized the shape at **29.5% of all
- * pins** — but frequency is not accuracy, and §5.2 decision 3 is the standing
- * reminder of what happens when the two are conflated. So the shape was left
- * alone and the independent judging sheet was built to test it.
- *
- * It tested. On the 90-record independent draw (`judged-c29ce-90`, §5.2
- * decision 4), pins whose city was mentioned once scored **36.4% correct (n=11)
- * against 77.8% for every other pin (n=36)**, Fisher exact p=0.023. The hand
- * audit's ten-record guess had been "~40% against ~82%", which is as close to a
- * confirmed out-of-sample prediction as this project has managed.
- *
- * **Three things about the shape of this rule are deliberate and each one is a
- * measurement, not a preference:**
- *
- * 1. **It fires only on `city-survives`, after both dominance margins.** A city
- *    x1 beside a country x3 is already `country-dominates` and already ships as
- *    a container at 83.3%. Testing weakness first would rewrite placements the
- *    audit judged and liked, on no evidence at all.
- * 2. **It applies to cities only, never to containers.** The same shape at
- *    container level scored **85.7% (n=7)** — better than containers overall.
- *    `winnerMentions === 1` is a *pin* pathology; a country mentioned once in a
- *    story with no other geography is usually just where the story is.
- * 3. **It DROPs rather than falling through to the adm1/country container.**
- *    Fall-through preserves volume and was the obvious alternative, so it was
- *    checked against the draw: of the weak-city pins, the ones with somewhere to
- *    fall to would have become `Praia, Cape Verde -> Germany x2`,
- *    `Dublin -> United Kingdom x2`, `Canberra -> Singapore x2`. A country
- *    mentioned twice under a one-mention city is the same noise one level up, and
- *    laundering it into a container would move the error out of the pin number
- *    and into the container number rather than removing it.
- *
- * **The cost is volume and it was accepted deliberately.** Measured on 1,397
- * filtered articles after the change: `weak-city` is **14.7% of all records and
- * 30.2% of what used to be pins** (205 against 473 surviving), which is the
- * 29.5% `place:audit` predicted before the rule existed. Steady state ~40,700
- * groups/day falls to roughly 34,700 — far inside the count band's
- * [2,000, 60,000] (`publish.ts`), so no invariant fires and nothing here is
- * self-concealing. What it buys is pins at **77.8% [61.9, 88.3]** against the
- * measured 68.1%: the band §5.1 calls "proceed as planned" rather than "proceed
- * with a disclosure". **That is a projection, not a result** — it is the old
- * draw with a subset removed, and only a fresh judged draw can confirm it.
- *
- * **This does not retire the disclosure.** §5.1's band is read off a measured
- * number, and until a new draw is judged the measured number is still 68.1%.
- *
- * **This does not license the next shape.** `tie-broken` looks similar in the
- * same draw (44.4% on n=9) and is NOT implemented, because n=9 is what
- * §5.2 decision 3 looked like right before it evaporated. It needs its own draw
- * — and it mostly went away on its own: tie-broken pins fell from 15.5% to 3.6%
- * when this rule landed, because a tie at one mention was the same population
- * seen twice. Whatever is left is 17 pins in 1,397 records and can wait.
- *
- * ---
- *
- * **`explainPlacement()` is the implementation; `placeStory()` reads its answer.**
- * The rule is eight branches over a handful of counts, so every placement it has
- * ever made is fully explainable from its inputs — but only if the explanation
- * and the decision are the same code. A separate "explainer" walking the same
- * logic is a second implementation that drifts, and it would drift *silently*,
- * because nothing downstream compares them. So the trace is computed once and
- * the placement is a field on it.
- *
- * This exists because the audit's failure taxonomy could not be read off the
- * output. 15 wrong rule-H placements were classified by hand, and the classes
- * turned out to be mechanically distinct in ways `{kind, location}` cannot show:
- * a story whose locations are *all mentioned once* (the rule picks a confident
- * winner from noise) looks identical to one with a real, dominant place. See
- * `winnerMentions` and `tieBroken`.
+ * `explainPlacement()` is the implementation; `placeStory()` just reads its
+ * `.placement` field — kept as one function rather than a rule plus a
+ * separate explainer so the trace can never silently drift from the
+ * decision it explains.
  */
 
 import type { Article, GdeltLocation, Placement } from "../lib/types.ts";
@@ -104,40 +36,26 @@ import type { RefData } from "./refdata.ts";
 const CITY = new Set<number>(CITY_TYPES);
 const ADM1 = new Set<number>(ADM1_TYPES);
 
-/** §2.1's margins. Countries are structurally over-mentioned; states are not. */
+/** Countries are structurally over-mentioned; states are not — see docs/DESIGN.md#rule-h-the-shipped-rule. */
 export const ADM1_DOMINANCE = 2;
 export const COUNTRY_DOMINANCE = 3;
 
-/**
- * How many times a city must be mentioned before it may hold a PIN.
- *
- * **2 is "more than once", not a tuned threshold**, and it is the only value the
- * evidence supports: the judged draw split pins at exactly x1 vs x2+ (36.4% vs
- * 77.8%), because that is the split the trace exposed and the judging sheet was
- * built to test. Raising it to 3 would be fitting a number to a result on data
- * that never measured 3 — the header explains why that is the one thing this
- * module must not do.
- */
+/** 2 = "more than once" — the exact split the judged draw measured (36.4% vs 77.8%), not a tuned threshold. See docs/DESIGN.md#the-weak-city-drop-added-2026-08-14. */
 export const MIN_CITY_MENTIONS = 2;
 
 /**
- * **The demonym trap.** GDELT writes country demonyms bare (`Americans`) but
- * state demonyms with a suffix (`Texans, United States`). Matching the whole
- * FullName against the list — the obvious implementation — silently misses every
- * US state. Match the FIRST COMMA SEGMENT. 11.9% of all location mentions are
- * demonyms (FINDINGS §10).
+ * The demonym trap: GDELT writes country demonyms bare (`Americans`) but
+ * state demonyms with a suffix (`Texans, United States`). Matching the
+ * whole FullName silently misses every US state — match the FIRST COMMA
+ * SEGMENT instead.
  */
 export function isDemonym(name: string, data: RefData): boolean {
   return data.demonyms.has(name.split(",")[0].trim().toLowerCase());
 }
 
-/**
- * Most-mentioned location of a level, ties broken by earliest mention.
- *
- * Counting is by NAME, not featureId: GDELT emits one entry per mention and the
- * same place can carry different feature ids across mentions, which would split
- * a location's own count against itself.
- */
+// Most-mentioned location of a level, ties broken by earliest mention.
+// Counting is by NAME, not featureId: GDELT can emit different feature ids
+// for the same place across mentions, which would split its own count.
 function mostMentioned(
   candidates: GdeltLocation[],
   mentions: Map<string, number>,
@@ -151,33 +69,22 @@ function mostMentioned(
   });
 }
 
-/**
- * The id of the region a container represents.
- *
- * ADM1 codes already embed their country (`USOR` = Oregon), so they are unique
- * globally and can be used as-is. Country containers use the FIPS code. The two
- * namespaces cannot collide: FIPS country codes are two characters and ADM1
- * codes are four.
- */
+// The id of the region a container represents. ADM1 codes already embed
+// their country (USOR = Oregon) so they're globally unique as-is; country
+// containers use the FIPS code. The two namespaces can't collide (FIPS = 2
+// chars, ADM1 = 4).
 export function regionIdFor(location: GdeltLocation): string {
   if (ADM1.has(location.type)) return location.adm1Code || location.countryCode;
   return location.countryCode;
 }
 
 /**
- * Which of the rule's eight branches produced the placement.
- *
- * `no-locations` and `all-demonyms` are both DROPs and both returned `null` from
- * the old code, but they are opposite findings: the first is GDELT extracting
- * nothing, the second is the demonym filter working (11.9% of mentions are
- * demonyms, §2.1). Collapsing them is how "the filter is too aggressive" would
- * hide.
- *
- * `weak-city` is the third DROP and the only one that discards a placement the
- * rule could have made. Its share of the feed is the direct measure of what the
- * 2026-08-14 change costs — measured at 14.7% of records, 30.2% of former pins —
- * so it must stay separable from the two upstream DROPs, which cost nothing
- * because there was never anything to publish.
+ * Which of the rule's branches produced the placement. `no-locations` and
+ * `all-demonyms` are both DROPs but opposite findings — the first is GDELT
+ * extracting nothing, the second is the demonym filter working — kept
+ * separate so "the filter is too aggressive" can't hide inside a merged
+ * count. `weak-city` is the only DROP that discards a placement the rule
+ * could have made; see docs/DESIGN.md#the-weak-city-drop-added-2026-08-14.
  */
 export type PlacementReason =
   | "no-locations"
@@ -193,7 +100,7 @@ export type PlacementReason =
 /** The winner at one level, and what it beat. */
 export type LevelCandidate = {
   name: string;
-  /** GDELT type code. Type 3/4 is only 70.7% cities — the rest are natural features, counties and landmarks (§2.1), which is how an ocean gets pinned. */
+  /** GDELT type code. Type 3/4 is only ~71% cities — the rest are natural features, counties and landmarks, which is how an ocean gets pinned. */
   type: number;
   mentions: number;
   /** How many distinct names at this level tied at `mentions`. >1 means the winner was chosen by earliest offset, not by evidence. */
@@ -203,18 +110,13 @@ export type LevelCandidate = {
 };
 
 /**
- * Why a story landed where it did.
- *
- * Deliberately **not** in `lib/types.ts`. That file is 1:1 with the eventual
- * `articles` table (§3.1) and holds records that flow between modules; this is
- * one function's account of its own decision and is never persisted or passed
- * on. Putting it there would imply it is a column.
- *
- * `sourceCountry` is not here on purpose. Source-country bias — an Indian outlet
- * mentioning India 12 times against Seoul's 2, so `country-dominates` fires on a
- * match played in Seoul — is a real failure class, but the domain->country map
- * is `refdata`'s and `PlacedArticle` already carries `sourceCountry`. Join it
- * downstream rather than widening the placement rule's inputs.
+ * Why a story landed where it did. Deliberately not in `lib/types.ts` —
+ * that file mirrors persisted/passed-on records, and this is one
+ * function's account of its own decision, never persisted. `sourceCountry`
+ * is deliberately not a field here: it's a real bias source (an outlet
+ * mentioning its own country enough to fire `country-dominates`), but the
+ * domain->country map belongs to `refdata` and joins downstream instead of
+ * widening this rule's inputs.
  */
 export type PlacementTrace = {
   placement: Placement;
@@ -222,13 +124,7 @@ export type PlacementTrace = {
   city: LevelCandidate | null;
   adm1: LevelCandidate | null;
   country: LevelCandidate | null;
-  /**
-   * Mentions of the location actually chosen. 0 on a DROP — including
-   * `weak-city`, where the count that caused the drop is still readable off
-   * `city.mentions`. It cannot be 1 on a PIN any more; that combination is what
-   * the weak-city DROP removed, and a `lone-mention` pin appearing in a future
-   * `place:audit` run means this rule has been bypassed.
-   */
+  /** Mentions of the chosen location. 0 on a DROP (weak-city's cause is still readable off `city.mentions`). Cannot be 1 on a PIN — that's exactly what weak-city removed. */
   winnerMentions: number;
   /** The chosen location tied at the top of its level and won on offset alone. */
   tieBroken: boolean;
