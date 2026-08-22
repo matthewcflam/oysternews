@@ -1,34 +1,20 @@
 /**
- * The browser's half of §4's city panel: fetching a country's published shard,
- * and finding the record nearest a clicked label.
- *
- * **Fetched lazily, per country, on the first city label click in it** — the
- * same reasoning `lib/regions.ts` gives for the region index, one level down:
- * nothing needs a shard until a city label in that country is clicked, and the
- * US shard alone runs tens of KB gzipped (`worker/publish.ts`'s upload
- * comment has the measured numbers).
- *
- * **The match is purely geographic.** `city_label` carries no stable id
- * (`lib/labels.ts`), so there is nothing to join on — `nearestCity` is a
- * haversine search over the shard, capped at a fixed radius so the same click
- * answers the same way at every zoom.
+ * The browser's half of the city panel: fetching a country's published
+ * shard, and finding the record nearest a clicked label. Fetched lazily
+ * per country, on the first city label click in it — same reasoning as
+ * `lib/regions.ts`'s region index. Purely geographic match: `city_label`
+ * carries no stable id, so `nearestCity` is a haversine search capped at a
+ * fixed radius, giving the same click the same answer at every zoom.
  */
 
 import type { CityRecord, CityShard } from "./types";
 
 const pending = new Map<string, Promise<CityShard>>();
 
-/**
- * Fetch one country's shard, memoized per URL like `loadRegionIndex`.
- *
- * **404 is a normal answer, not a failure.** A country with no clustered
- * cities in the window publishes no shard for it at all (`worker/cities.ts`
- * skips an empty index) — that resolves to an empty array, which the caller
- * reads through `nearestCity` exactly like a shard that simply has no record
- * within range. A 5xx or network failure is the only case that should read as
- * "unavailable"; on that path the cache is cleared so the next click retries
- * rather than re-throwing a network blip for the rest of the session.
- */
+// Fetch one country's shard, memoized per URL like loadRegionIndex. A 404
+// is normal (a country with no clustered cities publishes no shard),
+// resolving to an empty array read the same as no record in range. Only a
+// 5xx/network failure clears the cache so the next click retries.
 export function loadCityShard(base: string, fips: string): Promise<CityShard> {
   const url = `${base}${fips}.json`;
   const cached = pending.get(url);
