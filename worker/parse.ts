@@ -1,19 +1,14 @@
 /**
- * GKG 2.1 parsing. PURE (HANDOFF.md §3.3) — takes text, returns records, touches
- * nothing. worker/fetch.ts does the downloading and unzipping.
- *
- * Two things here are load-bearing and neither is obvious from the code alone:
- *
- * 1. **V2GCAM is never materialized.** It is 69.4% of the bytes in a bundle
- *    (§4) and nothing in this project reads it. `columns()` scans for tab
- *    offsets and slices only the five fields that are wanted, so the largest
- *    field in the file never becomes a string. A plain `row.split("\t")` would
- *    build it ~1,200 times per bundle and then discard it.
- *
- * 2. **The schema canary is `>= 27`, indexed from the left** (§3.2). A strict
- *    `!== 27` fails closed the first time GDELT appends a benign column, which
- *    is the more likely event by far — and failing closed on GDELT's only usable
- *    access path (§4: there is no fallback) takes the whole map down.
+ * GKG 2.1 parsing. PURE — takes text, returns records, touches nothing;
+ * worker/fetch.ts does the downloading and unzipping. Two load-bearing,
+ * non-obvious choices: (1) V2GCAM, 69.4% of a bundle's bytes, is never
+ * materialized — `columns()` index-scans and slices only the wanted
+ * fields, rather than `row.split("\t")` building and discarding it ~1,200
+ * times per bundle; (2) the schema canary is `>= MIN_COLS`, not `===` —
+ * GDELT appending a benign column is far more likely than a real
+ * regression, and this is the only access path with no fallback (see
+ * docs/DESIGN.md#data-reality), so failing closed on a false positive
+ * takes the whole map down.
  */
 
 import type { Article, GdeltLocation } from "../lib/types.ts";
@@ -24,23 +19,10 @@ const C_SOURCE = 3;
 const C_DOCID = 4;
 const C_THEMES = 8;
 const C_LOC = 10;
-/**
- * `V2.1SHARINGIMAGE` — the image the publisher declared for social sharing,
- * which is the `og:image` tag GDELT already read off the page.
- *
- * **Added 2026-08-14, and it deleted a whole endpoint.** The story panel's
- * thumbnail used to come from `/api/og`, which fetched the article page itself,
- * server-side, per story opened — an SSRF primitive guarded by a scheme
- * allowlist, DNS checks and hand-followed redirects. All of that existed to
- * re-derive a field that was sitting in the row this parser was already reading,
- * eleven columns to the left of the one it took the title from.
- *
- * Measured on two committed bundles, 1,085 rows: **87.8% non-empty**, 8 of 8
- * sampled URLs live, 6 of 8 byte-identical to what the page declares today (the
- * other two are CDN rewrites that still serve). `V2.1RELATEDIMAGES` (17.2%) and
- * `V2.1SOCIALIMAGEEMBEDS` (6.0%) are the neighbouring columns and are not worth
- * the bytes.
- */
+// V2.1SHARINGIMAGE: the publisher's declared og:image, already read off the
+// page by GDELT. Replaced a server-side /api/og fetch-and-scrape endpoint
+// (an SSRF surface) that existed only to re-derive this field. Measured
+// 87.8% non-empty over 1,085 sampled rows.
 const C_IMAGE = 18;
 const C_EXTRAS = 26;
 
@@ -54,7 +36,7 @@ export type ParseResult = {
   rows: number;
   /** Rows failing the schema canary. A nonzero count here is a GDELT schema change. */
   shortRows: number;
-  /** Rows with no PAGE_TITLE. Measured at 0.3% (§4); a spike means GDELT changed V2EXTRASXML. */
+  /** Rows with no PAGE_TITLE. Measured at ~0.3%; a spike means GDELT changed V2EXTRASXML. */
   noTitle: number;
 };
 
@@ -92,7 +74,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   nbsp: " ",
 };
 
-/** GKG is ASCII-only and its titles are HTML-entity-escaped (§4). */
+/** GKG is ASCII-only and its titles are HTML-entity-escaped. */
 export function unescapeEntities(value: string): string {
   return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body: string) => {
     if (body[0] === "#") {
@@ -110,8 +92,8 @@ export function unescapeEntities(value: string): string {
  * V2EnhancedLocations:
  *   Type#FullName#CountryCode#ADM1Code#ADM2Code#Lat#Long#FeatureID#CharOffset
  *
- * Records carry 6+ locations half the time (§4), so this runs on every kept row
- * and is worth keeping allocation-light.
+ * Records carry 6+ locations roughly half the time, so this runs on every
+ * kept row and is worth keeping allocation-light.
  */
 export function parseLocations(field: string): GdeltLocation[] {
   const out: GdeltLocation[] = [];
@@ -143,23 +125,13 @@ export function parseLocations(field: string): GdeltLocation[] {
 }
 
 /**
- * The sharing image, or "" — and this is the only place it is ever validated.
- *
- * **It ends up in an `<img src>` in the browser, so it is untrusted input from
- * GDELT to the DOM.** Sanitising here rather than in the panel means a bad value
- * cannot reach a tile at all: the archive is the boundary, and a URL that fails
- * this check is simply not published. The client keeps its own fallbacks —
- * `onError` and the minimum-width check that rejects tracking pixels — but they
- * guard against images that *break*, not against schemes that should never have
- * been rendered.
- *
- * **`https:` and `http:` only.** `javascript:` is the reason a scheme allowlist
- * beats every other kind of check, and `data:` would let a row carry an
- * arbitrarily large payload into a tile.
- *
- * GDELT writes at most one image here in practice, but the field is documented
- * as multi-valued and 6 rows in the sample carried a `;`. The first valid one
- * wins, which matches how the publisher ordered them.
+ * The sharing image, or "" — the only place it is ever validated. Ends up
+ * in an `<img src>` in the browser, so this is untrusted input reaching the
+ * DOM; sanitising here (the archive boundary) means a bad value never
+ * reaches a tile at all. `https:`/`http:` only — a scheme allowlist, since
+ * `javascript:` must never render and `data:` could carry an arbitrarily
+ * large payload into a tile. Multi-valued field in practice; first valid
+ * one wins.
  */
 export function parseSharingImage(field: string): string {
   for (const chunk of field.split(";")) {
