@@ -1,52 +1,30 @@
 /**
- * A country's flag, and its name — the two things the region panel's header
- * needs that a FIPS region id alone cannot give it.
- *
- * The flag is the panel's one picture. A region has no article and therefore no
- * `og:image` the way a story does, and a flag is the one image that is
- * unambiguously *of* the country and needs no per-region curation. Mode 3
- * (2026-08-16) moved it from a full-bleed hero to a small plate beside the
- * heading; nothing about the lookup changed with it.
- *
- * `countryName` is here rather than in a file of its own because it reads the
- * same merged table `flagUrl` does. Two modules merging the same two JSON files
- * is two places for the merge order to drift, and the order is load-bearing —
- * see below.
- *
- * **The id is FIPS 10-4, and flags are addressed by ISO 3166.** That is §3.4's
- * join trap, and it is silent: a naive two-letter passthrough draws Serbia's flag
- * over Russia, Switzerland's over China, Iceland's over Israel and American
- * Samoa's over Australia — four countries that would each look like a plausible
- * bug in the map rather than in a lookup. `data/crosswalk.json` is the mapping
- * the worker already uses, so the browser reads the same table rather than a
- * second copy that could drift.
+ * A country's flag, and its name — what the region panel's header needs
+ * that a FIPS region id alone can't give it. `countryName` lives here
+ * because it reads the same merged crosswalk table `flagUrl` does, so the
+ * merge only happens once. The id is FIPS 10-4; flags are addressed by ISO
+ * 3166, and a naive two-letter passthrough would draw Serbia's flag over
+ * Russia, Switzerland's over China, Iceland's over Israel, American
+ * Samoa's over Australia — see docs/DESIGN.md#the-fips-trap. Reads the
+ * same `data/crosswalk.json` the worker uses rather than a second copy
+ * that could drift.
  */
 
 import crosswalk from "@/data/crosswalk.json";
 import overrides from "@/data/fips-overrides.json";
 import { shortCountry } from "@/lib/story";
 
-/**
- * Where the images come from. flagcdn serves public-domain flag PNGs keyed by
- * lowercase ISO alpha-2, with no key and no rate limit to manage — the same
- * "free tier everywhere" constraint §2.6 puts on the basemap.
- *
- * w640 rather than the full-resolution file: the hero is 420px wide at most and
- * this is a decoration behind a heading, so anything larger is bytes spent on a
- * phone (§1) for pixels nobody sees.
- */
+// flagcdn: public-domain flag PNGs keyed by lowercase ISO alpha-2, no key,
+// no rate limit. w640 rather than full-resolution — this is decoration
+// behind a heading, not a hero image.
 const FLAG_BASE = "https://flagcdn.com/w640";
 
 /**
- * FIPS 10-4 → ISO 3166 alpha-2.
- *
- * **The generated crosswalk is not the whole table**, and reading it alone is a
- * mistake with a name: Natural Earth populates `FIPS_10` on 236 of 258 features
- * and the gaps are not random — they are territories plus, awkwardly, **Israel**,
- * which `data/fips-overrides.json` measures at 1.7% of all location mentions,
- * the largest single hole by a wide margin. `worker/refdata.ts` merges the two
- * files in this order for exactly that reason, and this is the same merge; the
- * overrides go last because they exist to correct AND to fill, so they must win.
+ * FIPS 10-4 -> ISO 3166 alpha-2. The generated crosswalk alone is not the
+ * whole table — Natural Earth populates FIPS_10 on 236/258 features, and
+ * the gaps include Israel (1.7% of location mentions, the largest single
+ * hole) — so `data/fips-overrides.json` is merged in after and wins on
+ * collision. See docs/DESIGN.md#the-fips-trap.
  */
 type CrosswalkRow = { iso: string; name: string };
 
@@ -64,16 +42,9 @@ const FIPS_TO_NAME: Record<string, string> = Object.fromEntries(
   MERGED.map(([fips, entry]) => [fips, entry.name]),
 );
 
-/**
- * The inverse of `FIPS_TO_ISO`, for §4's city shard lookup: `city_label`
- * carries `iso_a2` (verified against the live style 2026-08-21), and a
- * country's shard is keyed by FIPS like everything else this project
- * publishes.
- *
- * First writer wins on a collision — `MERGED` is iterated crosswalk-then-
- * overrides, so an override's ISO code claims the shard over whichever FIPS
- * code the generated crosswalk happened to visit first for the same ISO.
- */
+// Inverse of FIPS_TO_ISO, for the city shard lookup: city_label carries
+// iso_a2, but a country's shard is keyed by FIPS. Overrides win on
+// collision (MERGED iterates crosswalk-then-overrides).
 const ISO_TO_FIPS: Record<string, string> = {};
 for (const [fips, entry] of MERGED) {
   const iso = entry.iso.toUpperCase();
@@ -95,21 +66,11 @@ export function fipsForIso(iso: string): string | null {
 const FIPS_SHAPE = /^[A-Z]{2}([A-Z0-9]{2})?$/;
 
 /**
- * The flag for a region id, or `null` when there is not one to draw.
- *
- * `null` is a normal answer in three cases, and the panel treats all three the
- * same way — as the story panel already treats a story with no `og:image`, by
- * falling back to the flat purple hero:
- *
- * 1. **An admin-1 id** (`USCA`, `IN25` — four characters). A state or province
- *    is not a country, and there is no equivalent flag set for them. Length is
- *    the test because that is exactly what distinguishes the two id shapes in
- *    `boundaries.pmtiles`.
- * 2. **A FIPS code the crosswalk does not carry.** Natural Earth writes no
- *    `FIPS_10` for a handful of polygons, so the outline can exist where the
- *    mapping does not.
- * 3. **An ISO code flagcdn has no image for.** Not detectable here — it surfaces
- *    as a failed image load, which the panel handles the same way.
+ * The flag for a region id, or `null` when there is not one to draw — a
+ * normal answer for an admin-1 id (4 chars, no flag set), a FIPS code the
+ * crosswalk doesn't carry, or an ISO code flagcdn has no image for (that
+ * last case surfaces as a failed image load instead). The panel falls back
+ * to the flat hero in all three, same as a story with no sharing image.
  */
 export function flagUrl(regionId: string): string | null {
   const fips = (regionId ?? "").trim().toUpperCase();
@@ -122,28 +83,14 @@ export function flagUrl(regionId: string): string | null {
 }
 
 /**
- * The country a region id belongs to, for the panel's breadcrumb — `"India"`
- * for `IN`, `"USA"` for `USCA`.
- *
- * **It reads the first two characters and nothing else**, which is the whole of
- * the country/admin-1 relationship as `boundaries.pmtiles` encodes it: an
- * admin-1 id is its country's FIPS code with a two-character subdivision
- * appended (`USCA`, `IN25`), so the parent is a prefix rather than a join. That
- * matters — §3.4 — because the alternative is matching "California" to a country
- * by name, which is the trap `flagUrl` above exists to avoid.
- *
- * `""` when the crosswalk does not carry the code. The breadcrumb drops the
- * missing crumb rather than printing a bare id: it is a wayfinding line, and
- * "World › IN25 › …" tells the reader less than "World › …" does.
- *
- * Shortened through `shortCountry` so a breadcrumb and a story row two inches
- * below it cannot spell the same country two different ways — the crosswalk says
- * "United States of America" where GDELT says "United States".
- *
- * **Refuses anything not FIPS-shaped**, rather than blindly slicing the first
- * two characters. §4 introduced ids this function was never meant to see — a
- * continent's `CONT:EU` sliced to `"CO"` and returned "Colombia", putting
- * `World › Colombia › Europe` in the breadcrumb. The guard is the fix.
+ * The country a region id belongs to, for the panel's breadcrumb —
+ * `"India"` for `IN`, `"USA"` for `USCA`. Reads the first two characters
+ * only: an admin-1 id is its country's FIPS code with a subdivision
+ * appended, so the parent is a prefix, not a join (avoids the name-join
+ * trap `flagUrl` also avoids). `""` when the crosswalk lacks the code — the
+ * breadcrumb drops the crumb rather than print a bare id. Refuses anything
+ * not FIPS-shaped: a bare-prefix slice of `CONT:EU` once returned "Colombia"
+ * ("CO") in the breadcrumb before this guard existed.
  */
 export function countryName(regionId: string): string {
   const trimmed = (regionId ?? "").trim().toUpperCase();
