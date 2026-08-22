@@ -1,51 +1,17 @@
 /**
- * The per-region story index. PURE (HANDOFF.md §3.3).
- *
- * §2.3's region panel lists a country's or a state's top stories when its label
- * is clicked. **That question cannot be answered from the tiles**, which is why
- * this file exists rather than the browser querying what it already has: the
- * §2.4 budget bakes deferred stories into HIGHER-zoom tiles, so a country's tile
- * at world zoom physically does not contain them. Ask the map for Pakistan's
- * stories at z1.5 and it can honestly return one — the country-top floor pin —
- * and a panel built on that would call it Pakistan's top story list.
- *
- * So the index is computed here, over the whole ranked pool, and published
- * alongside the archive. It is correct at every zoom because it never consults a
- * zoom at all.
- *
- * **Two consequences worth stating rather than discovering.**
- *
- * 1. **The panel can show stories the map cannot.** A group whose `minzoom`
- *    landed above the z12 ceiling is in the pipeline and not on the map (§2.4
- *    overflow — 204 of 1467 on the first real run). It is still one of its
- *    region's top stories by §2.5, so it appears here. The panel is the only
- *    surface that can reach it.
- * 2. **It is still one content model** (§2.3). The ordering is `compareGroups`,
- *    unchanged — the same comparator the tile budget and the country floor use.
- *    Nothing here re-ranks, filters by tier-1, or classifies by topic.
- *
- * §2.6 applies as hard here as in the popup: **title, source, link. Never
- * article text.** `RegionStory` is the whole of what a panel can render, which
- * is what makes that enforceable rather than aspirational.
+ * The per-region story index (computed over the whole ranked pool, not the
+ * tiles — a region's tile at world zoom does not contain most of its
+ * stories). See docs/DESIGN.md#regions.
  */
 
 import type { RegionEntry, RegionIndex, RegionStory, StoryGroup } from "../lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
-/**
- * Re-exported so this module still reads as the owner of the index's shape while
- * the declarations live where the browser can reach them without a `.ts`-suffixed
- * import (§0). `lib/types.ts` carries the rules those two types encode.
- */
+// Re-exported so this module reads as the owner of the index's shape;
+// declarations live in lib/types.ts (docs/DESIGN.md#the-ts-extension-import-rule).
 export type { RegionEntry, RegionIndex, RegionStory };
 
-/**
- * How many stories a region keeps.
- *
- * Ten is a panel you can scan on a phone without scrolling forever, and it
- * bounds the payload: the index is roughly (countries + regions) × N entries,
- * and N is the only term anyone can turn.
- */
+/** Rows kept per region. See docs/DESIGN.md#regions. */
 export const REGION_TOP_N = 10;
 
 function rowOf(group: StoryGroup): RegionStory {
@@ -59,30 +25,11 @@ function rowOf(group: StoryGroup): RegionStory {
 }
 
 /**
- * Build the index.
- *
- * **A story is filed under its country, its admin-1, and (when a resolver is
- * supplied) its continent**, so clicking "California", "United States" and
- * "North America" all find it. The three namespaces cannot collide — FIPS
- * country codes are two characters, admin-1 codes are four (see `place.ts`'s
- * `regionIdFor`), and continent ids are `CONT:XX` (`lib/continents.ts`) — so
- * one flat map serves all three levels.
- *
- * Sorted here rather than trusting the caller: `budget.ts` returns groups in
- * whatever order its tile walk produced, and a panel that silently depends on
- * an upstream sort is a bug waiting for someone to reorder a pipeline stage.
- *
- * **`total` and `sources` count the pool, not the rows (2026-08-16).** The panel
- * header says "248 stories today · 39 sources", and the rows are capped at ten,
- * so those two numbers cannot be derived from what is published — 68 of 163
- * regions in a measured run exceed the cap, and the largest holds 977. They are
- * therefore counted here, over every group filed under the key, and the cap is
- * applied only to `stories`. That is the whole reason the value stopped being a
- * bare array.
- *
- * The domain set is dropped before the entry is returned: it is the counting
- * apparatus, not a field. Publishing 39 domain strings per region to render the
- * number 39 would multiply the index's size for no reader.
+ * Files a story under its country, its admin-1, and (when a resolver is
+ * supplied) its continent — one flat map, since the three id namespaces
+ * cannot collide (FIPS country = 2 chars, adm1 = 4, continent = `CONT:XX`).
+ * `total`/`sources` count the whole pool, not just the capped `stories`
+ * rows. See docs/DESIGN.md#regions.
  */
 export function buildRegionIndex(
   groups: StoryGroup[],
@@ -133,15 +80,9 @@ export function buildRegionIndex(
   return index;
 }
 
-/**
- * Regions covered, and the total rows — what the run summary reports.
- *
- * **No compatibility shim here, deliberately.** It is handed the index this
- * module just built, which is always the current shape; the legacy bare-array
- * form can only reach a *browser*, holding a manifest from before this change.
- * That normalisation lives in `lib/regions.ts` alone, where it can be reached,
- * rather than in two copies of which one gets fixed.
- */
+// Regions covered and total rows, for the run summary. No legacy bare-array
+// shim here — this always sees the current shape; that normalisation lives
+// in lib/regions.ts, which is what a browser holding an old manifest reaches.
 export function indexStats(index: RegionIndex): { regions: number; rows: number } {
   const entries = Object.values(index) as RegionEntry[];
   return {
