@@ -1,18 +1,10 @@
 /**
- * §4's continent labels: a closed seven-name table, not a join.
- *
- * MapTiler's `continent_label` carries only `name`/`name:en` (verified against
- * the live style 2026-08-21) — no id, no code. Natural Earth's `CONTINENT`
- * column (`scripts/build-crosswalk.ts`) is the other vocabulary this project
- * speaks, and **the two disagree on one name**: MapTiler's `name:en` for
- * Oceania is `"Australia"`; Natural Earth calls the same continent
- * `"Oceania"`. Both must resolve to the same id or a click on the label loses
- * the continent the crosswalk files stories under. `continentIdFor` is the one
- * place that bridges them.
- *
- * The `CONT:` prefix cannot collide with `worker/place.ts`'s `regionIdFor` —
- * FIPS country codes are two characters and admin-1 codes are four; nothing
- * three characters and colon-shaped can arrive from that function.
+ * Continent labels: a closed seven-name table, not a join. MapTiler's
+ * `continent_label` carries only a name, no id — and MapTiler's `"Australia"`
+ * and Natural Earth's `"Oceania"` name the same continent, so
+ * `continentIdFor` bridges both vocabularies to one id. The `CONT:` prefix
+ * can't collide with `worker/place.ts`'s `regionIdFor` (FIPS = 2 chars,
+ * admin-1 = 4). See docs/DESIGN.md#cities-continents.
  */
 
 export type ContinentId =
@@ -53,14 +45,10 @@ export function continentIdFor(name: string | null | undefined): ContinentId | n
 
 /**
  * Curated camera boxes for the "Zoom to" button, in the spirit of
- * `MapView.tsx`'s `BBOX_OVERRIDES`: a computed union of member countries would
- * hand Europe a box reaching the Bering Strait through Russia's own bbox, and
- * a hand-picked constant is honest about being a curated view rather than a
- * derived fact.
- *
- * `[west, south, east, north]`, matching `lib/region-bbox.ts`'s `Bbox` — east
- * may exceed 180 for a continent that crosses the antimeridian, the same
- * convention `region-bbox.json` uses for Russia (`east: 191.005`) and Fiji.
+ * `MapView.tsx`'s `BBOX_OVERRIDES`: a computed union of member countries
+ * would hand Europe a box reaching the Bering Strait through Russia's own
+ * bbox. `[west, south, east, north]` — east may exceed 180 for a continent
+ * crossing the antimeridian, same convention as `region-bbox.json`.
  */
 export const CONTINENT_BBOX: Record<ContinentId, [number, number, number, number]> = {
   "CONT:AF": [-25.36, -46.97, 63.5, 37.5],
