@@ -1,26 +1,12 @@
 /**
- * Tile building. I/O — a tippecanoe subprocess (HANDOFF.md §3.3).
- *
- * §3.1 locks the flags: `-Z0 -z12 -r1 --drop-densest-as-needed`. **`-r1` is not
- * a typo and not a tuning knob** — it disables tippecanoe's own radial dropping,
- * because rank thinning is done by per-feature `minzoom` from worker/budget.ts.
- * Letting tippecanoe drop features too would silently discard the ones §2.5
- * chose to keep, using a rule that knows nothing about salience or tier-1.
- *
- * Two layers, one archive (§2.4):
- *
- *   stories       per-tile top-K, minzoom from the budget
- *   country-top   top 1 per country, minzoom 0, exempt from the budget
- *
- * The per-feature `minzoom` is carried by a `tippecanoe` object at **Feature
- * level**, and that placement requires **tippecanoe >= 2.52.0**. Both halves are
- * load-bearing and neither works alone; `scripts/run-tippecanoe.sh` enforces the
- * version, and the note on `featureOf` is the account of why.
- *
- * tippecanoe has no native Windows build (§6 decision 8), so on Windows this
- * shells into WSL. `scripts/build-tiles.sh` already solves that, including the
- * path translation, and is reused rather than reimplemented — its comment about
- * never routing a Windows path through `wslpath` cost twenty minutes to learn.
+ * Tile building via a tippecanoe subprocess. Flags are locked: `-Z0 -z12 -r1
+ * --drop-densest-as-needed` — `-r1` disables tippecanoe's own density
+ * thinning, since worker/budget.ts's per-feature minzoom does that job
+ * instead. Two layers: `stories` (per-tile top-K, minzoom from the budget)
+ * and `country-top` (top 1/country, minzoom 0, exempt from the budget).
+ * Requires tippecanoe >= 2.52.0 (see `featureOf` below and
+ * docs/DESIGN.md#tiles-budget). tippecanoe has no native Windows build, so
+ * on Windows this shells through `scripts/run-tippecanoe.sh` into WSL.
  */
 
 import { spawn } from "node:child_process";
@@ -31,71 +17,33 @@ import type { StoryGroup } from "../lib/types.ts";
 export const STORIES_LAYER = "stories";
 export const COUNTRY_LAYER = "country-top";
 
-/**
- * **A forward-slash literal, never `path.join`.** This is an argument to `bash`,
- * not a path for this process to open, and on Windows `path.join` returns
- * `scripts\run-tippecanoe.sh` — which bash reads as an escaped `r`, and reports
- * as `scriptsrun-tippecanoe.sh: No such file or directory`.
- *
- * The same family of bug as the `wslpath` note in `scripts/build-tiles.sh`, and
- * it hid for as long as it did because it is **Windows-only**: `path.join` gives
- * a forward slash on the Linux runner, so CI has always been fine and the dev
- * machine could not run the worker at all. Measured 2026-08-13, the first time
- * anyone ran `worker/run.ts` end to end on Windows.
- */
+// Forward-slash literal, never `path.join`: this is an argument to `bash`,
+// not a path for this process, and `path.join` returns backslashes on
+// Windows, which bash misreads as an escape (`scriptsrun-tippecanoe.sh: No
+// such file or directory`).
 const SCRIPT = "scripts/run-tippecanoe.sh";
 
-/**
- * A path as an argument to bash, not as a path for this process.
- *
- * Same hazard as `SCRIPT`, one level down: `path.join` builds these with
- * backslashes on Windows, and they cross the same argv boundary that ate the
- * script name. `run-tippecanoe.sh` does handle `C:\Users\x` — but only if the
- * backslashes survive the trip, and its own comment records the contract as
- * *"Node on Windows hands over C:/Users/x"*. This is that contract, made real
- * rather than assumed. A no-op on Linux, where there is nothing to replace.
- */
+// Same hazard as SCRIPT: path.join emits backslashes on Windows, which don't
+// survive the argv boundary into bash. run-tippecanoe.sh expects forward
+// slashes ("Node on Windows hands over C:/Users/x"); a no-op on Linux.
 const posix = (value: string): string => value.replaceAll("\\", "/");
 
 /**
- * §2.6 is link-out only: title, source, link. **Never article text.**
+ * Link-out only: title, source, link — never article text. This function is
+ * where that's enforced; a feature carries exactly these properties, so no
+ * body text can reach the browser.
  *
- * That is a copyright constraint, and this function is where it is actually
- * enforced — a feature carries exactly these properties, so there is no path by
- * which body text could reach the browser even if something upstream started
- * carrying it. §7 critical gap 2 asks for a test that the popup contains title,
- * source and link and nothing else; this is the other half of it.
- *
- * ---------------------------------------------------------------------------
- * **The `tippecanoe` object is a sibling of `geometry` and `properties`, and
- * that is the only place it works. It was in the wrong place for the life of
- * the project.**
- *
- * Nested inside `properties` it is not a directive at all, just an attribute, so
- * **every per-feature `minzoom` budget.ts ever computed was ignored on every
- * archive this project ever published.** Measured 2026-08-14 on the live
- * archive: world zoom served 1,714 pins on a phone against §9's 30-60, and the
- * country floor was starved to 1 feature. The tell was that all 1,714 features
- * still carried `tippecanoe` as a visible attribute — tippecanoe strips the
- * directive when it consumes one.
- *
- * **Moving it here was tried the same day and appeared to empty the map**, which
- * bought a revert and a day of confusion. It published an archive with exactly
- * one feature per layer per tile at every zoom, everywhere. That was not this
- * code being wrong. It was **an upstream bug in tippecanoe 2.49.0**, which is
- * what `apt-get install tippecanoe` gives you on Ubuntu 24.04 and what CI used:
- *
- *   In tile.cpp the block that assigns `sf.dropped` is guarded by
- *   `if (sf.tippecanoe_minzoom == -1)` and has no `else`. A feature that
- *   declares a minzoom therefore keeps the struct default,
- *   `dropped = FEATURE_DROPPED`, and is discarded by rate. The one survivor is
- *   the "first feature of the tile is always kept" guard — hence exactly one
- *   per tile rather than an empty archive.
- *
- * Fixed upstream in felt/tippecanoe bd48ba8, "Fix accidental loss (at all
- * zooms) of features with an explicit minzoom", first released in **2.52.0**.
- * Verified 2026-08-14 by building 2.49.0, 2.52.0 and 2.79.0 and running the same
- * 218 well-spread points through each, one layer, nothing else changed:
+ * The `tippecanoe` object below MUST be a sibling of `geometry`/`properties`,
+ * not nested inside `properties` — nesting it silently makes tippecanoe
+ * ignore every minzoom budget.ts computes (world zoom served 1,714 pins
+ * instead of 30-60 on the live archive). This placement in turn requires
+ * tippecanoe >= 2.52.0, a hard floor enforced by scripts/run-tippecanoe.sh:
+ * below it, an upstream bug (fixed in felt/tippecanoe bd48ba8, "Fix
+ * accidental loss (at all zooms) of features with an explicit minzoom")
+ * silently drops every feature that declares a minzoom down to one per
+ * tile. Both failure modes are silent — exit 0, archive publishes, tests
+ * pass — and only a decoded tile shows the difference. Verified by building
+ * 2.49.0/2.52.0/2.79.0 and running the same 218 points through each:
  *
  * ```
  *                                   2.49.0      2.52.0    2.79.0
@@ -104,30 +52,15 @@ const posix = (value: string): string => value.replaceAll("\\", "/");
  *   minzoom = i % 13          z0 =       1          17        17
  * ```
  *
- * The last row is the budget working: 17 of 218 points declare `minzoom: 0`, and
- * on a fixed tippecanoe exactly those 17 are what z0 serves.
- *
- * **So this line and the version floor are one change, and neither half works
- * alone.** On a tippecanoe below 2.52.0 this placement empties the map, which is
- * why `scripts/run-tippecanoe.sh` refuses to run at all below that version
- * rather than leaving it to a comment.
- *
- * **Both failure modes are silent**: tippecanoe exits 0, the archive publishes,
- * §8's invariants pass, and every unit test passes whether the budget ran, was
- * ignored, or ate the map. Only a decoded tile or a browser can tell them apart.
- * **Do not change this without decoding real tiles at real coordinates.**
- * ---------------------------------------------------------------------------
+ * Full post-mortem: docs/DESIGN.md#the-tippecanoe-2-49-0-post-mortem. Do not
+ * change this without decoding real tiles at real coordinates.
  */
 function featureOf(group: StoryGroup): unknown {
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: [group.lon, group.lat] },
-    // Feature level, beside `geometry` and `properties` — read the note above
-    // before moving it. tippecanoe consumes this and it never reaches the
-    // browser, which is also why it is not in the §2.6 property list below.
-    //
-    // The value must stay a **number**: `{"minzoom": "0"}` is discarded without
-    // an error, and a stringified value looks exactly like a working one.
+    // Feature level, beside geometry/properties — see note above before
+    // moving it. Must stay a number: {"minzoom": "0"} is silently discarded.
     tippecanoe: { minzoom: group.minzoom },
     properties: {
       title: group.title,
@@ -137,15 +70,9 @@ function featureOf(group: StoryGroup): unknown {
       kind: group.kind,
       region: group.regionId,
       country: group.countryCode,
-      // The panel's thumbnail, straight from GDELT's V2.1SHARINGIMAGE. A URL,
-      // not bytes — §2.6 is about reproducing content, and a link to the
-      // publisher's own CDN reproduces nothing. Mean 115 bytes, so this is the
-      // most expensive property in the list; it is here rather than fetched at
-      // click time because the alternative was a server-side fetch of the
-      // article page, which is a much worse thing to own. See parse.ts.
+      // Thumbnail URL from GDELT's V2.1SHARINGIMAGE (not bytes — a link to
+      // the publisher's own CDN, not reproduced content). See parse.ts.
       image: group.image,
-      // Kept for the §2.3 freshness stamp and for debugging why a pin ranks
-      // where it does. Numbers and dates, never prose.
       salience: Number(group.salience.toFixed(4)),
       domains: group.distinctDomains,
       tier1: group.tier1Fresh ? 1 : 0,
@@ -167,13 +94,10 @@ export type TileBuild = {
   countryTopWritten: number;
 };
 
-/**
- * Write both layers and run tippecanoe over them.
- *
- * `maxZoom` is tippecanoe's ceiling, NOT the budget's data cap. Features whose
- * minzoom sits above it are simply never rendered, which is how budget.ts's
- * overflow disappears from the map without being deleted from the pipeline.
- */
+// Write both layers and run tippecanoe over them. z12 is tippecanoe's render
+// ceiling, not the budget's cap — features with minzoom above it are simply
+// never rendered, which is how overflow disappears from the map without
+// being deleted from the pipeline.
 export async function buildTiles(
   stories: StoryGroup[],
   countryTop: StoryGroup[],
@@ -191,11 +115,9 @@ export async function buildTiles(
   await runTippecanoe([
     "--force",
     "--name=sonder-stories",
-    // Progress only, not the summary. Tippecanoe's per-tile progress is a single
-    // carriage-returned line tens of thousands of characters long, which in a CI
-    // log (or a captured buffer) buries everything printed after it — including
-    // the run summary and any stack trace. That has cost one unexplained failure
-    // already.
+    // -q suppresses tippecanoe's per-tile progress line, which is tens of
+    // thousands of characters long and buries the run summary/stack trace
+    // after it in any captured log.
     "-q",
     "-Z0",
     "-z12",
@@ -216,13 +138,9 @@ export async function buildTiles(
   };
 }
 
-/**
- * Run tippecanoe, natively where it exists and through WSL on Windows.
- *
- * The script is the single place that knows about the WSL path translation, so
- * CI (Linux, native tippecanoe) and this machine (Windows, WSL) take the same
- * code path here.
- */
+// Run tippecanoe, natively where it exists and through WSL on Windows —
+// scripts/run-tippecanoe.sh is the single place that knows the WSL path
+// translation, so CI and this machine take the same code path.
 function runTippecanoe(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("bash", [SCRIPT, ...args], {
