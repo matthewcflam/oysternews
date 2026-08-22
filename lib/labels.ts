@@ -1,55 +1,21 @@
 /**
- * Which rendered basemap feature is a place label, and at what level
- * (HANDOFF.md §2.3, step 1).
- *
- * §2.3's gesture is **clicking the word**, not the landmass: clicking a shape
- * cannot tell "California" from "the United States", and clicking the label can.
- * So a click hit-tests the whole map — `queryRenderedFeatures` with no layer
- * filter returns basemap features alongside ours — and this module answers the
- * only question that matters about the result: is this a country label, a state
- * label, or neither.
- *
- * **Two schemas, both required.** MapTiler's `planet_v4` puts labels in their own
- * source-layers (`country_label`, `state_label`); OpenFreeMap ships OpenMapTiles,
- * where every settlement, state and country is one `place` layer discriminated by
- * `class`. The app runs on MapTiler in production and falls back to OpenFreeMap
- * with no key (`lib/basemap.ts`), so both spellings are live, and **MapTiler has
- * already changed its schema once**. When this breaks it breaks the §11 way —
- * silently, with no error and no console warning, because a click that matches
- * nothing is indistinguishable from a click on the ocean. Hence tests, not a
- * comment.
- *
- * **The label supplies the level and nothing else.** State labels carry no region
- * code on either provider (MapTiler has `iso_a2` + `admin_level`, OpenFreeMap has
- * only a name), and joining "California" to `USCA` by name is §3.4's join trap
- * wearing a new hat. The region id comes from hit-testing our own
- * `boundaries.pmtiles` at the label's anchor — see `MapView.tsx`. The `name` here
- * is for the panel heading only; nothing joins on it.
- *
- * Verified against both live styles on 2026-08-13:
- *
- * ```
- *   maptiler     country_label  z2-12   country_disputed_label z4-12
- *                state_label    z2-11   city_label     z4-14
- *                continent_label z0-3 (styled max z2)
- *   openfreemap  place/country  z0-9    place/state    z5-8
- *                place/city (+town/village)   place/continent
- * ```
- *
- * **City and continent, added 2026-08-21 (§4).** Verified live against the
- * MapTiler style the same day: `city_label` carries `{name, iso_a2, rank,
- * capital}` and backs both plain and capital city labels; `continent_label`
- * carries only `{name}`. Neither carries an id or an admin code, which is why
- * `MapView.tsx` cannot hit-test a polygon for either — a city resolves by
- * fetching that country's published shard and snapping to the nearest
- * indexed city (`lib/cities.ts`), and a continent resolves through the closed
- * seven-name table in `lib/continents.ts`.
- *
- * **`town_label`, `place_label` (village/suburb/neighbourhood) stay refused,
- * deliberately.** They sit inside a city's own snap radius, so accepting them
- * would print the parent city's stories under a suburb's name — the same
- * "join by name" trap this file already avoids for state labels, worn as a
- * radius instead of a string.
+ * Which rendered basemap feature is a place label, and at what level. The
+ * gesture is clicking the word, not the landmass — a shape click can't
+ * distinguish "California" from "the United States". Two label schemas are
+ * both required: MapTiler's own source-layers (`country_label`,
+ * `state_label`, ...) and OpenFreeMap's single `place` layer discriminated
+ * by `class` — the app falls back to OpenFreeMap with no API key (see
+ * lib/basemap.ts), and MapTiler has already changed its own schema once.
+ * A mismatch here fails silently (a click matching nothing is
+ * indistinguishable from clicking the ocean), hence tests, not a comment.
+ * The label supplies only the level, never a region id — that comes from
+ * hit-testing `boundaries.pmtiles` at the label's anchor (city and
+ * continent resolve differently; see `lib/cities.ts` /
+ * `lib/continents.ts`) — to avoid joining "California" to `USCA` by name.
+ * `town_label`/`place_label` stay refused deliberately: they sit inside a
+ * city's snap radius, and accepting them would print a parent city's
+ * stories under a suburb's name. See
+ * docs/DESIGN.md#the-label-based-gesture-and-no-name-matching-ever.
  */
 
 export type LabelLevel = "country" | "state" | "city" | "continent";
@@ -65,16 +31,11 @@ export type LabelFeature = {
   geometry?: { type?: string; coordinates?: unknown } | null;
 };
 
-/**
- * MapTiler source-layers, by level.
- *
- * `country_disputed_label` is accepted as a country because it is how MapTiler
- * draws the ones a worldview disagrees about (Kosovo, Western Sahara, Taiwan) —
- * they are labelled like any other country on screen, so refusing the click would
- * be an unexplainable dead spot. It costs nothing to accept: the id still comes
- * from our own boundary hit-test, which either has that polygon or draws no
- * outline at all.
- */
+// MapTiler source-layers, by level. country_disputed_label is accepted as
+// a country because that's how MapTiler draws disputed territories
+// (Kosovo, Western Sahara, Taiwan) — refusing the click would be an
+// unexplainable dead spot, and it costs nothing since the id still comes
+// from our own boundary hit-test.
 const MAPTILER_LAYERS: Record<string, LabelLevel> = {
   country_label: "country",
   country_disputed_label: "country",
@@ -158,7 +119,7 @@ export function labelAnchor(feature: LabelFeature | null | undefined): [number, 
  *
  * **Display only.** Nothing joins on this string — see the header. Both providers
  * write `name`; MapTiler also writes localized `name:en`, which is preferred when
- * present because the map is English-only (§2.6).
+ * present because the map is English-only.
  */
 export function labelName(feature: LabelFeature | null | undefined): string {
   const properties = feature?.properties ?? {};
