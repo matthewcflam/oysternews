@@ -80,17 +80,13 @@ import StoryBubbles, { type TopStory } from "./StoryBubbles";
 import StoryPanel from "./StoryPanel";
 
 /**
- * The map (HANDOFF.md §4). This component owns wiring only — the source, the
- * camera, and the click behaviour. **How the layers look lives in
- * `lib/layers.ts`**, because those specs encode product rules (§2.6 link-out,
- * §2.3's invisible tier-1 preference, containers drawn as regions) that are
- * worth testing rather than reviewing.
- *
- * The archive is whatever `manifest.json` currently points at, which changes
- * every run — hence the async step before a source can be added.
- *
- * MapLibre 6 has no default export and aliases its Map class to avoid shadowing
- * the global `Map`, hence the named `MapLibreMap` import.
+ * The map. This component owns wiring only — source, camera, click
+ * behaviour. How the layers look lives in `lib/layers.ts`, since those
+ * specs encode product rules worth testing rather than reviewing. The
+ * archive is whatever manifest.json currently points at, which changes
+ * every run, hence the async step before a source can be added. MapLibre 6
+ * has no default export and aliases its Map class to avoid shadowing the
+ * global `Map`, hence the named `MapLibreMap` import.
  */
 
 /**
@@ -103,14 +99,11 @@ import StoryPanel from "./StoryPanel";
 const WORKER_URL = "/maplibre-gl-worker.mjs";
 
 /**
- * What a label click resolved to.
- *
- * `country` and `state` carry an id the outline archive can draw, same as
- * before §4. `continent` carries a `CONT:XX` id (`lib/continents.ts`) into the
- * same region index, and draws no outline (`selectRegionAt`). `city` carries
- * no id of its own — nothing basemap-side has one — only the country FIPS its
- * shard is keyed by and the label's own anchor, which `nearestCity` snaps to
- * a published record.
+ * What a label click resolved to. `country`/`state` carry an id the
+ * outline archive can draw. `continent` carries a `CONT:XX` id into the
+ * same region index and draws no outline. `city` carries no id of its own
+ * — only the country FIPS its shard is keyed by and the label's own
+ * anchor, which `nearestCity` snaps to a published record.
  */
 type Selection =
   | { kind: "country" | "state"; id: string; name: string }
@@ -119,12 +112,10 @@ type Selection =
 
 const NO_PIN: FeatureCollection = { type: "FeatureCollection", features: [] };
 
-/**
- * The city record a selection resolves to, or `null` when there is none yet
- * (still loading, the shard has nothing this country, or nothing is within
- * `CITY_SNAP_KM`). Pure and outside the component so `zoomToRegion` and the
- * panel's render can both call it without duplicating the match.
- */
+// The city record a selection resolves to, or null (still loading, the
+// shard has nothing this country, or nothing is within CITY_SNAP_KM).
+// Pure and outside the component so zoomToRegion and the panel's render
+// can both call it without duplicating the match.
 function cityRecordFor(
   selection: Selection | null,
   cityShard: { country: string; shard: CityShard } | null,
@@ -134,15 +125,10 @@ function cityRecordFor(
   return nearestCity(cityShard.shard, selection.at, CITY_SNAP_KM);
 }
 
-/**
- * Drop the selection triangle at a coordinate, or clear it with `null`.
- *
- * A one-feature GeoJSON source rather than a `Marker`: a marker is a DOM node
- * positioned on every frame of every drag, and this has to survive the same pans
- * and zooms the pins do. As a source it moves with the map for free, at the same
- * moment the pin under it moves — a marker lags it by a frame, which at the tip
- * of a triangle is visible as the point sliding off its own dot.
- */
+// Drop the selection triangle at a coordinate, or clear it with null. A
+// one-feature GeoJSON source rather than a Marker: a marker is a DOM node
+// positioned per drag frame and would lag the pin under it by a frame,
+// visible at the triangle's tip as sliding off its own dot.
 const showPin = (map: MapLibreMap | null, at: [number, number] | null) => {
   const source = map?.getSource<GeoJSONSource>(SELECTED_SOURCE_ID);
   if (!source) return;
@@ -159,130 +145,62 @@ const showPin = (map: MapLibreMap | null, at: [number, number] | null) => {
 export default function MapView() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
-  /**
-   * The same map as `mapRef`, in state, purely so the overlay re-renders once it
-   * exists. A ref is invisible to React, and `StoryBubbles` has to subscribe to
-   * the map's events the moment there is a map to subscribe to.
-   */
+  // The same map as mapRef, in state, purely so the overlay re-renders
+  // once it exists — a ref is invisible to React.
   const [ready, setReady] = useState<MapLibreMap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const provider = basemap().provider;
 
-  /**
-   * The selected story.
-   *
-   * **This is what the map popup used to be.** A click no longer anchors a box to
-   * the dot it hit; it opens the panel, which is the same slot §2.3's region
-   * panel uses. Holding the selection in React state rather than in a MapLibre
-   * `Popup` is what lets the panel be a component with a testable content model
-   * (`lib/story.ts`) instead of an HTML string.
-   *
-   * **`nearby` went with "Stories Nearby" (2026-08-16).** The card's list is
-   * "More Reporting" — other outlets on the same story — and that rides the
-   * story's own `more` field rather than a second `queryRenderedFeatures` over a
-   * radius. So the state, the radius query, `lib/nearby.ts` and its test are all
-   * deleted rather than left wired to nothing, the same treatment `samePlacement`
-   * and `anchorBubbles` got when they were orphaned.
-   */
+  // The selected story. A click opens this panel rather than anchoring a
+  // MapLibre Popup, which is what lets the panel be a component with a
+  // testable content model (lib/story.ts) instead of an HTML string.
   const [story, setStory] = useState<PanelStory | null>(null);
 
-  /**
-   * The open story's url, and the spider's redraw, both held for `markSelected`.
-   *
-   * The url is a ref rather than derived from `story` because the two readers of
-   * it — the feature state on the vector source and the leaf property on the
-   * overlay — are both written from map code, outside React's ordering. Reading
-   * it off state would paint the disc a render late, which is a frame in which
-   * the wedge is pointing at an orange circle.
-   *
-   * `redrawSpider` is the map effect handing out its own `drawSpider`, because a
-   * leaf's fill is data and data only changes when the overlay is rebuilt. A
-   * click does not move the camera, so nothing else would rebuild it until the
-   * reader's next gesture.
-   */
+  // The open story's url, and the spider's redraw, both held for
+  // markSelected. Refs, not state: both readers (feature state on the
+  // vector source, the leaf property on the overlay) are written from map
+  // code outside React's render ordering — reading off state would paint
+  // the disc a render late.
   const selectedUrl = useRef<string | null>(null);
   const redrawSpider = useRef<(() => void) | null>(null);
 
-  /**
-   * Mode 1's speech bubbles: the five stories the ring marks **on arrival**,
-   * with their headlines and the coordinate each tail has to land on.
-   *
-   * **Written exactly twice.** Once at the first `idle`, where the ranking is
-   * taken over the default world view and is therefore the top five stories in
-   * the world; and once, back to empty, on the reader's first camera move. The
-   * bubbles are the map's opening sentence, not a live caption that follows the
-   * reader — see `dismissBubbles`. The ring goes on re-ranking to the viewport
-   * at every idle, which is where "what is big here" keeps being answered.
-   */
+  // The opening-card speech bubbles: the five stories the ring marks on
+  // arrival. Written exactly twice — once at the first idle (top five of
+  // the default world view), once back to empty on the first camera move.
+  // See dismissBubbles and docs/DESIGN.md#the-selection-triangle-and-the-opening-card-bubbles.
   const [tops, setTops] = useState<TopStory[]>([]);
 
-  /*
-   * **The collapse tab is gone (2026-08-16), and so is the state behind it.**
-   *
-   * `PanelTab`, `collapsed` and `onToggleCollapse` existed to slide a full-height
-   * column off the left edge so the reader could see the map underneath it. Mode
-   * 2 made the panel a 324x489 card that covers about a twelfth of a desktop
-   * viewport — there is no longer anything worth reclaiming, and a control whose
-   * whole purpose was reclaiming it is a control that answers a question nobody
-   * has.
-   *
-   * **Dismissal did not go with it**, which is the part that would have been easy
-   * to lose: the tab and the × answered different questions, and only the tab's
-   * question expired. There are three ways to close a panel — `Escape` below, a
-   * click on the map background (the miss path in the click handler), and the ×
-   * in the card itself.
-   */
+  // There are three ways to close a panel: Escape below, a click on the
+  // map background (the miss path in the click handler), and the panel's
+  // own close button.
 
-  /**
-   * §2.3's region panel. `regionsUrl` is optional on the manifest — one
-   * published before 2026-08-13 has none — so `null` here means the panel is
-   * unavailable, not broken, and the map must go on working without it.
-   */
+  // The region panel. regionsUrl is optional on the manifest — a manifest
+  // published before the index existed has none — so null here means
+  // "unavailable," not broken.
   const [regionsUrl, setRegionsUrl] = useState<string | null>(null);
-  /** §4: absent or 1 means the region index predates `CONT:*` keys — a continent click must read `unavailable`, not a fetch that resolves to an honestly empty entry. */
+  /** Absent/1 means the region index predates `CONT:*` keys — a continent click must read `unavailable`, not an honestly-empty fetch result. */
   const [regionsVersion, setRegionsVersion] = useState<number>(1);
-  /** §4: URL prefix of the per-country city shards. `null` for a manifest published before city shards existed — the same optionality `regionsUrl` already has. */
+  /** URL prefix of the per-country city shards. `null` for a manifest published before city shards existed — same optionality as `regionsUrl`. */
   const [citiesBase, setCitiesBase] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [index, setIndex] = useState<RegionIndex | null>(null);
   const [indexFailed, setIndexFailed] = useState(false);
-  /**
-   * §4's city shard, kept alongside the country it was fetched for so a shard
-   * still in flight for a NEW selection is never read as the answer for it —
-   * two fast clicks in different countries must not show one country's
-   * cities under the other's heading for a frame.
-   */
+  // The city shard, kept alongside the country it was fetched for so a
+  // shard still in flight for a NEW selection is never read as its answer
+  // — two fast clicks in different countries must not show one country's
+  // cities under the other's heading for a frame.
   const [cityShard, setCityShard] = useState<{ country: string; shard: CityShard } | null>(null);
   const [cityShardFailed, setCityShardFailed] = useState(false);
 
-  /**
-   * Mode 3's "Zoom to Texas" table. Committed and static, so it has no
-   * `unavailable` state of its own: a failed fetch leaves this `null`, and the
-   * panel simply does not draw the button. There is nothing to tell the reader —
-   * the map is fine and the two other ways to reach a region (drag, wheel) are
-   * the ones they were already using.
-   */
+  // The "Zoom to Texas" table. Committed and static, so it has no
+  // `unavailable` state of its own — a failed fetch just leaves this null
+  // and the panel doesn't draw the button.
   const [bboxes, setBboxes] = useState<BboxTable | null>(null);
 
-  /**
-   * Clear the outline and the selection pin from outside the map effect — the
-   * panel's close button.
-   *
-   * The triangle is torn down here, alongside the outline, because the two are
-   * the same statement: "this is the thing you picked". Clearing one without the
-   * other leaves the map pointing at something the panel is no longer showing.
-   */
-  /**
-   * Move the `MARK` fill onto one story's disc, or take it off with `null`.
-   *
-   * **Both source layers**, for the reason `setTop` gives: the flag has to
-   * survive the z4 handover from the country floor to the stories layer without
-   * a repaint gap. The top-5 copy on top reads the same source and the same
-   * state, so it recolours with the original underneath it.
-   *
-   * The spider is redrawn last because a leaf carries the flag as data, not as
-   * state. Cheap: it is the same rebuild `drawSpider` does on every zoom step.
-   */
+  // Move the MARK fill onto one story's disc, or take it off with null.
+  // Both source layers, so the flag survives the z4 handover between the
+  // country floor and the stories layer without a repaint gap. Redraws
+  // the spider last, since a leaf carries the flag as data, not state.
   const markSelected = (url: string | null) => {
     const map = mapRef.current;
     const previous = selectedUrl.current;
@@ -304,6 +222,11 @@ export default function MapView() {
     redrawSpider.current?.();
   };
 
+  // Clear the outline and selection pin from outside the map effect — the
+  // panel's close button. The triangle is torn down alongside the
+  // outline since the two are the same statement ("this is what you
+  // picked"); clearing one without the other leaves the map pointing at
+  // something the panel no longer shows.
   const clearRegion = () => {
     setSelection(null);
     markSelected(null);
@@ -313,25 +236,6 @@ export default function MapView() {
     }
   };
 
-  /**
-   * Fly the camera to the selected region's bounds.
-   *
-   * **This is the zoom §2.3 deliberately took OUT of the label click, put back
-   * as a thing the reader asks for.** Clicking a label used to move the camera;
-   * that was removed because the panel answers the question directly and the
-   * move was one nobody requested. A button is the other half of that argument —
-   * the reader who does want to go there now has a way to say so, and the
-   * reader who does not is still left where they were.
-   *
-   * The panel stays open and the outline stays drawn: the region is still the
-   * selection, and closing the thing that explains where you just flew to would
-   * be a strange reward for pressing it.
-   *
-   * `fitBounds`, not `flyTo` with a computed zoom: the box is the datum, and
-   * asking MapLibre to fit it accounts for the viewport's aspect ratio, which a
-   * zoom number cannot. `MAX_FIT_ZOOM` is why a small region does not overshoot
-   * the archive's z12 ceiling.
-   */
  const BBOX_OVERRIDES: Record<string, [number, number, number, number]> = {
   FR: [-5.14, 41.33, 9.56, 51.10],    // Metropolitan France
   US: [-137.0, 24.39, -66.93, 49.38],  // Contiguous USA (Lower 48)
@@ -343,12 +247,9 @@ export default function MapView() {
 /** Degrees of padding around a city's coordinate — there is no polygon to fit, only a point. */
 const CITY_ZOOM_PAD = 0.12;
 
-/**
- * The box `zoomToRegion` would fit for the current selection, or `null` when
- * there is nothing to fit yet — which is also what gates the button's
- * presence (`onZoom={zoomTargetFor(...) ? zoomToRegion : null}` below), so
- * the two can never disagree about whether "Zoom to" does anything.
- */
+// The box zoomToRegion would fit for the current selection, or null —
+// which also gates the button's presence below, so the two can never
+// disagree about whether "Zoom to" does anything.
 const zoomTargetFor = (
   current: Selection | null,
 ): [number, number, number, number] | null => {
@@ -372,6 +273,12 @@ const zoomTargetFor = (
   }
 };
 
+// Fly the camera to the selected region's bounds — a button, brought back
+// as a thing the reader asks for after the label click's automatic zoom
+// was removed (the panel already answers the question directly). Panel
+// and outline stay in place. fitBounds, not flyTo with a computed zoom:
+// the box is the datum, and fitBounds accounts for viewport aspect ratio.
+// MAX_FIT_ZOOM keeps a small region from overshooting the archive's z12 ceiling.
 const zoomToRegion = () => {
   const map = mapRef.current;
   const box = zoomTargetFor(selection);
@@ -389,59 +296,36 @@ const zoomToRegion = () => {
   );
 };
 
-  /**
-   * Close the story panel and drop the container outline it drew.
-   *
-   * Shares `clearRegion`'s outline clearing rather than duplicating it: §2.2
-   * allows exactly one outline on the map, so "no story selected" and "no region
-   * selected" have to mean the same thing about the outline layers.
-   */
+  // Close the story panel and drop the container outline it drew. Shares
+  // clearRegion's outline clearing since only one outline may exist on the
+  // map — "no story selected" and "no region selected" mean the same
+  // thing about the outline layers.
   const clearStory = () => {
     setStory(null);
     clearRegion();
   };
 
-  /**
-   * Open a story: the panel, its neighbours, and the triangle on its coordinate.
-   *
-   * **One path for two gestures.** A pin click and a bubble click select the
-   * same thing and must leave the map in the same state — the risk of two copies
-   * is not that either is wrong today, but that one of them later grows a step
-   * the other does not and the map starts behaving differently depending on
-   * which half of the same mark the reader hit.
-   *
-   * `at` is where the triangle goes. It took a second argument, the screen point
-   * the neighbours were measured from, until "Stories Nearby" was replaced by
-   * "More Reporting" on 2026-08-16 — the card's list is a property of the story
-   * rather than of where on the map it was clicked, so there is nothing left to
-   * measure a radius from.
-   */
+  // Open a story: the panel, its neighbours, and the triangle on its
+  // coordinate. One path for two gestures (pin click and bubble click),
+  // so the map can't grow a difference between them over time. `at` is
+  // where the triangle goes.
   const selectStory = (selected: PanelStory, at: [number, number]) => {
     const map = mapRef.current;
     if (!map) return;
 
-    /**
-     * **Every selection starts from a clean slate**, which settles the one
-     * question §2.3 left open: a container click clears a region lock. There is
-     * one red outline and one panel, and a container outline drawn while a
-     * region outline is still up would leave the user unable to say which of the
-     * two the map is claiming is selected.
-     */
+    // Every selection starts from a clean slate — a container click also
+    // clears a region lock, since only one outline and one panel may
+    // exist at a time.
     clearRegion();
     showPin(map, at);
-    // After `clearRegion`, which has just taken the fill off whatever was open.
+    // After clearRegion, which has just taken the fill off whatever was open.
     markSelected(selected.url);
 
-    // §2.6 (link-out only) and §5.2 decision 3 (the pin half of the
-    // geotag-confidence treatment) both live in `lib/story.ts`, where they are
-    // tested rather than reviewed.
     setStory(selected);
   };
 
-  /**
-   * The index, fetched **lazily on first open**: ~151 KB gzipped, and nothing
-   * needs it until a label is clicked (§1 — this audience is on a phone).
-   */
+  // The index, fetched lazily on first open — nothing needs it until a
+  // label is clicked. See docs/DESIGN.md#regions.
   useEffect(() => {
     if (!selection || !regionsUrl || index) return;
     let cancelled = false;
@@ -461,15 +345,10 @@ const zoomToRegion = () => {
     };
   }, [selection, regionsUrl, index]);
 
-  /**
-   * The bbox table, on the same trigger and for the same reason: ~140 KB that
-   * nothing needs until a region panel is open.
-   *
-   * A separate effect from the index above rather than a second `then` inside
-   * it, because the two are independent — the index comes from the manifest and
-   * can be unavailable; this comes from the deploy and cannot. Chaining them
-   * would make a missing `regionsUrl` also cost the reader the zoom button.
-   */
+  // The bbox table, on the same trigger and for the same reason. A
+  // separate effect rather than a second `then` inside the index one:
+  // they're independent (the index can be unavailable, this cannot), and
+  // chaining would make a missing regionsUrl also cost the zoom button.
   useEffect(() => {
     if (!selection || bboxes) return;
     let cancelled = false;
@@ -487,14 +366,10 @@ const zoomToRegion = () => {
     };
   }, [selection, bboxes]);
 
-  /**
-   * §4's city shard, fetched lazily per country on the first city click in it.
-   *
-   * Skips the fetch when the cache already holds that country's shard —
-   * `loadCityShard` itself memoizes per URL, so this guard is purely to avoid
-   * re-running the effect body on every unrelated selection change, not to
-   * avoid a real network request.
-   */
+  // The city shard, fetched lazily per country on the first city click in
+  // it. Skips the fetch when the cache already holds that country's shard
+  // — loadCityShard itself memoizes per URL, so this guard just avoids
+  // re-running the effect body on unrelated selection changes.
   useEffect(() => {
     if (!selection || selection.kind !== "city" || !citiesBase) return;
     if (cityShard?.country === selection.country) return;
@@ -514,20 +389,10 @@ const zoomToRegion = () => {
     };
   }, [selection, citiesBase, cityShard]);
 
-  /**
-   * `Escape` closes whichever panel is open.
-   *
-   * **One of the three dismissals, and the one that had never been wired.** The
-   * card, the click-away and this were all listed together as the affordances
-   * that survive the collapse tab's deletion; the other two already existed, and
-   * this did not — it was assumed. Keyboard dismissal is also the only one of the
-   * three a reader who never touches the mouse has.
-   *
-   * Bound only while something is open, so the map does not carry a global
-   * keydown listener to do nothing with. `story` wins over `selection` in the
-   * same order the render does — §2.3 allows one panel, and a story click clears
-   * the region, so the two can only disagree for the frame in between.
-   */
+  // Escape closes whichever panel is open — the one dismissal without a
+  // mouse. Bound only while something is open, so the map doesn't carry a
+  // global keydown listener to do nothing with. `story` wins over
+  // `selection` in the same order the render does.
   useEffect(() => {
     if (!story && !selection) return;
 
@@ -558,16 +423,15 @@ const zoomToRegion = () => {
     const map = new MapLibreMap({
       container: container.current,
       style: basemap().styleUrl,
-      // z2, forced by MapTiler's country labels not existing below it — see
-      // lib/basemap.ts. §2.3's gesture has to be clickable on arrival.
+      // z2, forced by MapTiler's country labels not existing below it —
+      // see lib/basemap.ts. The label click gesture needs one clickable on arrival.
       center: DEFAULT_CENTER,
       zoom: DEFAULT_ZOOM,
-      // §3.1: 2D Mercator, no globe projection.
       renderWorldCopies: true,
-      // ...and no 3D either. NavigationControl ships with showCompass:false, so
-      // a camera that had been tilted or spun would have no control to put it
-      // back north-up. Right-drag rotate and ctrl/two-finger pitch are off here;
-      // the pinch and keyboard paths below have no constructor flag.
+      // No 3D: NavigationControl ships with showCompass:false, so a
+      // tilted/spun camera would have no control to put it back
+      // north-up. Right-drag rotate and pitch are off here; pinch and
+      // keyboard rotation are disabled just below (no constructor flag).
       dragRotate: false,
       pitchWithRotate: false,
       touchPitch: false,
@@ -579,34 +443,24 @@ const zoomToRegion = () => {
     map.touchZoomRotate.disableRotation();
     map.keyboard.disableRotation();
 
-    // Bottom-right (2026-08-14), not top-right: the freshness stamp took that
-    // corner when the masthead was removed, and the two would overlap there.
+    // Bottom-right, not top-right: the freshness stamp took that corner
+    // when the masthead was removed, and the two would overlap there.
     map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
     mapRef.current = map;
     setReady(map);
 
-    /**
-     * Dev-only test seam. §11 is this project's expensive lesson: it has shipped
-     * green and rendered nothing, twice, and both times the missing tool was a
-     * way to ask the running map what it actually did. `queryRenderedFeatures`
-     * answers that in one line; guessing pixel coordinates does not.
-     *
-     * Stripped from production builds by the NODE_ENV check, which Next inlines
-     * as a literal at build time, so this branch is not merely unreachable in
-     * production — it is not in the bundle.
-     */
+    // Dev-only test seam: this project has shipped green and rendered
+    // nothing, more than once, and the fix each time was a way to ask the
+    // running map what it actually did rather than guess pixel
+    // coordinates. Stripped from production by the NODE_ENV check, which
+    // Next inlines at build time — not in the bundle, not just unreachable.
     if (process.env.NODE_ENV !== "production") {
       (window as unknown as { __sonderMap?: unknown }).__sonderMap = map;
     }
 
-    /**
-     * Two independent things have to finish before a source can be added: the
-     * manifest fetch and the map's own `load`. Either can win. Awaiting both as
-     * promises is the only ordering that is correct in both directions — an
-     * `map.on("load")` handler that awaits inside itself would work too, but a
-     * manifest that resolves first would then sit idle behind a network round
-     * trip it already paid for.
-     */
+    // Two independent things must finish before a source can be added:
+    // the manifest fetch and the map's own load. Awaiting both as
+    // promises is correct in both win orders.
     const loaded = new Promise<void>((resolve) => {
       map.on("load", () => resolve());
     });
@@ -622,41 +476,31 @@ const zoomToRegion = () => {
         map.addSource(SOURCE_ID, {
           type: "vector",
           url: `pmtiles://${manifest.url}`,
-          /**
-           * Gives every story feature a stable id, which is what makes
-           * `setFeatureState` — and therefore the top-5 highlight — possible at
-           * all. Tippecanoe writes no feature ids, and without one MapLibre has
-           * nothing to key state by.
-           *
-           * `url` is the only property unique per group (`worker/tiles.ts` does
-           * not serialise the group id), and it is promoted for BOTH source
-           * layers so a story keeps one identity across §2.4's overlap.
-           */
+          // Gives every story feature a stable id, which is what makes
+          // setFeatureState (and the top-5 highlight) possible at all —
+          // tippecanoe writes no feature ids. `url` is the only property
+          // unique per group, promoted for BOTH source layers so a story
+          // keeps one identity across the country-floor overlap.
           promoteId: {
             [STORIES_SOURCE_LAYER]: "url",
             [COUNTRY_SOURCE_LAYER]: "url",
           },
         });
 
-        // §2.2's outline archive is static and committed, so it is addressed
-        // relative to the origin rather than through the manifest.
+        // The outline archive is static and committed, addressed relative
+        // to the origin rather than through the manifest.
         map.addSource(BOUNDARIES_SOURCE_ID, {
           type: "vector",
           url: `pmtiles://${new URL(BOUNDARIES_ARCHIVE, window.location.href).href}`,
         });
 
-        /**
-         * The spider overlay: legs and leaves, computed on the client from what
-         * is rendered. It cannot come from the archive — a leaf's position is a
-         * pixel offset from its anchor, so it depends on the current camera.
-         */
+        // The spider overlay: legs and leaves, computed client-side — a
+        // leaf's position is a pixel offset from its anchor, so it can't
+        // come from the archive.
         map.addSource(SPIDER_SOURCE_ID, { type: "geojson", data: EMPTY_SPIDER });
 
-        /**
-         * The selection triangle: at most one feature, empty until something is
-         * clicked. Its image is generated rather than loaded — see `lib/pin.ts`
-         * for why this repo has no sprite.
-         */
+        // The selection triangle: at most one feature, empty until
+        // clicked. Image is generated, not loaded — see lib/pin.ts.
         map.addSource(SELECTED_SOURCE_ID, { type: "geojson", data: NO_PIN });
         map.addImage(PIN_IMAGE_ID, trianglePin(), { pixelRatio: PIN_PIXEL_RATIO });
 
@@ -664,34 +508,29 @@ const zoomToRegion = () => {
         setRegionsVersion(manifest.regionsVersion ?? 1);
         setCitiesBase(manifest.citiesBase ?? null);
 
-        // Outlines go under the stories, which go under the labels. Order is
-        // asserted in layers.test.ts. The hit targets paint nothing, and go
-        // under everything (§2.3 step 2).
+        // Outlines under the stories, which are under the labels — order
+        // asserted in layers.test.ts. Hit targets paint nothing and go
+        // under everything.
         for (const layer of hitLayers()) map.addLayer(layer);
         for (const layer of boundaryLayers()) map.addLayer(layer);
 
-        /**
-         * The pins go on top; the headlines go **below the basemap's place
-         * labels**, so a country or state name always wins the symbol collision
-         * against a headline and stays clickable for §2.3. Measured: appending
-         * the headline layer deleted two thirds of the state labels over the US
-         * at z5 — see `firstPlaceLabelLayerId`.
-         */
+        // Pins on top; headlines below the basemap's place labels, so a
+        // country/state name always wins symbol collision against a
+        // headline and stays clickable. See firstPlaceLabelLayerId and
+        // docs/DESIGN.md#regions.
         const [countryPins, storyPins, headlines] = storyLayers();
-        // The legs go UNDER the pins — a leg is a pointer, and one drawn across
-        // a neighbouring story's pin would hide data behind decoration. The
-        // leaves go over them, because a leaf IS data and it must win the click.
+        // Legs go UNDER the pins (a pointer shouldn't hide data); leaves
+        // go OVER them (a leaf IS data and must win the click).
         const [spiderLegs, spiderLeaves] = spiderLayers();
         map.addLayer(spiderLegs);
         map.addLayer(countryPins);
         map.addLayer(storyPins);
         map.addLayer(spiderLeaves);
-        // The five best stories, drawn again above every other disc. See
-        // `topPinLayer` — draw order inside a circle layer is tile order, and
-        // the highlight is feature state, which a `circle-sort-key` cannot read.
+        // The five best stories, drawn again above every other disc — see
+        // topPinLayer for why (circle-sort-key can't read feature state).
         map.addLayer(topPinLayer());
-        // Above every disc, including the top-5 copy: the triangle marks the one
-        // thing the reader picked, so nothing may be drawn over it.
+        // Above every disc, including the top-5 copy: nothing may be
+        // drawn over the triangle marking what the reader picked.
         map.addLayer(selectedPinLayer());
         map.addLayer(headlines, firstPlaceLabelLayerId(map.getStyle().layers));
 
@@ -699,21 +538,16 @@ const zoomToRegion = () => {
         /* The top-5-on-screen highlight                                       */
         /* ------------------------------------------------------------------ */
 
-        /**
-         * The keys currently carrying the flag. Held here rather than read back
-         * off the map because `removeFeatureState` needs to know what to clear,
-         * and MapLibre offers no way to enumerate the states it holds.
-         */
+        // The keys currently carrying the flag. Held here since
+        // removeFeatureState needs to know what to clear, and MapLibre
+        // offers no way to enumerate the states it holds.
         let marked: string[] = [];
 
-        /**
-         * Those of `marked` that are actually flagged on the vector source —
-         * every one that a spider has NOT displaced. A displaced story is drawn
-         * twice: covered at its anchor, and again as a leaf. Flagging it would
-         * scale the covered copy by `TOP_SCALE` and push it out from behind the
-         * pin on top of it, which is the overlap this split exists to remove.
-         * Its highlight travels on the leaf instead, as a property.
-         */
+        // Those of `marked` actually flagged on the vector source — every
+        // one a spider has NOT displaced. A displaced story is drawn
+        // twice (covered at its anchor, again as a leaf); flagging the
+        // covered copy would let its ring poke out from behind the pin on
+        // top of it. Its highlight travels on the leaf instead, as a property.
         let flagged: string[] = [];
         let displaced = new Set<string>();
 
@@ -727,17 +561,9 @@ const zoomToRegion = () => {
           }
         };
 
-        /**
-         * **On `idle`, not on `moveend`.** "Top 5 on screen" is a question about
-         * what is *rendered*, and a move ends before the tiles it uncovered have
-         * loaded — ranking there would score the new viewport against the old
-         * viewport's features and then never correct itself. `idle` fires once
-         * the map has finished loading and drawing everything, which is the
-         * first moment the query can answer truthfully.
-         *
-         * Writing feature state repaints, which produces another `idle`; the
-         * `sameKeys` guard is what stops that from being a loop.
-         */
+        // Applies the top-5 flags computed on `idle` (see `refresh` below
+        // for why idle, not moveend). sameKeys stops the resulting
+        // repaint from looping back into another idle.
         const applyTop = () => {
           const visible = marked.filter((key) => !displaced.has(key));
           if (sameKeys(visible, flagged)) return;
@@ -745,15 +571,13 @@ const zoomToRegion = () => {
           for (const key of flagged) if (!visible.includes(key)) setTop(key, false);
           for (const key of visible) setTop(key, true);
           flagged = visible;
-          // Mode 1: a bubbled headline replaces the 11px one under the pin. Keyed
-          // on the bubbles themselves rather than on `marked`, because the two
-          // part company the moment the ring re-ranks and the bubbles do not —
-          // and because `dismissBubbles` empties this list, which is what gives
-          // the five their small labels back.
+          // A bubbled headline replaces the 11px label under the pin.
+          // Keyed on the bubbles themselves, not `marked` — the two part
+          // company once the ring re-ranks, and dismissBubbles emptying
+          // this list is what gives the five their small labels back.
           map.setFilter(LABELS_LAYER_ID, bubbleLabelFilter(bubbles.map((bubble) => bubble.story.url)));
-          // The layer that draws them above every other disc. Its filter and the
-          // feature state are set together, always, so the copy on top can never
-          // be painted as an ordinary pin or an ordinary pin painted as a copy.
+          // Filter and feature state are set together, always, so the
+          // top-5 copy layer and an ordinary pin can never swap places.
           map.setFilter(TOP_LAYER_ID, topFilter(visible));
         };
 
@@ -761,44 +585,31 @@ const zoomToRegion = () => {
         /* Spiderfy                                                            */
         /* ------------------------------------------------------------------ */
 
-        /**
-         * The stacks found at the last `idle`. Membership changes only when the
-         * rendered features change; POSITIONS change on every camera move,
-         * because a leaf is a pixel offset. Keeping the two apart is what lets
-         * the expensive half run on idle and the cheap half run on every frame.
-         */
+        // The stacks found at the last idle. Membership changes only when
+        // rendered features change; positions change on every camera move
+        // (a leaf is a pixel offset). Keeping the two apart lets the
+        // expensive half run on idle and the cheap half run every frame.
         let stacks: Stack[] = [];
 
-        /**
-         * The records `StoryBubbles` is rendering, held here as well as in React
-         * state because `applyTop` reads them to decide which small labels to
-         * suppress, and it runs on every idle rather than on a render.
-         */
+        // The records StoryBubbles is rendering, held here too since
+        // applyTop reads them (on every idle, not a render) to decide
+        // which small labels to suppress.
         let bubbles: TopStory[] = [];
 
-        /** Has the opening ranking been taken? It is taken once; see `refresh`. */
+        // Has the opening ranking been taken? Taken once; see `refresh`.
         let bubblesCaptured = false;
 
-        /**
-         * Take the bubbles down, permanently, on the reader's first camera move.
-         *
-         * **`movestart`, and any move counts** — a drag, a wheel, a keyboard
-         * nudge, or a `flyTo` from the search bar. The five headlines answer
-         * "what is happening in the world" for the view the reader was handed;
-         * the instant they choose a different view, that sentence is about
-         * somewhere they are no longer looking, and the ring is already there to
-         * mark what matters where they went.
-         *
-         * Armed only once the capture has happened, so a camera animation during
-         * startup cannot dismiss bubbles that were never drawn.
-         */
+        // Take the bubbles down permanently on the reader's first camera
+        // move (movestart — drag, wheel, keyboard, or a search flyTo all
+        // count). Armed only after the capture, so a startup camera
+        // animation can't dismiss bubbles that were never drawn.
         const dismissBubbles = () => {
           if (!bubblesCaptured || !bubbles.length) return;
           bubbles = [];
           setTops(bubbles);
-          // Directly rather than through `applyTop`: its `sameKeys` guard returns
-          // early whenever the ranking has not changed, and the five have to get
-          // their 11px labels back on this move whether or not it re-ranks.
+          // Directly, not through applyTop — its sameKeys guard would
+          // skip this whenever the ranking hasn't changed, but the five
+          // need their labels back on this move regardless.
           map.setFilter(LABELS_LAYER_ID, bubbleLabelFilter([]));
           map.off("movestart", dismissBubbles);
         };
@@ -822,18 +633,11 @@ const zoomToRegion = () => {
         // moves no camera, so nothing else here would rebuild the overlay.
         redrawSpider.current = drawSpider;
 
-        /**
-         * **On `idle`, not on `moveend`.** Both halves of this ask what is
-         * *rendered*, and a move ends before the tiles it uncovered have loaded —
-         * ranking or grouping there scores the new viewport against the old
-         * viewport's features and never corrects itself. `idle` fires once the
-         * map has finished loading and drawing, which is the first moment the
-         * query can answer truthfully.
-         *
-         * Writing feature state or overlay data repaints, which produces another
-         * `idle`; the `sameKeys` and `sameStacks` guards are what stop that from
-         * being a loop.
-         */
+        // On idle, not moveend: a move ends before the tiles it uncovered
+        // have loaded, so ranking there would score the new viewport
+        // against the old viewport's features and never correct itself.
+        // idle is the first moment the query can answer truthfully.
+        // sameKeys/sameStacks stop the resulting repaint from looping.
         const refresh = () => {
           const layers = [STORIES_LAYER_ID, COUNTRY_LAYER_ID].filter((id) => map.getLayer(id));
           if (!layers.length) return;
@@ -848,17 +652,13 @@ const zoomToRegion = () => {
            * Mode 1's bubbles, from the same query and the same ranking — the
            * headline and the coordinate for each of `marked`, best first.
            *
-           * **Taken once, at the first idle, and never recomputed.** That idle is
-           * the default world view, so these five are the top five stories in the
-           * world rather than the top five of whatever the reader is looking at;
-           * `dismissBubbles` retires them on the first camera move. The ring,
-           * which keeps recomputing below, is the part of this that stays live.
-           *
-           * Deduplicated by url on the way in, because `renderWorldCopies` draws
-           * a story once per visible copy of the world and §2.4 draws it again
-           * in the country floor. Which copy wins does not matter:
-           * `StoryBubbles` normalises the longitude to the copy nearest the
-           * camera before it projects.
+           * Taken once, at the first idle, over the default world view —
+           * these are the top five in the world, not wherever the reader
+           * is looking. dismissBubbles retires them on the first camera
+           * move. Deduplicated by url, since renderWorldCopies and the
+           * country floor can each draw a story more than once;
+           * StoryBubbles normalises longitude to the nearest copy before
+           * it projects, so which copy wins here doesn't matter.
            */
           if (!bubblesCaptured) {
             const found = new Map<string, TopStory>();
@@ -886,9 +686,9 @@ const zoomToRegion = () => {
             }
           }
 
-          // The stacks are read BEFORE the highlight is applied: which stories a
-          // spider has displaced decides which of the five may be flagged on the
-          // vector source at all.
+          // Stacks are read BEFORE the highlight is applied: which
+          // stories a spider has displaced decides which of the five may
+          // be flagged on the vector source at all.
           const found = map.getZoom() < SPIDERFY_ZOOM ? [] : stacksFrom(features);
           if (!sameStacks(found, stacks)) {
             stacks = found;
@@ -896,23 +696,17 @@ const zoomToRegion = () => {
           }
 
           applyTop();
-          // Membership may be unchanged while the top-5 flags on the leaves are
-          // not, and those live in the overlay's data rather than in state.
+          // Membership may be unchanged while the leaves' top-5 flags
+          // (overlay data, not state) are not.
           drawSpider();
         };
 
         map.on("idle", refresh);
-        /**
-         * **`zoom`, not `move`.** A leaf's position is its anchor plus a pixel
-         * offset, and under a pan the anchor and the leaf translate together —
-         * the geography does not need recomputing and the spider is already
-         * correct. Only a zoom changes what a pixel is worth. Rebuilding on
-         * `move` instead would hand the source worker a fresh FeatureCollection
-         * on every frame of every drag, to redraw the identical picture.
-         */
+        // zoom, not move: a leaf is its anchor plus a pixel offset, and a
+        // pan translates both together, so only a zoom needs a rebuild.
         map.on("zoom", drawSpider);
 
-        /** §2.2: one outline at a time, and none by default. */
+        // One outline at a time, and none by default.
         const clearOutline = () => {
           for (const id of [COUNTRY_OUTLINE_ID, REGION_OUTLINE_ID]) {
             map.setFilter(id, MATCH_NOTHING);
@@ -920,28 +714,16 @@ const zoomToRegion = () => {
         };
 
         /**
-         * §2.3's label gesture: a click that hit no pin may still have hit a
-         * place label — country, state, and as of §4, city or continent.
-         *
-         * **The label gives the level; our own polygons give the id, for
-         * country and state.** State labels carry no region code on either
-         * provider, and joining "California" to `USCA` by name is §3.4's join
-         * trap wearing a new hat (§2.3). So the id comes from hit-testing
-         * `boundaries.pmtiles`, which makes it by construction an id the
-         * outline archive can draw.
-         *
-         * **City and continent have no polygon to hit-test at all** — neither
-         * is in `HIT_LAYER_FOR` (`lib/layers.ts`). A city resolves by finding
-         * its country (from the label's own `iso_a2`, falling back to the
-         * country hit-test) and snapping to the nearest record in that
-         * country's published shard (`lib/cities.ts`) once it loads. A
-         * continent resolves through the closed name table
-         * (`lib/continents.ts`) — nothing to hit-test, nothing to fetch.
-         *
-         * The camera does not move. That is the deliberate change from the
-         * original §2.3 — the panel surfaces the region's stories directly, so
-         * the zoom stopped being the mechanism and became a move the user did
-         * not ask for.
+         * The label gesture: a click that hit no pin may still have hit a
+         * place label. The label gives the level; our own polygon hit-test
+         * gives the id, for country and state — no name matching, ever
+         * (see docs/DESIGN.md#the-label-based-gesture-and-no-name-matching-ever).
+         * City and continent have no polygon to hit-test: a city resolves
+         * by finding its country then snapping to the nearest record in
+         * that country's shard (`lib/cities.ts`); a continent resolves
+         * through the closed name table (`lib/continents.ts`). The camera
+         * does not move — the panel surfaces the region's stories
+         * directly, so a zoom here would be a move the reader didn't ask for.
          */
         const selectRegionAt = (event: MapMouseEvent) => {
           const label = firstLabel(map.queryRenderedFeatures(event.point));
@@ -965,8 +747,8 @@ const zoomToRegion = () => {
           if (label.level === "continent") {
             const id = continentIdFor(labelName(label.feature));
             if (!id) return;
-            // No outline (§4: ~50 red country outlines is a fill, not a
-            // click-reveal), just the triangle marking what was clicked.
+            // No outline (~50 red country outlines would be a fill, not
+            // a click-reveal) — just the triangle marking what was clicked.
             showPin(map, anchor ?? fallback);
             setSelection({ kind: "continent", id, name: labelName(label.feature) });
             return;
@@ -1020,26 +802,17 @@ const zoomToRegion = () => {
             return;
           }
 
-          // No polygon under the label: Natural Earth and the basemap disagree
-          // about what exists there. Draw nothing rather than guess — `IN25`
-          // has no outline for the same reason (§4).
+          // No polygon under the label: Natural Earth and the basemap
+          // disagree about what exists there. Draw nothing rather than guess.
         };
 
         /**
-         * **One handler for the whole map, not one per layer.**
-         *
-         * The per-layer form registers the same handler twice over two layers
-         * that overlap by design (§2.4), so a click where both match runs it
-         * twice: two popups, and two competing writes to the outline filter.
-         * Hit-testing once gives a single deterministic answer, in the layer
-         * priority order `CLICKABLE_LAYER_IDS` states.
-         *
-         * It also gives the map a dismiss: clicking empty ocean closes the panel
-         * and clears the outline, which §2.2's "click-reveal only" implies.
-         *
-         * Note that the top-most feature wins, and at world zoom that is often a
-         * PIN sitting over a container — clicking "Texas" where a Bell County
-         * pin overlaps it selects the pin, and correctly draws no outline.
+         * One handler for the whole map, not one per layer — the
+         * per-layer form would run twice on a click where the overlapping
+         * stories/country-floor layers both match. Hit-testing once gives
+         * a single deterministic answer in `CLICKABLE_LAYER_IDS` priority
+         * order, and also gives the map a dismiss: clicking empty ocean
+         * closes the panel and clears the outline.
          */
         map.on("click", (event: MapMouseEvent) => {
           const layers = CLICKABLE_LAYER_IDS.filter((id) => map.getLayer(id));
@@ -1059,25 +832,19 @@ const zoomToRegion = () => {
           const selected = panelStory(feature.properties);
           if (!selected) return;
 
-          // §2.2: "Clicking any container story outlines its container in red."
-          // A PIN gets none — it is at an exact place, and drawing a region
-          // around it would claim the opposite.
-          // Dead while containers are filtered off the map (`NOT_CONTAINER`) —
-          // no click can produce a feature this accepts. Kept wired because the
-          // "somewhere in" stories are moving into the region panel and will
-          // need the same join to draw their outline from there.
+          // A container story outlines its container in red; a PIN gets
+          // none. Dead while containers are filtered off the map
+          // (NOT_CONTAINER), but kept wired for when "somewhere in"
+          // stories move into the region panel and need the same join.
           const outline = outlineFor(feature.properties);
           if (outline) {
             map.setFilter(outline.layerId, ["==", ["get", "id"], outline.id]);
           }
 
-          /**
-           * The triangle goes on the FEATURE's coordinate, not the click point,
-           * so its tip meets the centre of the circle the reader aimed at. On a
-           * spider leaf that is the displaced position — which is correct: the
-           * leaf is where the story is drawn, and the tip has to agree with what
-           * is on screen rather than with where the story really is.
-           */
+          // The triangle goes on the FEATURE's coordinate, not the click
+          // point, so its tip meets the centre of the circle the reader
+          // aimed at — on a spider leaf that's the displaced position,
+          // which is correct: the tip must agree with what's on screen.
           selectStory(
             selected,
             feature.geometry.type === "Point"
@@ -1097,9 +864,9 @@ const zoomToRegion = () => {
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
-        // §7 critical gap 3. A manifest that will not load is the one failure
-        // where the map is otherwise healthy — basemap, controls, no map error
-        // event — so nothing else would ever say why the world is empty.
+        // A manifest that won't load is the one failure where the map is
+        // otherwise healthy (basemap, controls, no map error event), so
+        // nothing else would ever say why the world is empty.
         setError(
           `Story data unavailable — could not read the manifest. (${
             cause instanceof Error ? cause.message : String(cause)
@@ -1126,33 +893,21 @@ const zoomToRegion = () => {
     };
   }, []);
 
-  /**
-   * `unavailable` is one state for two causes on purpose: a manifest with no
-   * `regionsUrl` (published before the index existed) and an index that would
-   * not load are the same thing from the reader's side — no list, working map.
-   */
+  // `unavailable` is one state for two causes on purpose: no regionsUrl
+  // and a failed index load are the same thing from the reader's side —
+  // no list, working map.
   const panelStatus = !regionsUrl || indexFailed ? "unavailable" : index ? "ready" : "loading";
 
   /**
-   * What `RegionPanel` gets, branched by `selection.kind`.
-   *
-   * Country and state are untouched — `entryFor(index, id)` and the status
-   * derived above, exactly as before §4.
-   *
-   * Continent reads the SAME index under its `CONT:XX` key
-   * (`worker/regions.ts`), but a manifest older than `regionsVersion: 2` has
-   * never written one — its `entryFor` would resolve to an honestly empty
-   * entry, which here would be a LIE ("no stories in Europe today") rather
-   * than the truth ("this run predates continents"). `regionsVersion` is what
-   * tells the two apart.
-   *
-   * City has no `regionId` and no outline; its entry is the matched
-   * `CityRecord` reshaped to `RegionEntry`'s three fields, its own loading
-   * state tracks the shard fetch rather than the region index, and its
-   * heading is the MATCHED record's name — never the clicked label's own
-   * text, because two cities can sit inside each other's snap radius
-   * (`lib/cities.ts`) and showing one's rows under the other's name would be
-   * a silent mislabel, the one failure mode this project is built to avoid.
+   * What `RegionPanel` gets, branched by `selection.kind`. Continent reads
+   * the same index under its `CONT:XX` key, but a manifest older than
+   * `regionsVersion: 2` never wrote one — without the version check,
+   * `entryFor` resolving to an honestly-empty entry would read as "no
+   * stories in Europe today" instead of "this run predates continents."
+   * City has no `regionId`/outline; its heading is the MATCHED record's
+   * name, never the clicked label's own text, since two cities can sit
+   * inside each other's snap radius (`lib/cities.ts`) and showing one's
+   * rows under the other's name would be a silent mislabel.
    */
   const cityRecord = cityRecordFor(selection, cityShard);
   const zoomBox = zoomTargetFor(selection);
@@ -1193,10 +948,9 @@ const zoomToRegion = () => {
       <div ref={container} className="map" />
 
       {/*
-        Mode 1: the top five headlines, in bubbles pointing at their own pins.
-        Outside the map container rather than inside it, so MapLibre never sees
-        the nodes — it owns its container's children, and a React subtree in
-        there is a subtree two libraries both believe they are managing.
+        The top five headlines, in bubbles pointing at their own pins.
+        Outside the map container so MapLibre never sees the nodes — it
+        owns its container's children.
       */}
       <StoryBubbles
         map={ready}
@@ -1206,10 +960,9 @@ const zoomToRegion = () => {
       />
 
       {/*
-        The story panel and the region panel share one slot, and the click
-        handler guarantees at most one selection at a time — a story click clears
-        the region and a region click can only happen where no story was hit.
-        The story is rendered first so that guarantee is visible here too.
+        The story panel and region panel share one slot — a story click
+        clears the region, so at most one is ever selected. Story renders
+        first, making that guarantee visible here too.
       */}
       {story && <StoryPanel story={story} onClose={clearStory} />}
 
