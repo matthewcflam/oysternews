@@ -1,73 +1,36 @@
 /**
- * Per-tile top-K density budget. PURE (HANDOFF.md §3.3, §2.4).
+ * Per-tile top-K density budget. For each tile at each zoom, keep the top K
+ * groups by the ranking comparator; the rest get a deeper `minzoom` and
+ * reappear on zoom-in — cap and floor at once. Selection is local, so a
+ * crowded US tile never buries an unrelated story elsewhere.
  *
- * For each tile at each zoom, keep the top K groups inside it by the §2.5
- * comparator; the rest get a deeper `minzoom` and reappear on zoom-in.
- *
- * This is the cap AND the floor. A sparse tile keeps everything it has, so the
- * map is never empty; a crowded tile defers its weakest, so it never turns to
- * mush. Because selection is local, US stories compete only with other US
- * stories — the Strait of Hormuz is never buried by an American election.
- *
- * Two traps, both named in §5 as bugs already paid for:
- *
- * 1. **Iterate features, not tiles.** There are 16.7M tiles at z12 and ~40k
- *    features. Walking the tile space is not slow, it is impossible. Every loop
- *    here is over features, with tiles as Map keys that only exist when occupied.
- *
- * 2. **`minzoom` must be monotonic upward** — "a feature can win its z5 tile and
- *    lose its z6 tile". The fix is structural rather than a post-hoc repair: a
- *    group assigned at z KEEPS OCCUPYING ITS TILE'S BUDGET at every deeper zoom,
- *    and each zoom only fills the slots left over. A group can therefore never
- *    be selected at z and missing at z+1, because nothing at z+1 can evict it.
- *
- * Measured (§2.4, FINDINGS §12): the budget binds in four countries and is a
- * no-op in ninety. Of 124 countries with news in a 24-hour window, four clear
- * 1,000 stories/day (US 11,800, India 4,900, UK 2,700, Canada 1,750), 67 sit
- * between 10 and 99, and 28 get fewer than ten. Tune K against the US and India;
- * everywhere else the floor is what does the work.
+ * Two structural invariants: (1) iterate features, not tiles — there are
+ * 16.7M tiles at z12 and ~40k features, so tiles exist only as Map keys
+ * when occupied; (2) `minzoom` must be monotonic upward (a group assigned
+ * at z keeps occupying its tile's budget at every deeper zoom, so nothing
+ * at z+1 can evict it) — this is enforced structurally in `assignMinzoom`
+ * below, not patched after the fact. Measured binding pattern and full
+ * rationale: docs/DESIGN.md#tiles-budget.
  */
 
 import { SPIDERFY_ZOOM, coordKey } from "../lib/spiderfy.ts";
 import type { StoryGroup } from "../lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
-/**
- * §2.4: K ~ 12-20, tuned on real data. A phone shows 2-4 tiles, so roughly 30-60
- * pins — which is §9's density target.
- */
+/** K ~ 12-20, tuned on real data. A phone shows 2-4 tiles, so roughly 30-60 pins. See docs/DESIGN.md#tiles-budget and #open-items (phone profile never measured on real hardware). */
 export const DEFAULT_K = 15;
 
-/**
- * The deepest zoom the budget assigns, matching tippecanoe's `-z12` (§3.1).
- *
- * §6 decision 1 caps *data* zoom at z10, meaning the map stops being useful past
- * it because GDELT gives city centroids and every Chicago story shares one
- * coordinate. The budget still runs to 12, because those two levels are where a
- * deferred story gets its last chance to "reappear on zoom-in" (§2.4).
- */
+/** Deepest zoom the budget assigns, matching tippecanoe's `-z12`. Data zoom is capped at z10 for usefulness (GDELT gives city centroids), but the budget runs to 12 so a deferred story still gets its last chance to reappear on zoom-in. */
 export const MAX_BUDGET_ZOOM = 12;
 
 /**
  * Groups that never win a slot, even at MAX_BUDGET_ZOOM, are assigned
- * MAX_BUDGET_ZOOM + 1 — above tippecanoe's ceiling, so they are not rendered.
- *
- * This is a real cost and it is stated rather than hidden. The alternative —
- * dumping the remainder at the deepest zoom — breaks §9's "~30-60 pins at every
- * zoom, not more" outright, and the §2.4 floor layer already guarantees no
- * country vanishes. `assignMinzoom` returns the overflow count so worker/run.ts
- * can report it (§8) instead of letting it decay quietly.
- *
- * **Amended 2026-08-14, when spiderfy landed.** This block used to say that
- * co-located stories "collide at EVERY zoom, so zooming never separates them"
- * and that the overflow was therefore genuinely invisible. That is no longer
- * true: from `SPIDERFY_ZOOM` the client spreads a stack into legs and leaves, so
- * a deferred story is reachable by zooming into its city. **The overflow number
- * itself will move on the first run after this change and has not been re-read
- * yet** — the coordinate cap frees slots at shallow zooms (a stack of 14 held 14
- * of a tile's 15) while concentrating the competition at z9-12, and which effect
- * dominates is a measurement, not a guess. Read it off the next run (§8) before
- * drawing any conclusion about K.
+ * MAX_BUDGET_ZOOM + 1 — above tippecanoe's ceiling, not rendered. The
+ * country-top floor layer guarantees no country vanishes; `assignMinzoom`
+ * returns the overflow count so `run.ts` can report it rather than let it
+ * decay quietly. Since spiderfy landed, an overflowed story is still
+ * reachable by zooming into its city past SPIDERFY_ZOOM — see
+ * docs/DESIGN.md#overflow-as-feature-at-57.
  */
 export const NOT_RENDERED = MAX_BUDGET_ZOOM + 1;
 
@@ -112,17 +75,11 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
   for (let zoom = 0; zoom <= maxZoom; zoom++) {
     /** Slots already consumed in a tile by groups assigned at a shallower zoom. */
     const used = new Map<string, number>();
-    /**
-     * §6 decision 1's coordinate cap. GDELT places every story in a city at the
-     * SAME centroid, so below the spiderfy zoom a second story there is drawn
-     * exactly underneath the first: invisible, and holding a budget slot that
-     * another location could have used. Measured on the live archive, two thirds
-     * of all visible stories were in such a stack — see `lib/spiderfy.ts`.
-     *
-     * So below `SPIDERFY_ZOOM` a coordinate holds one story, the best one. At
-     * and above it the cap lifts, because that is exactly where the client can
-     * spread the stack into legs and leaves and the pins stop overlapping.
-     */
+    // Coordinate cap: below SPIDERFY_ZOOM a coordinate holds one story (the
+    // best), since GDELT gives every story in a city the same centroid and
+    // a second story there would render exactly underneath the first,
+    // invisible, wasting a budget slot. Lifts at SPIDERFY_ZOOM, where the
+    // client can spread the stack into legs and leaves. See lib/spiderfy.ts.
     const occupied = new Set<string>();
     const capped = zoom < SPIDERFY_ZOOM;
 
@@ -166,18 +123,12 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
   return { groups: assigned, overflow };
 }
 
-/**
- * The §2.4 floor: top 1 per country, EXEMPT from the tile budget, `minzoom` 0.
- *
- * At z0 the whole planet is one tile, so the budget alone would put 12-20
- * stories on the entire world map. This layer is what keeps the default view
- * populated regardless of salience — every country with news in the window gets
- * at least one pin (§9).
- *
- * It ranks on the same comparator, so a country whose only tier-1 story of the
- * last 48 hours is low-salience still shows THAT story as its representative.
- * That is the intended effect, not a side effect.
- */
+// The country-top floor: top 1 per country, EXEMPT from the tile budget,
+// minzoom 0. At z0 the whole planet is one tile, so the budget alone would
+// put only 12-20 stories on the entire world map; this keeps every country
+// with news represented regardless of salience. Ranks on the same
+// comparator, so a country's lowest-salience-but-only tier-1 story is still
+// its representative — intended, not a side effect.
 export function countryTopGroups(groups: StoryGroup[]): StoryGroup[] {
   const best = new Map<string, StoryGroup>();
 
