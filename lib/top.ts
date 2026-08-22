@@ -1,22 +1,12 @@
 /**
- * Which stories are "the top 5 on screen" (the pin identity's first state).
- *
- * Separated from `MapView.tsx` for the same reason `layers.ts` is: the ranking is
- * a product rule, not wiring. Three of its decisions are load-bearing and tested
- * in `top.test.ts`:
- *
- * 1. **Ranked by salience, never by tier-1.** §2.3 keeps the tier-1 preference
- *    invisible — it decides *which* stories the budget admitted, and it is not
- *    allowed to become a badge. A top-5 highlight is exactly the badge §2.3
- *    forbids, so the comparator here is deliberately NOT §2.5's full comparator.
- * 2. **Deduplicated by URL.** With `renderWorldCopies` on, one story is rendered
- *    once per visible copy of the world, and below z4 the same group can also be
- *    in both the stories layer and the country floor (§2.4's overlap). Ranking
- *    the raw query result would spend all five slots on one story at z1.
- * 3. **Total order.** Half of all stories sit at exactly log1p(1) salience
- *    (§2.5), so ties are the common case, not the edge case. Without the date
- *    and key tiebreaks, panning the map by one pixel would reshuffle which of a
- *    dozen equal stories is "top 5" and the highlight would flicker.
+ * Which stories are "the top 5 on screen." Separated from `MapView.tsx`
+ * for the same reason `layers.ts` is: the ranking is a product rule, not
+ * wiring. Ranked by salience, never tier-1 (a top-5 highlight is exactly
+ * the badge tier-1 must stay invisible from). Deduplicated by URL, since
+ * `renderWorldCopies` and the country-floor overlap can render one story
+ * more than once. Total order: half of all stories tie at the same
+ * salience, so without date/key tiebreaks a one-pixel pan would flicker
+ * the highlight. See docs/DESIGN.md#the-tier-1-comparator.
  */
 
 import { compareProperties, type StoryProperties } from "./spiderfy";
@@ -24,11 +14,7 @@ import { compareProperties, type StoryProperties } from "./spiderfy";
 /** Five, from the identity sheet. */
 export const TOP_COUNT = 5;
 
-/**
- * The identity of a story on the client. **`url` is it** — the group id is not
- * serialised into the tiles (`worker/tiles.ts` writes only §2.6's property list),
- * and it is the only property that is unique per group by construction.
- */
+/** The identity of a story on the client is `url` — the group id is never serialised into the tiles, and url is the only property unique per group by construction. */
 export type RankedFeature = {
   properties?: Record<string, unknown> | null;
 };
