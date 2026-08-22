@@ -1,46 +1,28 @@
 /**
- * Story grouping. PURE (HANDOFF.md §3.3, §2.5).
- *
- * **This has to be real grouping, not title dedup.** Title dedup alone inverts
- * the signal it feeds: wire copy republished verbatim under one headline merges
- * into a single high-domain story, while the NYT, BBC and Guardian each writing
- * their own headline about the same event split into three 1-domain stories. The
- * outlets doing independent journalism would rank lowest. That is why grouping
- * lives in Phase 3 and not Phase 6.
- *
- * §2.5's key, all three parts required together:
- *
- *   >= 2 shared V2EnhancedThemes, excluding themes above the doc-frequency
- *   ceiling, AND a title-token Jaccard floor, AND the same 0.5 degree cell.
- *
- * Then exact-title dedup on top, to collapse syndication.
- *
- * **The theme ceiling is not optional.** Measured over one hour: 3,230 distinct
- * themes, of which `CRISISLEX_CRISISLEXREC` alone appears on 39.4% of articles,
- * `UNGP_FORESTS_RIVERS_OCEANS` on 32.7%, `WB_696_PUBLIC_SECTOR_MANAGEMENT` on
- * 31.7%. Nine themes exceed 20% and 105 exceed 5%. Without the ceiling,
- * CRISISLEX alone would join 39% of all articles to each other. FINDINGS §8
- * validated the rule as necessary and suggested tightening 20% to 15%, which is
- * the default here.
+ * Story grouping. PURE. Must be real grouping, not title dedup — title
+ * dedup alone inverts the ranking signal (wire copy merges into one
+ * high-domain story; independent journalism from NYT/BBC/Guardian on the
+ * same event splits into three 1-domain stories). Key, all three parts
+ * required together: >= 2 shared V2EnhancedThemes excluding themes above
+ * THEME_CEILING document frequency, AND a title-token Jaccard floor, AND
+ * the same 0.5° cell. Exact-title dedup runs on top to collapse
+ * syndication. The theme ceiling is not optional — one measured hour found
+ * a single theme (`CRISISLEX_CRISISLEXREC`) on 39.4% of all articles,
+ * which without a ceiling would join over a third of the feed to itself.
+ * See docs/DESIGN.md#ranking.
  */
 
 import { createHash } from "node:crypto";
 import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
 import { summarise } from "./rank.ts";
 
-/** FINDINGS §8: 9 themes exceed 20%, so 15% excludes a few more and costs nothing. */
+/** 9 measured themes exceed 20% document frequency; 15% excludes a few more at no real cost. */
 export const THEME_CEILING = 0.15;
 
-/**
- * Title-token Jaccard floor. Two headlines about the same event share proper
- * nouns; two unrelated headlines that happen to share two themes and a cell do
- * not. 0.25 is a starting point tuned by eye on real bundles rather than fitted
- * — it is the one constant here without a measurement behind it, and it is worth
- * revisiting once real placements can be judged.
- */
+/** Title-token Jaccard floor — the one constant here without a measurement behind it, tuned by eye on real bundles. Worth revisiting once real placements can be judged. See docs/DESIGN.md#ranking. */
 export const JACCARD_FLOOR = 0.25;
 
-/** §2.5: the location half of the key. Roughly 55 km at the equator. */
+/** The location half of the key. Roughly 55 km at the equator. */
 export const CELL_DEGREES = 0.5;
 
 /**
@@ -81,17 +63,10 @@ export function cellOf(lat: number, lon: number): string {
   return `${Math.floor(lat / CELL_DEGREES)}:${Math.floor(lon / CELL_DEGREES)}`;
 }
 
-/**
- * How many articles carry each theme. Distinct per article — a theme mentioned
- * nine times in one document is one document.
- *
- * **Extracted from `overCommonThemes` on 2026-08-16 and exported**, because the
- * topic classifier needs the counts themselves rather than the set above the
- * ceiling: it ranks a story's themes by specificity, and "how rare is this
- * theme" is the same measurement grouping already makes. Computing it twice
- * would be two passes over ~26,000 articles for one answer, and two places for
- * "distinct per article" to be got wrong differently.
- */
+// How many articles carry each theme, distinct per article (nine mentions
+// in one document count as one). Exported because worker/topics.ts's
+// classifier needs the same per-theme rarity measurement grouping already
+// makes, rather than a second, possibly-divergent pass.
 export function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const article of articles) {
@@ -235,13 +210,10 @@ export function groupArticles(
   return [...members.values()].map((group) => buildGroup(group, now));
 }
 
-/**
- * The representative article shown in the popup and in a container's label.
- *
- * A tier-1 article wins when the group has one, newest first — the group is on
- * the map because of that coverage (§2.5), so showing a syndicated rewrite of it
- * would be odd. Otherwise the newest article wins.
- */
+// The representative article shown in the popup and a container's label.
+// A tier-1 article wins when the group has one (newest first) — the group
+// is on the map because of that coverage, so a syndicated rewrite would be
+// an odd thing to show instead. Otherwise the newest article wins.
 function representative(members: PlacedArticle[]): PlacedArticle {
   let best = members[0];
   for (const member of members) {
