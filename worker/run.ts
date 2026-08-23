@@ -25,13 +25,13 @@ import {
   assertStoreReachable,
   pingHealthcheck,
   publish,
-  vercelBlobStore,
 } from "./publish.ts";
 import { rankGroups } from "./rank.ts";
 import { buildRegionIndex, indexStats } from "./regions.ts";
 import { buildCityIndex, cityIndexStats } from "./cities.ts";
 import { continentIdFor } from "../lib/continents.ts";
 import { type RefData, assertUsable, loadRefData, sourceCountry } from "./refdata.ts";
+import { r2Store } from "./store.ts";
 import { appendShards, pruneShards, readPool } from "./state.ts";
 import { buildTiles } from "./tiles.ts";
 
@@ -340,9 +340,13 @@ export function formatSummary(summary: RunSummary): string {
 }
 
 async function main(): Promise<void> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) throw new Error("BLOB_READ_WRITE_TOKEN is not set");
-  const store = vercelBlobStore(token);
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error("R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must all be set");
+  }
+  const store = r2Store({ accountId, accessKeyId, secretAccessKey });
 
   // Here rather than inside run(): the credential enters the process at this
   // line and nowhere else, and run() takes an injected store precisely so a
