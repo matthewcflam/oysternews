@@ -991,7 +991,7 @@ const zoomToRegion = () => {
         exactly the silent §2.6 failure the two-copy arrangement was built to
         prevent. Do not disable it again without saying where the mark went.
       */}
-      <MapTilerLogo />
+      {/*<MapTilerLogo />*/}
       {provider === "openfreemap" && (
         <div className="notice notice--info">
           Keyless basemap (OpenFreeMap escape hatch). Set{" "}

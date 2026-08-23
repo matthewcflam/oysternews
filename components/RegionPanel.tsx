@@ -6,72 +6,22 @@ import { placeLine, publishedAt } from "@/lib/story";
 import type { RegionEntry } from "@/lib/types";
 
 /**
- * §2.3's region panel: the top stories of the country or state whose label was
- * clicked.
- *
- * **Mode 3 (2026-08-16) gave it its own content inside the shared card.** It had
- * worn the story panel's clothes since 2026-08-14 — same hero, same list — which
- * was the right call while the two were the same shape, and stopped being right
- * the moment the mockup made them different shapes. What they still share is the
- * shell: `.panel` positions, sizes and fills both, so §2.3's one slot still reads
- * as one slot.
- *
- * What changed, and why:
- *
- * - **The hero is gone.** A flag stretched across 190px of card was the loudest
- *   thing on screen — a national flag is designed to be maximally saturated — and
- *   it was 190px spent on a picture the reader already knows. It is now a small
- *   plate beside the heading, which is the size at which it does its actual job:
- *   confirming which country you clicked.
- * - **A breadcrumb above the name**, `World › India` or `World › USA ›
- *   California`. The panel is a place in a hierarchy and now says so; see
- *   `countryName` for why the parent is a prefix of the id rather than a join.
- * - **The rows are restacked**: place, then headline, then source and age. The
- *   headline is the thing being scanned, so it is the biggest thing in the row
- *   and the two lines around it are captions. The publisher lost its orange pill
- *   — nine pills down a 324px column read as the loudest thing in the panel — and
- *   keeps the accent as one small disc between it and the timestamp.
- * - **No MapTiler logo in the footer.** The card ends ~200px above the
- *   bottom-left corner, so the map's own copy is visible past it; the story card
- *   dropped its second copy on the same measurement (§2.6). There is no footer
- *   here at all now.
- * - **No orange disc in the corner.** It was the map's pin restated on a hero
- *   that no longer exists.
- *
- * **The counts and the zoom are real as of the same day.** `248 stories today ·
- * 39 sources` comes from `RegionEntry`, counted over the whole pool by
- * `worker/regions.ts` before the top-N cap — the rows on screen cannot produce
- * it, since 68 of 163 regions exceed the cap and the largest holds 977. `Zoom to
- * India ›` fits `public/region-bbox.json`, built from the same Natural Earth
- * features the click-outline is.
- *
- * **Both degrade to absent rather than to a wrong number.** An index published
- * before 2026-08-16 has no counts, so `total` is 0 and the line is not drawn; a
- * region the boundary set has no polygon for gets no button. Neither prints a
- * zero, and neither is a failure state worth telling the reader about.
- *
- * **Still not drawn, because the data still does not exist:** the topic chips
- * (blocked on the chip-set decision — Sports and Tech cannot be built from
- * GDELT) and `See all 248 stories` (blocked on the full-list shards). Nothing
- * here is stubbed for them.
- *
- * **Presentational only.** It is handed rows and renders them; the gesture, the
- * outline and the fetch all live in `MapView.tsx`. That split is what lets the
- * §2.6 constraint be checked by reading one short file.
- *
- * **§2.6 is enforced by the type, not by care.** `RegionStory` is title, source,
- * url, date and place — there is no article text to render, because there is no
- * field for it. Nothing here reads salience or tier-1 either: §2.3 says the
- * preference is invisible, so a badge would need a field the row does not carry.
- *
- * The ordering is `compareGroups`, applied by the worker. **The panel does not
- * re-rank** — one content model (§2.3).
+ * The region panel: top stories of the country, state, city, or continent
+ * whose label was clicked. Presentational only — the gesture, outline,
+ * and fetch all live in `MapView.tsx`. The counts (`248 stories today ·
+ * 39 sources`) and the zoom button are real, computed over the whole pool
+ * before the top-N cap, and both degrade to absent rather than a wrong
+ * number when data predates them. Topic chips and "See all N stories"
+ * are still not drawn, since the underlying data doesn't exist yet.
+ * Link-out enforced by the type — `RegionStory` has no field for article
+ * text, salience, or tier-1. The panel does not re-rank; ordering is
+ * `compareGroups`, applied by the worker. See docs/DESIGN.md#regions.
  */
 
 export type RegionPanelProps = {
   /** The label's own text, for the heading. Display only — nothing joins on it. */
   name: string;
-  /** FIPS region id the outline is drawn from, shown when the name is missing. `""` for a city — a city draws no outline (§4) and has no id of its own. */
+  /** FIPS region id the outline is drawn from, shown when the name is missing. `""` for a city — a city draws no outline and has no id of its own. */
   regionId: string;
   /** Rows plus the two pool counts — already normalised by `entryFor` (or already shaped like a `RegionEntry` for a city). */
   entry: RegionEntry;
@@ -107,56 +57,32 @@ export default function RegionPanel({
   trail: trailOverride,
 }: RegionPanelProps) {
   const { stories, total, sources } = entry;
-  /**
-   * The flag, or `null` for "draw the heading without one".
-   *
-   * **The state is the URL that FAILED, not the URL to show.** `flagUrl` knows
-   * the code maps to an ISO country; it cannot know flagcdn has an image for it,
-   * so a failed load still has to fall back — the story panel does the same with
-   * a hotlinked `og:image`, and for the same reason (a broken-image icon is worse
-   * than no image). Storing the failure rather than the value is what makes that
-   * survive the panel staying mounted as the reader clicks from one country to
-   * the next: the URL is derived fresh every render, so a new region cannot
-   * inherit the previous one's flag for a frame, and does not need an effect to
-   * clear it.
-   */
+  // The flag, or null for "draw the heading without one". State holds the
+  // URL that FAILED, not the URL to show — flagUrl can't know flagcdn has
+  // an image, so a failed load still needs a fallback. Deriving the URL
+  // fresh every render means a new region can't inherit the previous
+  // one's flag for a frame, with no effect needed to clear it.
   const url = flagUrl(flagCode ?? regionId);
   const [failed, setFailed] = useState<string | null>(null);
   const flag = url && url !== failed ? url : null;
 
   const heading = name || regionId;
 
-  /**
-   * `World › India`, `World › USA › California`, or — with `trailOverride` —
-   * `World › USA › Illinois › Chicago` (§4's city) and `World › Europe` (§4's
-   * continent, no country to name).
-   *
-   * The parent crumb is only drawn for an admin-1 when nothing overrides it —
-   * a country's own crumb IS the heading, and `World › India › India` says
-   * nothing twice. `flagUrl` uses the same length test for the same reason:
-   * two characters is a country and four is a subdivision, which is exactly
-   * how `boundaries.pmtiles` distinguishes them.
-   *
-   * Filtered rather than conditionally assembled, because `countryName` returns
-   * "" for a code the crosswalk does not carry and a missing crumb has to
-   * disappear rather than render as a gap between two separators.
-   */
+  // "World › India", "World › USA › California", or with trailOverride
+  // "World › USA › Illinois › Chicago" (city) / "World › Europe"
+  // (continent). The parent crumb only draws for an admin-1 — a
+  // country's own crumb IS the heading, and "World › India › India" says
+  // nothing twice. Filtered, not conditionally assembled, since
+  // countryName returns "" for an uncarried code and a missing crumb must
+  // disappear rather than leave a gap between separators.
   const parent = regionId.trim().length === 2 ? "" : countryName(regionId);
   const middle = trailOverride ?? [parent];
   const trail = ["World", ...middle, heading].filter(Boolean);
 
-  /**
-   * `248 stories today · 39 sources`, or "" when there is nothing honest to say.
-   *
-   * **"today" is the window, and it is the pipeline's own word.** The pool is a
-   * rolling 24 hours (§2.4), which is what every other relative stamp on this
-   * card is measured against.
-   *
-   * `total` of 0 means the index predates the counts (see `entryFor`), NOT a
-   * region with no news — that case has no rows either and gets the empty-state
-   * note below. `sources` is dropped on its own if it is missing, so a partial
-   * entry degrades to the half it can support rather than to nothing.
-   */
+  // "248 stories today · 39 sources", or "" when there's nothing honest
+  // to say. total of 0 means the index predates the counts (see
+  // entryFor), NOT a region with no news — that case has no rows either
+  // and gets the empty-state note below.
   const counts =
     total > 0
       ? [
