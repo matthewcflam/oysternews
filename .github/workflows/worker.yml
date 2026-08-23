@@ -103,12 +103,14 @@ jobs:
       # Actions sets the working directory to the workspace root.
       - name: Run the pipeline
         env:
-          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
           BUNDLE_CAP: ${{ inputs.bundle_cap }}
         run: node worker/run.ts
 
-      # The archive is already in Blob; this is for reading a failed run without
+      # The archive is already in R2; this is for reading a failed run without
       # re-running it. Kept short because it is debugging material, not a backup.
       - name: Upload the archive on failure
         if: failure()

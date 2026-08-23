@@ -1,5 +1,5 @@
 /**
- * Publication: Blob write, manifest, retention. Order is: upload the
+ * Publication: R2 write, manifest, retention. Order is: upload the
  * content-hashed archive (immutable — a re-run of the same data is a
  * no-op), upload the region index and city shards, then flip the manifest
  * last, since it's the only mutation of a stable key and the map keeps
@@ -7,8 +7,8 @@
  * invariants (below) gate all of it — a run that "succeeds" but produces
  * garbage (e.g. a GDELT schema drift emptying `locations`) publishes
  * NOTHING and leaves the previous manifest in place. Retention prunes only
- * after the flip. Blob transport is the REST API over `fetch`, not
- * `@vercel/blob` — see `vercelBlobStore` for the traps that forced that.
+ * after the flip. Store transport is `r2Store` in `store.ts`, over R2's
+ * S3-compatible API — see that file's header for the traps that shaped it.
  * See docs/DESIGN.md#operations.
  */
 
@@ -17,7 +17,7 @@ import { readFile } from "node:fs/promises";
 import type { CityShard, Manifest, StoryGroup } from "../lib/types.ts";
 import { stampToMs } from "./fetch.ts";
 import type { RegionIndex } from "./regions.ts";
-import type { ShardStore } from "./state.ts";
+import type { ArchiveStore } from "./store.ts";
 
 export const MANIFEST_KEY = "manifest.json";
 /** Everything content-hashed and retained together. Retention sweeps this whole directory. */
@@ -216,137 +216,11 @@ export function nextHistory(
 
 // --- The store ---------------------------------------------------------------
 
-/**
- * What publish.ts needs on top of state.ts's ShardStore: binary bodies, a
- * per-key cache lifetime, and the public URL a key resolves to.
- */
-export type ArchiveStore = ShardStore & {
-  putBinary(key: string, body: Uint8Array, maxAge: number): Promise<string>;
-  putText(key: string, body: string, contentType: string, maxAge: number): Promise<string>;
-  /** Synchronous: a public blob's URL is derivable, never looked up. See publicBase. */
-  urlOf(key: string): string;
-};
-
-const BLOB_API = "https://blob.vercel-storage.com";
-const BLOB_API_VERSION = "7";
-
-// A public store's URL host, derived from the token
-// (vercel_blob_rw_<storeId>_<secret> -> https://<storeid>.public.blob...).
-// Derived rather than looked up to avoid a billable `list` call on every
-// get/remove. See docs/DESIGN.md#blob-traps.
-function publicBase(token: string): string {
-  const storeId = token.split("_")[3];
-  if (!storeId) throw new Error("BLOB_READ_WRITE_TOKEN is not in the expected vercel_blob_rw_<id>_<secret> form");
-  return `https://${storeId.toLowerCase()}.public.blob.vercel-storage.com`;
-}
-
-/**
- * Vercel Blob over its REST API. The store must be created with PUBLIC
- * access (fixed at creation, not a code decision) — a private store serves
- * blobs through a Function instead of a direct URL, which breaks range
- * requests that pmtiles depends on. `x-add-random-suffix: 0` keeps keys
- * stable/content-addressed. `x-allow-overwrite: 1` is currently decorative
- * here (the REST layer permits overwrite regardless) but mandatory if this
- * is ever swapped for the `@vercel/blob` SDK, whose `put()` throws on an
- * existing pathname client-side unless `allowOverwrite: true` is passed.
- * The CDN can also serve a just-overwritten key stale for a few seconds
- * (bites concurrent smoke-testing, not the real 4-hourly cadence). Full
- * measurements: docs/DESIGN.md#blob-traps.
- */
-export function vercelBlobStore(token: string): ArchiveStore {
-  const headers = () => ({
-    authorization: `Bearer ${token}`,
-    "x-api-version": BLOB_API_VERSION,
-  });
-
-  async function upload(
-    key: string,
-    body: BodyInit,
-    contentType: string,
-    maxAge: number,
-  ): Promise<string> {
-    const response = await fetch(`${BLOB_API}/${key}`, {
-      method: "PUT",
-      headers: {
-        ...headers(),
-        "x-content-type": contentType,
-        "x-add-random-suffix": "0",
-        "x-allow-overwrite": "1",
-        "x-cache-control-max-age": String(maxAge),
-      },
-      body,
-    });
-    if (!response.ok) {
-      throw new Error(`blob put ${key}: HTTP ${response.status} ${await response.text()}`);
-    }
-    return ((await response.json()) as { url: string }).url;
-  }
-
-  async function listBlobs(prefix: string): Promise<{ pathname: string; url: string }[]> {
-    const out: { pathname: string; url: string }[] = [];
-    let cursor = "";
-    do {
-      const query = new URLSearchParams({ prefix, limit: "1000" });
-      if (cursor) query.set("cursor", cursor);
-      const response = await fetch(`${BLOB_API}?${query}`, { headers: headers() });
-      if (!response.ok) throw new Error(`blob list ${prefix}: HTTP ${response.status}`);
-      const page = (await response.json()) as {
-        blobs: { pathname: string; url: string }[];
-        cursor?: string;
-        hasMore?: boolean;
-      };
-      out.push(...page.blobs);
-      cursor = page.hasMore && page.cursor ? page.cursor : "";
-    } while (cursor);
-    return out;
-  }
-
-  return {
-    async list(prefix) {
-      return (await listBlobs(prefix)).map((blob) => blob.pathname);
-    },
-
-    async get(key) {
-      const response = await fetch(this.urlOf(key));
-      // A 404 is the ordinary "not written yet" case on a first run, and callers
-      // (readHistory, run.ts's lastWatermark) treat a throw as exactly that.
-      if (!response.ok) throw new Error(`blob get ${key}: HTTP ${response.status}`);
-      return response.text();
-    },
-
-    async put(key, body) {
-      // Shards are the state.ts path: JSONL, and never cached — a run reads them
-      // back within minutes of writing them.
-      await upload(key, body, "application/x-ndjson", 0);
-    },
-
-    async remove(key) {
-      const response = await fetch(`${BLOB_API}/delete`, {
-        method: "POST",
-        headers: { ...headers(), "content-type": "application/json" },
-        body: JSON.stringify({ urls: [this.urlOf(key)] }),
-      });
-      if (!response.ok) throw new Error(`blob delete ${key}: HTTP ${response.status}`);
-    },
-
-    putBinary(key, body, maxAge) {
-      // Wrapped rather than passed raw: a Node Buffer is an ArrayBufferView, but
-      // its `ArrayBufferLike` backing does not satisfy fetch's BodyInit under
-      // this TypeScript. The re-wrap costs one copy of the archive and buys a
-      // cast-free body; `body.buffer` is not usable directly because Buffer is
-      // pool-allocated and may sit at a non-zero offset in a shared backing.
-      return upload(key, new Blob([new Uint8Array(body)]), "application/octet-stream", maxAge);
-    },
-
-    putText(key, body, contentType, maxAge) {
-      return upload(key, body, contentType, maxAge);
-    },
-
-    urlOf(key) {
-      return `${publicBase(token)}/${key}`;
-    },
-  };
-}
+// Re-exported so existing imports of ArchiveStore from publish.ts keep
+// working — the type itself, and its implementation (`r2Store`), now live
+// in store.ts, which is the natural home for anything shaped by the
+// store's transport.
+export type { ArchiveStore };
 
 // --- Publishing ---------------------------------------------------------------
 
@@ -379,23 +253,27 @@ export function staleness(history: HistoryEntry[], now: Date): number {
   return now.getTime() - Math.max(...stamps);
 }
 
-// Fail fast on a token that cannot reach the store. Every read elsewhere in
-// this pipeline swallows its own errors (a first-run "not written yet" is
+// Fail fast on credentials that cannot reach the store. Every read elsewhere
+// in this pipeline swallows its own errors (a first-run "not written yet" is
 // legitimate), which otherwise leaves a bad credential invisible until the
 // first write, several steps later, with a stack trace that names nothing
-// about the token. One authenticated `list` at startup catches it in one
-// line; kept to a single call since `list` is a billed "advanced operation".
+// about the credential. One authenticated `list` at startup catches it in
+// one line; kept to a single call since `list` (ListObjectsV2) is a billed
+// R2 Class A operation.
 export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
   try {
     await store.list(ARCHIVE_PREFIX);
   } catch (cause) {
     throw new Error(
-      "BLOB_READ_WRITE_TOKEN cannot reach the Blob store. The token is the whole " +
-        "of the store's identity — `vercel_blob_rw_<storeId>_<secret>` — so this is " +
-        "a stale, truncated or quoted token rather than a permissions setting. " +
-        "GitHub stores a secret literally: surrounding quotes copied out of " +
-        ".env.local become part of the value, and `node --env-file` strips them " +
-        "locally, so the same token can work here and fail in Actions.",
+      "R2_ACCOUNT_ID / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY cannot reach the R2 " +
+        "store. A wrong account id signs against the wrong endpoint host; a wrong " +
+        "key pair fails signature verification — aws4fetch reports both as " +
+        "SignatureDoesNotMatch, which reads like a config error rather than a bad " +
+        "secret, so check the three env vars in that order. GitHub stores a secret " +
+        "literally: surrounding quotes copied out of .env.local become part of the " +
+        "value, and `node --env-file` strips them locally, so a credential can work " +
+        "here and fail in Actions. Note this check cannot catch a read-only token — " +
+        "it passes on `list` and the run then dies later inside appendShards.",
       { cause },
     );
   }
