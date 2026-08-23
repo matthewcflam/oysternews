@@ -32,7 +32,7 @@
  */
 
 import { THEME_CEILING, documentFrequency, groupArticles, overCommonThemes } from "../worker/group.ts";
-import { vercelBlobStore } from "../worker/publish.ts";
+import { r2Store } from "../worker/store.ts";
 import { readPool } from "../worker/state.ts";
 import { TOPICS, topicOf, topicOfTheme } from "../worker/topics.ts";
 import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
@@ -85,14 +85,18 @@ function coverage(groups: StoryGroup[]): { links: number; groups: number }[] {
 }
 
 async function main(): Promise<void> {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  if (!token) throw new Error("BLOB_READ_WRITE_TOKEN is not set");
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accountId || !accessKeyId || !secretAccessKey) {
+    throw new Error("R2_ACCOUNT_ID, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must all be set");
+  }
 
   const top = arg("--top", DEFAULT_TOP);
   const examples = arg("--examples", 0);
   const now = Date.now();
 
-  const pool = await readPool(vercelBlobStore(token), now);
+  const pool = await readPool(r2Store({ accountId, accessKeyId, secretAccessKey }), now);
   const articles = pool.articles;
   console.log(
     `pool: ${articles.length} articles from ${pool.shardsRead} live shards ` +

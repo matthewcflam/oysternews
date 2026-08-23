@@ -1,7 +1,7 @@
 /**
  * The browser's entry point to the published data (HANDOFF.md §3.2).
  *
- * **Path A: the browser reads Blob directly, with no `/api/stories` in front.**
+ * **Path A: the browser reads R2 directly, with no `/api/stories` in front.**
  * §3.2 sketched a Next route with `s-maxage=300`, and it was dropped on the
  * reasoning that the manifest IS the indirection the route would have provided —
  * the archive URL changes on every run and lives inside this file's response, so
@@ -13,23 +13,25 @@
  * Proxying the ARCHIVE through a route was rejected outright and should stay
  * rejected: PMTiles issues many small range requests, each of which would become
  * a Function invocation billed as Fast Data Transfer, which Vercel documents as
- * ~3× the cost of the Blob Data Transfer the same bytes cost when served direct.
+ * ~3× the cost of R2's egress-free Data Transfer the same bytes cost when served
+ * direct.
  */
 
 import { ago } from "./age";
+import { CDN_BASE } from "./cdn";
 import type { Manifest } from "./types";
 
 /**
- * Public and non-secret — a public Blob store serves this to anyone with the
- * URL, which is the point. Hardcoded rather than read from `NEXT_PUBLIC_*`
- * deliberately: those are inlined at BUILD time, so a value set in Vercel does
- * nothing until the next uncached build (§11, 2026-08-10). A constant in the
- * repo cannot drift from the deploy that way. The env var still overrides, for
- * pointing a local dev server at a scratch store.
+ * Public and non-secret — a public R2 bucket serves this to anyone with the
+ * URL, which is the point. Built from `CDN_BASE` rather than read from
+ * `NEXT_PUBLIC_*` deliberately: those are inlined at BUILD time, so a value
+ * set in Vercel does nothing until the next uncached build (§11,
+ * 2026-08-10). A constant in the repo cannot drift from the deploy that
+ * way — `CDN_BASE` is the one shared between this file and the worker, so
+ * the two halves cannot disagree. The env var still overrides, for pointing
+ * a local dev server at a scratch store or an `r2.dev` probe.
  */
-export const MANIFEST_URL =
-  process.env.NEXT_PUBLIC_MANIFEST_URL ??
-  "https://wkx9bwwjpf2tzdsl.public.blob.vercel-storage.com/manifest.json";
+export const MANIFEST_URL = process.env.NEXT_PUBLIC_MANIFEST_URL ?? `${CDN_BASE}/manifest.json`;
 
 /** §3.5. The freshness notice fires past 2× this, per §8. */
 export const CADENCE_HOURS = 4;
