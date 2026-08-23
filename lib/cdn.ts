@@ -3,7 +3,7 @@
  * manifest) and the browser (which reads the manifest from the same host).
  * One literal in one repo beats two env vars in two dashboards (GitHub
  * Actions and Vercel), which is a silent-drift generator — see
- * docs/DESIGN.md#blob-traps (now R2 traps).
+ * docs/DESIGN.md#r2-traps.
  *
  * Imports nothing, so it is safe to pull into both the Next bundle and
  * `node worker/run.ts`. Env-overridable via `R2_PUBLIC_BASE` for scratch
