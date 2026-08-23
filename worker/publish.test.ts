@@ -25,7 +25,6 @@ import {
   publish,
   staleness,
   statsOf,
-  vercelBlobStore,
 } from "./publish.ts";
 import { stampOfDate } from "./run.ts";
 
@@ -658,37 +657,25 @@ describe("assertStoreReachable", () => {
     await expect(assertStoreReachable(memoryStore())).resolves.toBeUndefined();
   });
 
-  it("names the token, and keeps the underlying error as the cause", async () => {
-    // The regression: a bad token used to surface as a bare 403 from inside
-    // appendShards, four steps downstream, because every read swallows its own
-    // failure as "not written yet". The message has to say BLOB_READ_WRITE_TOKEN
-    // — that is the entire point of the check.
+  it("names the credentials, and keeps the underlying error as the cause", async () => {
+    // The regression: a bad credential used to surface as a bare 403 from
+    // inside appendShards, four steps downstream, because every read swallows
+    // its own failure as "not written yet". The message has to name the R2
+    // env vars — that is the entire point of the check.
     const store = memoryStore();
-    const cause = new Error('HTTP 403 {"code":"forbidden","message":"Cannot get store id from token"}');
+    const cause = new Error("HTTP 403 SignatureDoesNotMatch");
     store.list = async () => {
       throw cause;
     };
-    await expect(assertStoreReachable(store)).rejects.toThrow("BLOB_READ_WRITE_TOKEN");
+    await expect(assertStoreReachable(store)).rejects.toThrow("R2_ACCOUNT_ID");
     await expect(assertStoreReachable(store)).rejects.toMatchObject({ cause });
   });
 });
 
-describe("vercelBlobStore", () => {
-  it("derives the public URL from the token instead of looking it up", () => {
-    // Verified against the live store 2026-08-12: this is byte-identical to the
-    // url `put` returns, which is what lets get/remove skip a billable list call.
-    const store = vercelBlobStore("vercel_blob_rw_WKX9BWwJPF2TzDSL_abcdef");
-    expect(store.urlOf("manifest.json")).toBe(
-      "https://wkx9bwwjpf2tzdsl.public.blob.vercel-storage.com/manifest.json",
-    );
-  });
-
-  it("fails loudly on a token that is not in the expected form", () => {
-    // Better than constructing "https://undefined.public.blob..." and 404ing on
-    // every read with no indication of why.
-    expect(() => vercelBlobStore("garbage").urlOf("manifest.json")).toThrow("expected");
-  });
-});
+// r2Store's own contracts (urlOf, putBinary/putText's public-URL return,
+// no-transform on the archive only, list pagination) live in
+// store.test.ts, against a mocked fetch — these are the r2Store
+// equivalents of the two tests removed here on the R2 migration.
 
 describe("pingHealthcheck", () => {
   it("reports false without a configured URL rather than throwing", async () => {

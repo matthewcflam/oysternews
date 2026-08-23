@@ -5,9 +5,10 @@ const nextConfig = {
     return [
       {
         // The §2.2 boundary polygons — the only PMTiles archive still served
-        // from this app. The story archive moved to Vercel Blob in Phase 3
-        // (verified there: 206, Accept-Ranges, CORS *), and the rule that used
-        // to name /stories.pmtiles outlived the file by one phase.
+        // from this app. The story archive moved to Vercel Blob in Phase 3,
+        // then to Cloudflare R2 (verified there: 206, Accept-Ranges, CORS *),
+        // and the rule that used to name /stories.pmtiles outlived the file
+        // by two phases.
         //
         // PMTiles is read with HTTP range requests, so Accept-Ranges is not
         // decoration: without it a client may fetch the whole 9 MB archive to

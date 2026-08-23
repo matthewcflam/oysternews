@@ -36,7 +36,7 @@ link. Success is a live URL, not an architecture — code that cannot be
 clicked does not count for this audience. That reframes every tradeoff in
 this document: **stability and responsiveness win over freshness** where
 the two conflict, and the project runs on **free tiers everywhere** —
-Vercel Hobby, GitHub Actions, MapTiler's free plan, Vercel Blob — because a
+Vercel Hobby, GitHub Actions, MapTiler's free plan, Cloudflare R2 — because a
 paid dependency turns a demo link into a bill. It is built solo, evenings
 and weekends.
 
@@ -152,7 +152,7 @@ cron (GitHub Action, every 4h)
                  (#operations)
   -> prune       only AFTER the flip, and only if it flipped
   -> ping        only after a real publish
-  -> Vercel Blob: stories-<hash>.pmtiles (immutable), boundaries.pmtiles
+  -> Cloudflare R2: stories-<hash>.pmtiles (immutable), boundaries.pmtiles
      (built once), manifest.json (stable key, cacheControlMaxAge: 60)
   -> Next.js /api/stories (s-maxage=300, swr=600)
   -> MapLibre GL JS
@@ -182,7 +182,7 @@ deliberately on the pure/impure line:
   directory (the FIPS crosswalk and overrides — see `#regions`).
 
 The six pure modules hold nearly all the logic and nearly all the risk, and
-need no network, no Blob credentials, and no tippecanoe binary to test.
+need no network, no R2 credentials, and no tippecanoe binary to test.
 That is the whole reason the split exists — it is what makes `npm test`
 meaningful without a live store.
 
@@ -208,7 +208,7 @@ imports a *value* from it.
   with no local reproduction — rejected in favor of the explicit,
   ugly-but-correct relative-with-extension form.
 - **A single undifferentiated pipeline module.** The pure/impure split is
-  what makes 400+ unit tests possible without a live Blob store or a
+  what makes 400+ unit tests possible without a live R2 bucket or a
   tippecanoe binary in CI for every test run.
 
 ---
@@ -1094,40 +1094,71 @@ specifically so the first generation ages out, and it fails in exactly the
 right place — the `stories-gen1` assertion passes, the `regions-gen1`
 assertion fails — localizing the leak to the index alone.
 
-### Blob traps
+### R2 traps
 
-Three, all measured directly against the live store and recorded in
-`worker/publish.ts`'s own header:
+Migrated from Vercel Blob 2026-08-23 — see `i-want-you-to-eager-stardust.md`
+for the full plan. Two of the three traps previously recorded here were
+Blob-specific and are dropped rather than kept as history: public-or-nothing
+access mode (Blob's access setting; R2 has no such fixed-at-creation
+distinction) and the REST/SDK overwrite split (an artefact of `@vercel/blob`
+specifically). The third — stale CDN reads — is not merely gone, it is
+*solved*, and worth recording because it shaped `worker/store.ts`'s design:
 
-1. **Public-or-nothing.** A Vercel Blob store's access mode is fixed at
-   creation and cannot be changed afterward; a private store serves blobs
-   through a Function rather than a direct URL, which breaks range
-   requests entirely (pmtiles needs range requests). The first store was
-   created private and had to be destroyed and rebuilt. If the store is
-   ever recreated, it must be public or the map does not work; region is
-   likewise permanent.
-2. **The REST/SDK overwrite split.** `@vercel/blob`'s `put()` throws
-   client-side on an existing pathname by default — that guard is an SDK
-   behavior, not an API rule. A bare REST `PUT` over an existing key
-   returns 200 and succeeds. The `x-add-random-suffix: 0` and
-   `x-allow-overwrite: 1` headers are load-bearing for that reason: anyone
-   swapping the REST calls for the SDK later must pass `allowOverwrite:
-   true` explicitly, or every run after the first dies at the manifest
-   write, having already uploaded its archive to no purpose.
-3. **Stale-CDN smoke-test hazard.** The CDN can serve a stale copy of a
-   key just overwritten, even under `max-age=0, s-maxage=0` — measured
-   directly: an overwrite of `state/publish-history.json` read back as the
-   *previous* body, with `X-Vercel-Cache: HIT, Age: 6`. Never bites at the
-   real 4-hourly cadence, but bites exactly when two runs happen minutes
-   apart — which is what manual smoke-testing looks like. A fourth,
-   related trap: a GitHub Actions secret holding a quoted token value that
-   `node --env-file` strips locally but GitHub Actions stores literally —
-   the same token worked locally and 403'd in CI with "Cannot get store id
-   from token or header." `assertStoreReachable()` — one authenticated
-   `list` call at the very top of `main()` — exists to catch exactly this
-   class of credential problem before any real work happens, deliberately
-   kept to one call per run since it is billed as an advanced Blob
-   operation.
+1. **Stale-CDN reads, solved by routing off the CDN.** The Blob
+   implementation's `get()`/`remove()` fetched the public CDN URL, because
+   the Blob REST API offered no authenticated GET — measured directly: an
+   overwrite of `state/publish-history.json` read back as the *previous*
+   body, `X-Vercel-Cache: HIT, Age: 6`. R2's S3 `GetObject`/`DeleteObject`
+   are authenticated and hit the origin directly, so `worker/store.ts`
+   routes `get()` and `remove()` through the S3 endpoint instead of
+   `urlOf()`'s public URL, eliminating the entire stale-read class.
+   `urlOf()` still returns the public custom-domain URL — that value is
+   what goes into the manifest for the browser.
+2. **Range-compression under Cloudflare's CDN.** Cloudflare compresses
+   objects by default, which corrupts HTTP Range responses — wrong total in
+   `Content-Range`, weak ETags, truncated bodies. This is the documented
+   cause of maplibre/demotiles#35, where PMTiles broke behind Cloudflare.
+   The fix is `Cache-Control: no-transform` from the origin on `PutObject`,
+   which `store.ts`'s `putBinary` sets unconditionally — the only artefact
+   it ever writes is the range-requested archive. `putText` (the manifest,
+   regions index, city shards — all JSON) deliberately does NOT set it:
+   those are fetched whole, never by range, and compression is a win there.
+   If the city shards ever become a range-addressed pack (see the
+   write-reduction follow-up), they move to `no-transform` too.
+3. **CORS, including the error path.** Vercel Blob sent
+   `Access-Control-Allow-Origin: *` for free; R2 does not — it has to be
+   set explicitly in the dashboard (R2 exposes no `PutBucketCors` API).
+   `AllowedOrigins` is `["*"]`, deliberately: it is not access control (a
+   `curl` ignores CORS entirely) and R2 egress is free, so a narrow list
+   would only break the per-branch Vercel preview deploys this project
+   relies on, for no security benefit. The subtler half: a *missing*
+   object's 404 needs `Access-Control-Allow-Origin` too, or the browser
+   fetch rejects with a CORS `TypeError` before the response status is ever
+   read — `lib/cities.ts:23-25` treats 404 as "this country publishes no
+   shard", and that branch never runs if the error response lacks the
+   header. The status code is the easy half of getting a 404 right; the
+   header on it is the half that actually breaks silently.
+4. **The `ListObjectsV2` XML parse has to guard against `<Prefix>`, and
+   against not being a listing at all.** The response body carries a
+   top-level `<Prefix>archives/</Prefix>` alongside the `<Key>` elements a
+   loose regex would also match, injecting the prefix itself into
+   `archivesToPrune`'s input, which passes it straight to `store.remove`.
+   `parseListPage` matches `<Key>` only. It also refuses to parse anything
+   that isn't a `<ListBucketResult>` — an `<Error>` document or an HTML
+   proxy page returned with a 200 would otherwise parse as "zero keys
+   stored", meaning `assertStoreReachable` passes while retention silently
+   prunes nothing, forever. That is the same shape of invisible failure as
+   the regions-index pruner leak below.
+
+A fifth trap carries over unchanged from Blob: a GitHub Actions secret
+holding a quoted value that `node --env-file` strips locally but GitHub
+Actions stores literally, so the same credential can work locally and fail
+in CI. `assertStoreReachable()` — one authenticated `list` call at the very
+top of `main()` — exists to catch exactly this class of credential problem
+before any real work happens, deliberately kept to one call per run since
+`ListObjectsV2` is a billed R2 Class A operation. It cannot catch a
+read-only R2 token, though: `list` succeeds on read-only access, and a run
+using one dies later, inside `appendShards`.
 
 ### Two shard families
 

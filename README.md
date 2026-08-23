@@ -6,7 +6,7 @@ papers of record given precedence over the rest — and they densify as you zoom
 
 **[Live here](https://sonder-drab-eta.vercel.app/).** A GitHub Action runs the
 ingestion pipeline every four hours over a rolling 24-hour window, publishes a
-content-hashed archive to Vercel Blob, and the browser follows `manifest.json` to
+content-hashed archive to Cloudflare R2, and the browser follows `manifest.json` to
 find it. No deploy is involved in a normal publish cycle.
 
 ## Local development
@@ -16,7 +16,7 @@ npm install
 npm run dev
 ```
 
-That is the whole loop. **The map reads published data straight from Blob**, so
+That is the whole loop. **The map reads published data straight from R2**, so
 there is no build step between a clone and a working map, and nothing to keep in
 sync locally. Without a `NEXT_PUBLIC_MAPTILER_KEY` the app renders on a keyless
 OpenFreeMap basemap and says so on screen, so it runs with no account at all.
@@ -70,7 +70,7 @@ Superseded documents live unedited in `docs/archive/` for history: the original
 |---|---|
 | Frontend | Next.js + React, MapLibre GL JS (2D) |
 | Basemap | MapTiler, with an OpenFreeMap keyless fallback |
-| Story data | PMTiles vector tiles on Vercel Blob |
+| Story data | PMTiles vector tiles on Cloudflare R2 |
 | Boundaries | Natural Earth, built once |
 | Ingestion | GitHub Actions, TypeScript |
 | Database | none — deliberately, see `docs/DESIGN.md#operations` |
