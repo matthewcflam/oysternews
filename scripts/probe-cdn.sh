@@ -1,9 +1,24 @@
 #!/usr/bin/env bash
-# Phase C / E CDN probe. Usage: probe-cdn.sh <public-base-url>
+# Phase C / E CDN probe. Usage: probe-cdn.sh <public-base-url> [host:port:ip]
 # Proves the hazards that fail silently in a browser: Cloudflare compressing
 # a ranged PMTiles response, and CORS missing on the 404 path.
+#
+# The optional second argument pins the host to an IP, bypassing the local
+# resolver. Needed when verifying a hostname whose delegation your own network
+# has not caught up with: this machine's ISP resolver kept serving a deleted
+# wildcard for half an hour after the cutover, so every request landed on the
+# old registrar's parking IP and failed TLS. That looks identical to a broken
+# custom domain, and it cost a needless rollback. Get the real address from a
+# public resolver first: nslookup <host> 1.1.1.1
 set -u
-BASE="${1:?usage: probe-cdn.sh <public-base-url>}"
+BASE="${1:?usage: probe-cdn.sh <public-base-url> [host:port:ip]}"
+RESOLVE="${2:-}"
+if [ -n "$RESOLVE" ]; then
+  set -- --resolve "$RESOLVE"
+  printf 'pinned: %s\n\n' "$RESOLVE"
+else
+  set --
+fi
 fail=0
 say() { printf '%s\n' "$*"; }
 # An empty value never passes. Comparing "" to "" reads as equal, which once
@@ -16,7 +31,7 @@ chk() {
 }
 
 say "== manifest =="
-if ! man=$(curl -sS --fail-with-body --max-time 20 "$BASE/manifest.json" 2>&1); then
+if ! man=$(curl -sS "$@" --fail-with-body --max-time 20 "$BASE/manifest.json" 2>&1); then
   say "  FAIL  cannot fetch $BASE/manifest.json"
   say "        $man"
   say ""
@@ -39,7 +54,7 @@ for f in url regionsUrl citiesBase; do
 done
 
 say "== HEAD archive =="
-h=$(curl -s -D- -o /dev/null --max-time 30 "$BASE/$archive")
+h=$(curl -s "$@" -D- -o /dev/null --max-time 30 "$BASE/$archive")
 total=$(printf '%s' "$h" | grep -i '^content-length:' | tr -d '\r' | awk '{print $2}')
 if [ -z "$total" ]; then
   say "  FAIL  no content-length on HEAD $BASE/$archive"
@@ -48,7 +63,7 @@ fi
 say "  real size: $total bytes"
 
 say "== range request (the one that matters) =="
-r=$(curl -s -D- -o /dev/null --max-time 30 -H 'Range: bytes=0-16383' "$BASE/$archive")
+r=$(curl -s "$@" -D- -o /dev/null --max-time 30 -H 'Range: bytes=0-16383' "$BASE/$archive")
 code=$(printf '%s' "$r" | head -1 | awk '{print $2}')
 clen=$(printf '%s' "$r" | grep -i '^content-length:' | tr -d '\r' | awk '{print $2}')
 crange=$(printf '%s' "$r" | grep -i '^content-range:' | tr -d '\r' | awk '{print $2, $3}')
@@ -64,13 +79,13 @@ case "$etag" in W/*) say "  FAIL  weak ETag: $etag"; fail=1 ;; "") say "  FAIL  
 case "$cc" in *no-transform*) say "  PASS  cache-control has no-transform: $cc" ;; *) say "  FAIL  cache-control lacks no-transform: $cc"; fail=1 ;; esac
 
 say "== CORS preflight =="
-p=$(curl -s -D- -o /dev/null --max-time 20 -X OPTIONS \
+p=$(curl -s "$@" -D- -o /dev/null --max-time 20 -X OPTIONS \
   -H 'Origin: https://oysternews.xyz' -H 'Access-Control-Request-Method: GET' \
   -H 'Access-Control-Request-Headers: range,if-match' "$BASE/$archive")
 if printf '%s' "$p" | grep -qi '^access-control-allow-origin:'; then say "  PASS  preflight allows origin"; else say "  FAIL  preflight has no allow-origin"; fail=1; fi
 
 say "== CORS on the 404 path (lib/cities.ts:23 depends on this) =="
-n=$(curl -s -D- -o /dev/null --max-time 20 -H 'Origin: https://oysternews.xyz' "$BASE/archives/definitely-missing.json")
+n=$(curl -s "$@" -D- -o /dev/null --max-time 20 -H 'Origin: https://oysternews.xyz' "$BASE/archives/definitely-missing.json")
 ncode=$(printf '%s' "$n" | head -1 | awk '{print $2}')
 chk "404 status" "$ncode" "404"
 if printf '%s' "$n" | grep -qi '^access-control-allow-origin:'; then say "  PASS  404 carries allow-origin"; else say "  FAIL  404 lacks allow-origin - fetch rejects before the 404 branch runs"; fail=1; fi
