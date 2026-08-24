@@ -6,11 +6,28 @@ set -u
 BASE="${1:?usage: probe-cdn.sh <public-base-url>}"
 fail=0
 say() { printf '%s\n' "$*"; }
-chk() { if [ "$2" = "$3" ]; then say "  PASS  $1: $2"; else say "  FAIL  $1: got '$2' want '$3'"; fail=1; fi; }
+# An empty value never passes. Comparing "" to "" reads as equal, which once
+# reported PASS against a host whose TLS handshake was failing outright - the
+# exact silent success this script exists to catch.
+chk() {
+  if [ -z "$2" ]; then say "  FAIL  $1: empty (no response)"; fail=1
+  elif [ "$2" = "$3" ]; then say "  PASS  $1: $2"
+  else say "  FAIL  $1: got '$2' want '$3'"; fail=1; fi
+}
 
 say "== manifest =="
-man=$(curl -s --max-time 20 "$BASE/manifest.json")
+if ! man=$(curl -sS --fail-with-body --max-time 20 "$BASE/manifest.json" 2>&1); then
+  say "  FAIL  cannot fetch $BASE/manifest.json"
+  say "        $man"
+  say ""
+  say "ABORTED against $BASE - the host did not answer, so nothing below was tested."
+  exit 1
+fi
 archive=$(printf '%s' "$man" | grep -o '"archive"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/')
+if [ -z "$archive" ]; then
+  say "  FAIL  manifest has no archive key; got: $(printf '%s' "$man" | head -c 200)"
+  exit 1
+fi
 say "  archive key: $archive"
 for f in url regionsUrl citiesBase; do
   v=$(printf '%s' "$man" | grep -o "\"$f\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | sed 's/.*"\(https[^"]*\)"$/\1/')
@@ -24,6 +41,10 @@ done
 say "== HEAD archive =="
 h=$(curl -s -D- -o /dev/null --max-time 30 "$BASE/$archive")
 total=$(printf '%s' "$h" | grep -i '^content-length:' | tr -d '\r' | awk '{print $2}')
+if [ -z "$total" ]; then
+  say "  FAIL  no content-length on HEAD $BASE/$archive"
+  exit 1
+fi
 say "  real size: $total bytes"
 
 say "== range request (the one that matters) =="
