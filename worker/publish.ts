@@ -14,6 +14,7 @@
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { CDN_BASE } from "../lib/cdn.ts";
 import type { CityShard, Manifest, StoryGroup } from "../lib/types.ts";
 import { stampToMs } from "./fetch.ts";
 import type { RegionIndex } from "./regions.ts";
@@ -274,6 +275,45 @@ export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
         "value, and `node --env-file` strips them locally, so a credential can work " +
         "here and fail in Actions. Note this check cannot catch a read-only token — " +
         "it passes on `list` and the run then dies later inside appendShards.",
+      { cause },
+    );
+  }
+}
+
+/**
+ * Fail fast when the public host cannot serve what we are about to publish.
+ *
+ * `assertStoreReachable` proves the *S3 endpoint* answers, which is a
+ * different host from the one the browser reads. The manifest's `url`,
+ * `regionsUrl` and `citiesBase` are all built from `CDN_BASE`, so a run can
+ * write every object successfully, flip the manifest, exit 0 — and still
+ * leave the map blank, because nothing ever checked that `CDN_BASE` resolves.
+ * That is not hypothetical: on 2026-08-24 a scheduled run published a
+ * manifest pointing at a custom domain whose zone had not been delegated yet,
+ * and the failure was invisible for two and a half hours.
+ *
+ * A 404 is a **pass**. The bucket is empty on a first run, and any HTTP
+ * response at all proves DNS, TLS and routing work — which is the whole
+ * question. Only a transport-level throw (NXDOMAIN, TLS failure, refused
+ * connection) fails, and that is exactly the shape a wrong or undelegated
+ * `CDN_BASE` takes. One Class B operation against a 10M/month allowance.
+ */
+export async function assertPublicHostReachable(
+  base: string = CDN_BASE,
+  // Injected so the test can drive it without a network.
+  doFetch: typeof globalThis.fetch = globalThis.fetch,
+): Promise<void> {
+  try {
+    await doFetch(`${base}/${MANIFEST_KEY}`, { method: "HEAD" });
+  } catch (cause) {
+    throw new Error(
+      `The public host ${base} could not be reached, so a manifest published ` +
+        "now would point every browser at a dead origin while the run itself " +
+        "reported success. CDN_BASE comes from lib/cdn.ts, overridden by " +
+        "R2_PUBLIC_BASE. Check that the R2 bucket has this custom domain " +
+        "connected and that its zone is Active in Cloudflare — an undelegated " +
+        "or unconnected domain fails here as a DNS or TLS error, not an HTTP " +
+        "status. Any HTTP response, 404 included, passes this check.",
       { cause },
     );
   }
