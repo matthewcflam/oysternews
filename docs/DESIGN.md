@@ -153,7 +153,7 @@ cron (GitHub Action, every 4h)
   -> prune       only AFTER the flip, and only if it flipped
   -> ping        only after a real publish
   -> Cloudflare R2: stories-<hash>.pmtiles (immutable), boundaries.pmtiles
-     (built once), manifest.json (stable key, cacheControlMaxAge: 60)
+     (built once), manifest.json (stable key, cache-control max-age=60)
   -> Next.js /api/stories (s-maxage=300, swr=600)
   -> MapLibre GL JS
 ```
