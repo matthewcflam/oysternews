@@ -1,4 +1,3 @@
-import Link from "next/link";
 import FreshnessStamp from "./FreshnessStamp";
 
 /**
@@ -48,25 +47,6 @@ export default function BrandMark() {
       {/* Renders nothing until the manifest resolves — the block is sized by its
         contents, so the row simply is not there rather than sitting empty. */}
       <FreshnessStamp />
-
-      {/* `next/link`, not an anchor: /about is a route in this app, and a full
-        document load would discard the map and every tile it has cached. */}
-      <Link className="brand__about" href="/about">
-        <svg
-          className="brand__info"
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-          focusable="false"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1"
-        >
-          <circle cx="10" cy="10" r="5.5" />
-          <path d="M10 9v4" strokeLinecap="round" />
-          <path d="M10 6.75v.5" strokeLinecap="round" />
-        </svg>
-        About Us
-      </Link>
     </div>
   );
 }

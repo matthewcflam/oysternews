@@ -54,6 +54,7 @@ import {
 } from "@/lib/layers";
 import { loadManifest } from "@/lib/manifest";
 import { PIN_PIXEL_RATIO, trianglePin } from "@/lib/pin";
+import type { PlaceEntry } from "@/lib/place-search";
 import {
   FIT_PADDING,
   MAX_FIT_ZOOM,
@@ -76,6 +77,7 @@ import { sameKeys, topKeys } from "@/lib/top";
 import type { CityShard, RegionIndex } from "@/lib/types";
 import MapTilerLogo from "./MapTilerLogo";
 import RegionPanel from "./RegionPanel";
+import SearchBar from "./SearchBar";
 import StoryBubbles, { type TopStory } from "./StoryBubbles";
 import StoryPanel from "./StoryPanel";
 
@@ -111,6 +113,12 @@ type Selection =
   | { kind: "city"; country: string; name: string; at: [number, number] };
 
 const NO_PIN: FeatureCollection = { type: "FeatureCollection", features: [] };
+
+// The "World" button's own fixed height and its gap from MapLibre's zoom
+// control — both are CSS facts (see .reset-view-btn) needed here too since
+// the position effect computes the button's offset from the control's box.
+const WORLD_BTN_HEIGHT = 29;
+const WORLD_BTN_GAP = 6;
 
 // The city record a selection resolves to, or null (still loading, the
 // shard has nothing this country, or nothing is within CITY_SNAP_KM).
@@ -151,6 +159,41 @@ export default function MapView() {
   const [error, setError] = useState<string | null>(null);
   const provider = basemap().provider;
 
+  // Where MapLibre's own zoom control actually sits, in `right`/`bottom`
+  // CSS px for the "World" button below to match. Measured rather than a
+  // fixed offset: the attribution control is stacked in the same
+  // bottom-right corner underneath it, and attribution text can wrap to a
+  // second line at a narrow viewport, which pushes the zoom control up by
+  // a variable amount. A ResizeObserver on the control keeps this correct
+  // through that and through the container itself resizing.
+  const [worldBtnPos, setWorldBtnPos] = useState<{ right: number; bottom: number } | null>(null);
+
+  useEffect(() => {
+    if (!ready) return;
+    const group = ready
+      .getContainer()
+      .querySelector<HTMLElement>(".maplibregl-ctrl-bottom-right .maplibregl-ctrl-group");
+    if (!group) return;
+
+    const measure = () => {
+      const containerRect = ready.getContainer().getBoundingClientRect();
+      const groupRect = group.getBoundingClientRect();
+      setWorldBtnPos({
+        right: containerRect.right - groupRect.left + WORLD_BTN_GAP,
+        bottom: containerRect.bottom - (groupRect.top + groupRect.height / 2) - WORLD_BTN_HEIGHT / 2,
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(group);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [ready]);
+
   // The selected story. A click opens this panel rather than anchoring a
   // MapLibre Popup, which is what lets the panel be a component with a
   // testable content model (lib/story.ts) instead of an HTML string.
@@ -163,6 +206,12 @@ export default function MapView() {
   // the disc a render late.
   const selectedUrl = useRef<string | null>(null);
   const redrawSpider = useRef<(() => void) | null>(null);
+
+  // Fly back to the opening view and restore the orange headline bubbles —
+  // wired up inside the map effect, where the bubble capture and dismissal
+  // machinery already lives. Exposed as a ref so the "world" button below
+  // can call it without duplicating that state.
+  const resetHome = useRef<(() => void) | null>(null);
 
   // The opening-card speech bubbles: the five stories the ring marks on
   // arrival. Written exactly twice — once at the first idle (top five of
@@ -273,16 +322,13 @@ const zoomTargetFor = (
   }
 };
 
-// Fly the camera to the selected region's bounds — a button, brought back
-// as a thing the reader asks for after the label click's automatic zoom
-// was removed (the panel already answers the question directly). Panel
-// and outline stay in place. fitBounds, not flyTo with a computed zoom:
-// the box is the datum, and fitBounds accounts for viewport aspect ratio.
-// MAX_FIT_ZOOM keeps a small region from overshooting the archive's z12 ceiling.
-const zoomToRegion = () => {
+// Fly the camera to a box — shared by the region panel's "Zoom to" button
+// and a search selection, so the two gestures cannot drift apart on padding
+// or the z9 ceiling. fitBounds, not flyTo with a computed zoom: the box is
+// the datum, and fitBounds accounts for viewport aspect ratio. MAX_FIT_ZOOM
+// keeps a small region from overshooting the archive's z12 ceiling.
+const fitTo = (box: [number, number, number, number] | null) => {
   const map = mapRef.current;
-  const box = zoomTargetFor(selection);
-
   if (!map || !box || box.length < 4) return;
 
   const [minLng, minLat, maxLng, maxLat] = box;
@@ -295,6 +341,8 @@ const zoomToRegion = () => {
     { padding: FIT_PADDING, maxZoom: MAX_FIT_ZOOM },
   );
 };
+
+const zoomToRegion = () => fitTo(zoomTargetFor(selection));
 
   // Close the story panel and drop the container outline it drew. Shares
   // clearRegion's outline clearing since only one outline may exist on the
@@ -322,6 +370,41 @@ const zoomToRegion = () => {
     markSelected(selected.url);
 
     setStory(selected);
+  };
+
+  // A search selection: fly to the box, draw the outline, and open the same
+  // panel a label click would. No triangle — see the comment below.
+  const selectPlace = async (place: PlaceEntry) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    // Every selection starts from a clean slate, same as every other path.
+    setStory(null);
+    clearRegion();
+
+    const box =
+      place.kind === "continent"
+        ? (CONTINENT_BBOX[place.id as keyof typeof CONTINENT_BBOX] ?? null)
+        : await loadRegionBboxes().then(
+            (table) => {
+              setBboxes(table);
+              return BBOX_OVERRIDES[place.id] ?? bboxFor(table, place.id);
+            },
+            () => null,
+          );
+
+    fitTo(box);
+
+    if (place.kind === "country" || place.kind === "state") {
+      const outlineLayer = OUTLINE_LAYER_FOR[place.kind];
+      if (outlineLayer) map.setFilter(outlineLayer, matchId(place.id));
+    }
+
+    // No selection triangle. The triangle means "this is the exact point you
+    // clicked" — a search has no point, and dropping one at a bbox centre
+    // would put Indonesia's mark in the Java Sea. The camera move and the
+    // red outline are the statement instead.
+    setSelection({ kind: place.kind, id: place.id, name: place.name });
   };
 
   // The index, fetched lazily on first open — nothing needs it until a
@@ -599,6 +682,10 @@ const zoomToRegion = () => {
         // Has the opening ranking been taken? Taken once; see `refresh`.
         let bubblesCaptured = false;
 
+        // The opening ranking itself, held onto after `bubbles` is emptied
+        // by dismissBubbles — this is what the "world" button restores.
+        let capturedBubbles: TopStory[] = [];
+
         // Take the bubbles down permanently on the reader's first camera
         // move (movestart — drag, wheel, keyboard, or a search flyTo all
         // count). Armed only after the capture, so a startup camera
@@ -681,6 +768,7 @@ const zoomToRegion = () => {
             // open rather than freezing an empty set for the whole session.
             if (opening.length) {
               bubbles = opening;
+              capturedBubbles = opening;
               bubblesCaptured = true;
               setTops(bubbles);
             }
@@ -705,6 +793,33 @@ const zoomToRegion = () => {
         // zoom, not move: a leaf is its anchor plus a pixel offset, and a
         // pan translates both together, so only a zoom needs a rebuild.
         map.on("zoom", drawSpider);
+
+        // The "world" button: fly home and put the opening bubbles back.
+        // dismissBubbles is off'd immediately so the flyTo's own movestart
+        // doesn't dismiss the bubbles this is about to restore. Restoring
+        // them waits for moveend rather than firing alongside flyTo: a
+        // bubble is positioned by projecting its coordinate through the
+        // CURRENT camera (StoryBubbles' pointFor), and setting it mid-flight
+        // would project against wherever the animation happened to be,
+        // often off-screen, which placeBubbles then drops. Once settled,
+        // dismissBubbles goes back on so a move the reader makes afterward
+        // still dismisses them once.
+        const resetToHome = () => {
+          map.off("movestart", dismissBubbles);
+          setStory(null);
+          clearRegion();
+          map.once("moveend", () => {
+            bubbles = capturedBubbles;
+            setTops(bubbles);
+            map.setFilter(
+              LABELS_LAYER_ID,
+              bubbleLabelFilter(bubbles.map((bubble) => bubble.story.url)),
+            );
+            map.on("movestart", dismissBubbles);
+          });
+          map.flyTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM });
+        };
+        resetHome.current = resetToHome;
 
         // One outline at a time, and none by default.
         const clearOutline = () => {
@@ -886,8 +1001,9 @@ const zoomToRegion = () => {
     return () => {
       cancelled = true;
       setReady(null);
-      // The handler closes over a map that is about to be removed.
+      // Both handlers close over a map that is about to be removed.
       redrawSpider.current = null;
+      resetHome.current = null;
       map.remove();
       removeProtocol("pmtiles");
     };
@@ -947,6 +1063,27 @@ const zoomToRegion = () => {
     <>
       <div ref={container} className="map" />
 
+      <SearchBar onSelect={(place) => void selectPlace(place)} />
+
+      {/*
+        Bottom-right, left of MapLibre's own zoom control — see
+        docs/DESIGN.md#regions for why the corner is otherwise free.
+        Resets the camera to the opening view and brings the orange
+        headline bubbles back.
+      */}
+
+      
+      {/*
+      <button
+        type="button"
+        className="reset-view-btn"
+        style={worldBtnPos ?? undefined}
+        onClick={() => resetHome.current?.()}
+      >
+        World
+      </button>
+      */}
+
       {/*
         The top five headlines, in bubbles pointing at their own pins.
         Outside the map container so MapLibre never sees the nodes — it
@@ -979,19 +1116,6 @@ const zoomToRegion = () => {
           onClose={clearRegion}
         />
       )}
-      {/*
-        §2.6's logo, bottom-left of the MAP, and as of 2026-08-16 it is the ONLY
-        copy: both cards end ~200px above this corner, so the mark is visible past
-        either of them. Mode 2's card carries "How does this work?" in its footer
-        instead, and Mode 3's region card has no footer at all — see
-        `MapTilerLogo` for what the second copy was for.
-
-        **This rule was commented out in globals.css and restored on 2026-08-16.**
-        Without it the anchor fell into normal flow at the top of `main`, which is
-        exactly the silent §2.6 failure the two-copy arrangement was built to
-        prevent. Do not disable it again without saying where the mark went.
-      */}
-      {/*<MapTilerLogo />*/}
       {provider === "openfreemap" && (
         <div className="notice notice--info">
           Keyless basemap (OpenFreeMap escape hatch). Set{" "}
