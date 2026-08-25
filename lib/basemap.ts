@@ -5,7 +5,6 @@
  * visible rather than merely different. See docs/DESIGN.md#basemap.
  */
 
-const MAPTILER_STYLE = "streets-v2";
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
 /**

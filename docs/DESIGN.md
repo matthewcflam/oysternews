@@ -673,6 +673,22 @@ land off-coastline or on a neighboring landmass). No name matching happens
 anywhere in this path. City and continent labels need a different
 mechanism entirely — see `#cities-continents`.
 
+**Where a name is allowed to become an id.** The search box ("Where to
+next?", `components/SearchBar.tsx`) necessarily matches on typed names —
+that is what search means — which looks like exactly the trap the rule
+above exists to avoid. The resolution is where the join happens, not
+whether it happens: `scripts/build-boundaries.ts` already derives every
+region id from Natural Earth for the archive and `region-bbox.json`, off
+the same `outline()` calls. Carrying a `name` (and `alt` aliases) alongside
+that id and emitting `public/place-index.json` is the *first* join, not a
+second one — a name only ever rides along with an id the build has already
+decided. The browser (`lib/place-search.ts`) matches a typed string against
+that committed table and reads off its id; it never derives an id from a
+string itself. An id search cannot resolve to is, by construction, absent
+from the table, which `scripts/place-index.test.ts`'s committed-artifact
+check (every place-index id has a `region-bbox.json` entry) enforces
+mechanically.
+
 ### The FIPS trap
 
 GDELT uses FIPS 10-4 country codes, not ISO 3166. Four collide with
@@ -953,8 +969,9 @@ has to be taken again explicitly rather than drifting in silently. See
 
 ## Basemap
 
-`lib/basemap.ts` returns a MapTiler hosted style
-(`streets-v2`) when `NEXT_PUBLIC_MAPTILER_KEY` is set, and falls back to a
+`lib/basemap.ts` returns a custom MapTiler style (style ID
+`019fef1b-6271-7b5d-bc0d-bc743ed95216`, not a stock one) when
+`NEXT_PUBLIC_MAPTILER_KEY` is set, and falls back to a
 keyless OpenFreeMap positron style with no account and no key at all when
 it is not — `provider` is surfaced in the UI so a keyless deploy is
 visibly different, never silently degraded. `DEFAULT_ZOOM = 2` rather than

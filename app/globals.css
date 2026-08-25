@@ -346,47 +346,14 @@ main .bubbles {
   opacity: 1;
 }
 
-/* §5.2 decision 3's path from the map to the measured accuracy — and as of
-   2026-08-14 it is reachable with nothing selected, which is what it always
-   needed to be. Underlined because it is the one navigation on this screen. */
-.brand__about {
-  position: fixed;
-  left: 24px;
-  bottom: 24px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: #ffffff;
-  font-size: 14px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.brand__about:hover {
-  opacity: 1;
-}
-
-.brand__info {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  /* The glyph is stroked with `currentColor`, so it inherits the hover above
-     and cannot drift from the text beside it. */
-  vector-effect: non-scaling-stroke;
-}
-
 /* ==========================================================================
    The favicon and search field, top-centre (2026-08-14)
    ========================================================================== */
 
-/* Inert — see `components/SearchBar.tsx` for why this is a div and not an input.
-   `pointer-events: none` throughout, because nothing here is clickable yet and a
-   dead 194px block sitting on the map would swallow drags for no reason. */
+/* A real combobox now — see `components/SearchBar.tsx`. `pointer-events: none`
+   on the group itself, still, so the gaps around the pill and the list pass
+   drags through to the map; `.search__field` and `.search__list` opt back in
+   below, since those are the only parts a reader can actually click. */
 .search {
   position: absolute;
   top: 31px;
@@ -416,6 +383,13 @@ main .bubbles {
   height: 32px;
 }
 
+/* The containing block for `.search__list` — so the list's left/right edges
+   track the field's own width exactly, with no magic-number offset for the
+   mark sphere sitting beside it. */
+.search__box {
+  position: relative;
+}
+
 .search__field {
   display: flex;
   align-items: center;
@@ -426,16 +400,25 @@ main .bubbles {
   padding: 0 10px 0 17px;
   border-radius: 20px;
   background: var(--pill);
+  pointer-events: auto;
 }
 
-.search__placeholder {
+.search__input {
   flex: 1;
   min-width: 0;
-  color: var(--muted);
+  color: inherit;
+  font: inherit;
   font-size: 16px;
   line-height: 22px;
   letter-spacing: -0.02em;
   white-space: nowrap;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.search__input::placeholder {
+  color: var(--muted);
 }
 
 .search__icon {
@@ -443,6 +426,55 @@ main .bubbles {
   width: 20px;
   height: 20px;
   color: var(--muted);
+}
+
+/* Under the pill, same width and 20px radius family — a suggestion list reads
+   as one control with the field it drops from, not a separate popover. `left:
+   0` / `width: 100%` against `.search__box` (not `.search__field` itself,
+   since a form isn't a positioning context) keeps both edges flush with the
+   field regardless of the mark's width. */
+.search__list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  border-radius: 20px;
+  background: var(--pill);
+  pointer-events: auto;
+}
+
+.search__option {
+  padding: 8px 17px;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search__option[aria-selected="true"] {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.search__option-parent {
+  color: var(--muted);
+}
+
+.search__empty {
+  padding: 8px 17px;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: -0.02em;
+  color: var(--muted);
+  white-space: normal;
+  cursor: default;
 }
 
 /* §2.6 / MapTiler Free plan: the logo sits bottom-left, opposite MapLibre's own
@@ -1250,6 +1282,42 @@ main .bubbles {
 
 .notice code {
   font-size: 11px;
+}
+
+/* The "World" button: resets the camera to the opening view and restores
+   the orange headline bubbles. Docked to the left of MapLibre's own
+   NavigationControl group (29px, bottom-right at 10px) on the same row —
+   width is content-driven, so the right edge is pinned to the control's
+   left edge (10 + 29 + 6px gap) rather than a second fixed offset. z-index
+   2, same layer as the brand block and the notices: above the map, below
+   an open panel. White plate to match MapLibre's own control styling. */
+.reset-view-btn {
+  position: absolute;
+  right: 45px;
+  bottom: 10px;
+  z-index: 2;
+  height: 29px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.reset-view-btn:hover {
+  background: #f2f2f2;
+}
+
+.reset-view-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 2px 2px #0096ff;
 }
 
 /* Phase 6's About page.

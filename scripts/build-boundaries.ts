@@ -61,6 +61,18 @@ const OUTPUT = path.join(REPO_ROOT, "public", "boundaries.pmtiles");
  */
 const BBOX_OUTPUT = path.join(REPO_ROOT, "public", "region-bbox.json");
 
+/**
+ * The third output: a flat, searchable name -> id index for countries and
+ * admin-1 regions, for the "Where to next?" search box.
+ *
+ * **Built from the same `outline()` calls as the archive and the bbox table —
+ * this is the first join, not a second one.** A name reaches this file only
+ * riding along with an id the build already decided; the browser never turns a
+ * typed string into an id on its own. See
+ * docs/DESIGN.md#the-label-based-gesture-and-no-name-matching-ever.
+ */
+const PLACE_INDEX_OUTPUT = path.join(REPO_ROOT, "public", "place-index.json");
+
 export const COUNTRIES_LAYER = "countries";
 export const REGIONS_LAYER = "regions";
 
@@ -78,7 +90,7 @@ const SOURCES = {
 type Feature = {
   type: "Feature";
   geometry: unknown;
-  properties: Record<string, string | number | null | undefined>;
+  properties: Record<string, string | number | string[] | null | undefined>;
 };
 
 /** Natural Earth writes -99 rather than null for "no value". */
@@ -97,23 +109,29 @@ async function naturalEarth(source: { url: string; cache: string }): Promise<Fea
   return JSON.parse(await readFile(source.cache, "utf8")).features as Feature[];
 }
 
+type CrosswalkEntry = { iso: string; name: string };
+
+/** The committed crosswalk plus its overrides, merged — fips -> {iso, name}. */
+async function loadCrosswalk(): Promise<Record<string, CrosswalkEntry>> {
+  const read = async (file: string) =>
+    JSON.parse(await readFile(path.join(REPO_ROOT, "data", file), "utf8")).fips as Record<
+      string,
+      CrosswalkEntry
+    >;
+
+  return { ...(await read("crosswalk.json")), ...(await read("fips-overrides.json")) };
+}
+
 /**
- * ISO -> FIPS, inverted from the committed crosswalk plus its overrides.
+ * ISO -> FIPS, inverted from the merged crosswalk.
  *
  * Needed because Natural Earth's own `FIPS_10` is blank for exactly the places
  * the overrides file exists to fix. Built from the same data the rest of the
  * pipeline joins on, so boundaries cannot drift from placement.
  */
-async function isoToFips(): Promise<Map<string, string>> {
-  const read = async (file: string) =>
-    JSON.parse(await readFile(path.join(REPO_ROOT, "data", file), "utf8")).fips as Record<
-      string,
-      { iso: string; name: string }
-    >;
-
-  const merged = { ...(await read("crosswalk.json")), ...(await read("fips-overrides.json")) };
+function isoToFips(crosswalk: Record<string, CrosswalkEntry>): Map<string, string> {
   const byIso = new Map<string, string>();
-  for (const [fips, entry] of Object.entries(merged)) {
+  for (const [fips, entry] of Object.entries(crosswalk)) {
     // First writer wins: the crosswalk is generated in Natural Earth's own order,
     // and a later territory sharing an ISO code must not displace its country.
     if (entry.iso && !byIso.has(entry.iso)) byIso.set(entry.iso, fips);
@@ -121,14 +139,31 @@ async function isoToFips(): Promise<Map<string, string>> {
   return byIso;
 }
 
-/** One property, `id`, holding the code a story's `region` will be compared to. */
-const outline = (feature: Feature, id: string): Feature => ({
+/**
+ * A feature carrying whatever properties are handed to it — `id` always, plus
+ * `name`/`alt`/`parent` when the caller has them. `stripped()` reduces this
+ * back to `{ id }` at tippecanoe-write time, so the archive never sees the
+ * extra columns.
+ */
+const outline = (feature: Feature, properties: Feature["properties"]): Feature => ({
   type: "Feature",
   geometry: feature.geometry,
-  properties: { id },
+  properties,
 });
 
-function countryOutlines(features: Feature[], byIso: Map<string, string>): Feature[] {
+/** Reduces a feature list back to `{ id }` — the archive's bytes must not change. */
+const stripped = (features: Feature[]): Feature[] =>
+  features.map((feature) => ({
+    type: "Feature",
+    geometry: feature.geometry,
+    properties: { id: feature.properties.id },
+  }));
+
+export function countryOutlines(
+  features: Feature[],
+  byIso: Map<string, string>,
+  crosswalk: Record<string, CrosswalkEntry>,
+): Feature[] {
   const out: Feature[] = [];
   let recovered = 0;
 
@@ -140,7 +175,26 @@ function countryOutlines(features: Feature[], byIso: Map<string, string>): Featu
 
     if (!fips) continue;
     if (!value(feature.properties.FIPS_10)) recovered += 1;
-    out.push(outline(feature, fips));
+
+    const name =
+      value(feature.properties.NAME_EN) ||
+      value(feature.properties.NAME) ||
+      value(feature.properties.NAME_LONG);
+
+    // A bounded set of aliases, not the full 30-odd localized NAME_* columns —
+    // enough to catch "Russia" vs "Russian Federation", not a translation table.
+    const alt = [
+      ...new Set(
+        [
+          value(feature.properties.NAME_LONG),
+          value(feature.properties.FORMAL_EN),
+          value(feature.properties.ABBREV),
+          crosswalk[fips]?.name ?? "",
+        ].filter((candidate) => candidate && candidate !== name),
+      ),
+    ];
+
+    out.push(outline(feature, { id: fips, name, ...(alt.length ? { alt } : {}) }));
   }
 
   console.log(`  countries: ${out.length} outlines (${recovered} via the crosswalk)`);
@@ -169,7 +223,7 @@ const ADM1_FIPS_OVERRIDES: Record<string, string> = {
   "IN-TN": "IN25",
 };
 
-function regionOutlines(features: Feature[]): Feature[] {
+export function regionOutlines(features: Feature[], byIso: Map<string, string>): Feature[] {
   const out: Feature[] = [];
   const countriesById = new Map<string, Set<string>>();
   let usPostal = 0;
@@ -192,7 +246,10 @@ function regionOutlines(features: Feature[]): Feature[] {
       value(feature.properties.iso_a2) || value(feature.properties.adm0_a3) || "??";
     (countriesById.get(id) ?? countriesById.set(id, new Set()).get(id)!).add(country);
 
-    out.push(outline(feature, id));
+    const name = value(feature.properties.name_en) || value(feature.properties.name);
+    const parent = byIso.get(value(feature.properties.iso_a2));
+
+    out.push(outline(feature, { id, name, ...(parent ? { parent } : {}) }));
   }
 
   console.log(
@@ -319,6 +376,66 @@ export function bboxesById(features: Feature[]): Record<string, Bbox> {
   return out;
 }
 
+/* ------------------------------------------------------------------------- */
+/* The place index                                                           */
+/* ------------------------------------------------------------------------- */
+
+export type PlaceEntry = {
+  id: string;
+  name: string;
+  kind: "country" | "state";
+  parent?: string;
+  alt?: string[];
+};
+
+/**
+ * The searchable name -> id table for countries and admin-1 regions, built
+ * from the same `outline()` output the archive and the bbox table use.
+ *
+ * Countries first, then regions — the same one-flat-table reasoning as the
+ * merged bbox object: a FIPS country code is two characters and an admin-1
+ * code is four, so the namespaces cannot collide.
+ *
+ * An id with no bbox is dropped — a suggestion the camera cannot fly to is a
+ * dead row — which is what `place-index.test.ts`'s committed-artifact
+ * invariant checks mechanically.
+ */
+export function placeIndexFrom(
+  countries: Feature[],
+  regions: Feature[],
+  bboxes: Record<string, Bbox>,
+): PlaceEntry[] {
+  const entries: PlaceEntry[] = [];
+  const seen = new Set<string>();
+
+  const push = (feature: Feature, kind: PlaceEntry["kind"]) => {
+    const id = String(feature.properties.id ?? "");
+    const name = String(feature.properties.name ?? "");
+    if (!id || !name) return;
+    if (!(id in bboxes)) return;
+    if (seen.has(id)) return;
+    seen.add(id);
+
+    const parent = feature.properties.parent ? String(feature.properties.parent) : undefined;
+    const alt = Array.isArray(feature.properties.alt)
+      ? (feature.properties.alt as string[])
+      : undefined;
+
+    entries.push({
+      id,
+      name,
+      kind,
+      ...(parent ? { parent } : {}),
+      ...(alt && alt.length ? { alt } : {}),
+    });
+  };
+
+  for (const feature of countries) push(feature, "country");
+  for (const feature of regions) push(feature, "state");
+
+  return entries;
+}
+
 /**
  * **A forward-slash literal, never `path.join`** — and the paths handed after it
  * get the same treatment (`posix`, below).
@@ -352,17 +469,20 @@ async function main(): Promise<void> {
   await mkdir(BUILD_DIR, { recursive: true });
   await mkdir(path.dirname(OUTPUT), { recursive: true });
 
-  const byIso = await isoToFips();
-  const countries = countryOutlines(await naturalEarth(SOURCES.countries), byIso);
-  const regions = regionOutlines(await naturalEarth(SOURCES.regions));
+  const crosswalk = await loadCrosswalk();
+  const byIso = isoToFips(crosswalk);
+  const countries = countryOutlines(await naturalEarth(SOURCES.countries), byIso, crosswalk);
+  const regions = regionOutlines(await naturalEarth(SOURCES.regions), byIso);
 
   const countriesFile = path.join(BUILD_DIR, "countries.geojson");
   const regionsFile = path.join(BUILD_DIR, "regions.geojson");
   const collection = (features: Feature[]) =>
     `${JSON.stringify({ type: "FeatureCollection", features })}\n`;
 
-  await writeFile(countriesFile, collection(countries), "utf8");
-  await writeFile(regionsFile, collection(regions), "utf8");
+  // Stripped to `{ id }` here — the archive's bytes must not change just
+  // because `outline()` now carries a name/parent/alt alongside it.
+  await writeFile(countriesFile, collection(stripped(countries)), "utf8");
+  await writeFile(regionsFile, collection(stripped(regions)), "utf8");
 
   /**
    * Countries and regions in ONE table, because the browser looks up by id and
@@ -378,12 +498,21 @@ async function main(): Promise<void> {
       ` (${(bboxSize / 1024).toFixed(0)} KB)`,
   );
 
+  const places = placeIndexFrom(countries, regions, bboxes);
+  await writeFile(PLACE_INDEX_OUTPUT, `${JSON.stringify(places)}\n`, "utf8");
+  const placeSize = (await stat(PLACE_INDEX_OUTPUT)).size;
+  console.log(
+    `  places:    ${places.length} entries -> ${PLACE_INDEX_OUTPUT}` +
+      ` (${(placeSize / 1024).toFixed(0)} KB)`,
+  );
+
   /**
    * **`--bbox-only` exists because the two outputs have wildly different costs.**
-   * The archive needs tippecanoe installed and takes minutes; the bbox table is
-   * a pass over feature lists that are already in memory. Regenerating the table
-   * after a join change should not require the tool, and skipping the archive
-   * here is safe precisely because nothing above this line is archive-specific.
+   * The archive needs tippecanoe installed and takes minutes; the bbox table and
+   * the place index are a pass over feature lists already in memory. Regenerating
+   * them after a join change should not require the tool, and skipping the
+   * archive here is safe precisely because nothing above this line is
+   * archive-specific.
    */
   if (process.argv.includes("--bbox-only")) {
     console.log("--bbox-only: skipping tippecanoe");

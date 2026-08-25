@@ -44,6 +44,24 @@ export function continentIdFor(name: string | null | undefined): ContinentId | n
 }
 
 /**
+ * One canonical display name per id, for the search suggestion list.
+ * Deliberately not an invert of `NAME_TO_ID` — that map is many-to-one
+ * (`"oceania"` and `"australia"` both resolve to `CONT:OC`), so a naive
+ * invert would need an arbitrary tiebreak. "Oceania" is picked over
+ * "Australia" here because the continent includes New Zealand and the
+ * Pacific islands, not just the country.
+ */
+export const CONTINENT_NAME: Record<ContinentId, string> = {
+  "CONT:AF": "Africa",
+  "CONT:AN": "Antarctica",
+  "CONT:AS": "Asia",
+  "CONT:EU": "Europe",
+  "CONT:NA": "North America",
+  "CONT:OC": "Oceania",
+  "CONT:SA": "South America",
+};
+
+/**
  * Curated camera boxes for the "Zoom to" button, in the spirit of
  * `MapView.tsx`'s `BBOX_OVERRIDES`: a computed union of member countries
  * would hand Europe a box reaching the Bering Strait through Russia's own
