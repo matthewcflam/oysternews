@@ -22,6 +22,7 @@ import { placeStory } from "./place.ts";
 import {
   MANIFEST_KEY,
   type ArchiveStore,
+  assertPublicHostReachable,
   assertStoreReachable,
   pingHealthcheck,
   publish,
@@ -352,6 +353,8 @@ async function main(): Promise<void> {
   // line and nowhere else, and run() takes an injected store precisely so a
   // caller can hand it a fake. A reachability probe belongs to the real one.
   await assertStoreReachable(store);
+  // The S3 endpoint answering says nothing about the host the browser reads.
+  await assertPublicHostReachable();
 
   const summary = await run({
     store,

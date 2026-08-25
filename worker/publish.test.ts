@@ -17,6 +17,7 @@ import {
   MIN_COUNTRIES,
   archiveKey,
   archivesToPrune,
+  assertPublicHostReachable,
   assertStoreReachable,
   checkInvariants,
   contentHash,
@@ -669,6 +670,51 @@ describe("assertStoreReachable", () => {
     };
     await expect(assertStoreReachable(store)).rejects.toThrow("R2_ACCOUNT_ID");
     await expect(assertStoreReachable(store)).rejects.toMatchObject({ cause });
+  });
+});
+
+describe("assertPublicHostReachable", () => {
+  it("HEADs the manifest on the public base", async () => {
+    const seen: Array<[string, string | undefined]> = [];
+    const doFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      seen.push([String(url), init?.method]);
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await expect(
+      assertPublicHostReachable("https://cdn.example", doFetch),
+    ).resolves.toBeUndefined();
+    expect(seen).toEqual([["https://cdn.example/manifest.json", "HEAD"]]);
+  });
+
+  it("passes on 404 — an empty bucket still proves DNS, TLS and routing", async () => {
+    // The check asks whether the host answers at all, not whether the object
+    // exists. A first run against a fresh bucket legitimately 404s here, and
+    // failing that would block the very first publish.
+    const doFetch = (async () =>
+      new Response(null, { status: 404 })) as unknown as typeof globalThis.fetch;
+    await expect(
+      assertPublicHostReachable("https://cdn.example", doFetch),
+    ).resolves.toBeUndefined();
+  });
+
+  it("fails on a transport error, naming CDN_BASE and keeping the cause", async () => {
+    // The regression this exists for: on 2026-08-24 a scheduled run published
+    // a manifest built from a custom domain whose zone was not delegated yet.
+    // Every write succeeded, the run exited 0, and the map was blank for two
+    // and a half hours. An undelegated host fails as a transport throw, never
+    // as an HTTP status, which is why this is the condition being tested.
+    const cause = new Error("getaddrinfo ENOTFOUND cdn.example");
+    const doFetch = (async () => {
+      throw cause;
+    }) as unknown as typeof globalThis.fetch;
+
+    await expect(assertPublicHostReachable("https://cdn.example", doFetch)).rejects.toThrow(
+      "CDN_BASE",
+    );
+    await expect(assertPublicHostReachable("https://cdn.example", doFetch)).rejects.toMatchObject({
+      cause,
+    });
   });
 });
 
