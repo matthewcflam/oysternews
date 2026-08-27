@@ -5,7 +5,7 @@ by how many independent news organizations covered them — with wire services a
 papers of record given precedence over the rest — and they densify as you zoom in.
 
 **[Live here](https://sonder-drab-eta.vercel.app/).** A GitHub Action runs the
-ingestion pipeline every four hours over a rolling 24-hour window, publishes a
+ingestion pipeline twice a day over a rolling 24-hour window, publishes a
 content-hashed archive to Cloudflare R2, and the browser follows `manifest.json` to
 find it. No deploy is involved in a normal publish cycle.
 
