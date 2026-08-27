@@ -34,7 +34,7 @@ import type { Manifest } from "./types";
 export const MANIFEST_URL = process.env.NEXT_PUBLIC_MANIFEST_URL ?? `${CDN_BASE}/manifest.json`;
 
 /** §3.5. The freshness notice fires past 2× this, per §8. */
-export const CADENCE_HOURS = 4;
+export const CADENCE_HOURS = 12;
 
 let pending: Promise<Manifest> | null = null;
 
@@ -63,7 +63,7 @@ export function resetManifestCache(): void {
  * §2.3's relative freshness stamp.
  *
  * Deliberately coarse. The underlying data is a rolling 24-hour window assembled
- * every 4 hours, so minute-level precision would imply a currency the pipeline
+ * twice a day, so minute-level precision would imply a currency the pipeline
  * does not have.
  *
  * **The ladder moved to `lib/age.ts` and is now shared with the story stamps**

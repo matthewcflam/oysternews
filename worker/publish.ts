@@ -76,7 +76,7 @@ export const MIN_TITLE_RATE = 0.95;
 export const MIN_GROUPS = 1;
 
 /**
- * How long the count band may block publication before it stands down (8h,
+ * How long the count band may block publication before it stands down (24h,
  * the 2x monitoring cadence). Guards against COUNT_BAND_MAX going stale as
  * real volume grows — without this valve a calibration constant falling
  * behind reality would refuse every run with no self-correction. Only the
@@ -84,7 +84,7 @@ export const MIN_GROUPS = 1;
  * stay armed unconditionally since they catch real garbage rather than a
  * volume swing. See docs/DESIGN.md#the-count-band.
  */
-export const BAND_RELAX_AFTER_MS = 8 * 60 * 60 * 1000;
+export const BAND_RELAX_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export type PublishStats = {
   groups: number;
@@ -441,7 +441,7 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   return { published: true, manifest, stats, pruned: stale.length, bandRelaxed };
 }
 
-// Ping the dead-man switch (healthchecks.io, 4h period + 4h grace = the 2x
+// Ping the dead-man switch (healthchecks.io, 12h period + 12h grace = the 2x
 // cadence alert rule, docs/DESIGN.md#failure). Best-effort: the run has
 // already published by the time this is called, so a failed ping must not
 // turn a monitoring outage into a data outage.

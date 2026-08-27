@@ -129,11 +129,11 @@ it. See `#pipeline`.
 
 ## Pipeline
 
-The worker (`worker/`) runs the whole ingest-to-publish pipeline every four
-hours as a GitHub Action, over a rolling 24-hour window:
+The worker (`worker/`) runs the whole ingest-to-publish pipeline twice a day
+as a GitHub Action, over a rolling 24-hour window:
 
 ```
-cron (GitHub Action, every 4h)
+cron (GitHub Action, 9:20am/9:20pm Pacific = 16:20/04:20 UTC)
   -> fetch.ts    watermark -> now, capped at 12 bundles, HTTP only
   -> parse.ts    index-scan tab offsets, materialize 9 of 27 columns,
                  never build V2GCAM, schema canary on column count (>=27
@@ -1059,7 +1059,7 @@ anything. Calibration ladder, each rung a measured or derived number:
 |---|---|
 | 1,467 | A one-bundle smoke run (`BUNDLE_CAP=1`) |
 | **2,000** | **Floor** — roughly 20× below steady state; catches a real collapse or an accidental `BUNDLE_CAP` left set, and can never false-fire against real traffic |
-| 40,700 | Steady state — `#data-reality`'s measured distinct city stories/day |
+| 40,700 | Steady state under *continuous* ingest — `#data-reality`'s measured distinct city stories/day |
 | **60,000** | **Ceiling** — 1.47× steady state |
 | ~75,000 | Where grouping stops merging entirely (~112,500 records/day × ~67% placed) |
 
@@ -1069,13 +1069,24 @@ looking number like 25,000 was proposed and rejected specifically because
 it sits *below* steady state, which would have made it a permanent outage
 with no self-healing path rather than a real tripwire.
 
+**The 40,700 rung no longer describes what a run actually produces.** It was
+measured when the cron ran every four hours and `MAX_BUNDLES = 12` covered the
+whole gap. On the twice-daily cadence 48 bundles accumulate between runs and the
+cap still takes only the newest 12, so the window is deliberately sampled — 6 of
+every 24 hours of news, in two blocks — and steady state lands nearer ~10,000.
+Both constants were left alone on purpose: the floor still sits ~5× below the new
+volume and the ceiling only moves further away, so neither can false-fire. Only
+this rung's provenance changed, and re-deriving the constants against the sampled
+window would buy nothing. The lever, if the map ever reads too sparse, is
+`MAX_BUNDLES` in `worker/fetch.ts` — not these two numbers.
+
 **Why only the count band relaxes, and only when gated on non-empty
 history.** The band was originally *relative* — a trailing median of
 publish history, `[0.4×, 2.5×]` — and it failed twice in one day, once at
 each bound, because a refused run never appends to history, so the median
 that refused it never moves: "fail-closed becomes fail-forever." It was
 rewritten to the two absolute constants above, which read no history at
-all. `BAND_RELAX_AFTER_MS = 8h` (the monitoring cadence's 2× threshold,
+all. `BAND_RELAX_AFTER_MS = 24h` (the monitoring cadence's 2× threshold,
 `#failure`) lets **only the count band** stand down after being blocked
 that long, logging a loud WARN; `MIN_GROUPS`, `MIN_COUNTRIES = 15`, and
 `MIN_TITLE_RATE = 0.95` stay armed unconditionally — "they are the ones
