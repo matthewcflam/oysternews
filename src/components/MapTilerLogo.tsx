@@ -32,7 +32,12 @@ export default function MapTilerLogo() {
       rel="noopener noreferrer"
     >
       {/* biome-ignore lint/performance/noImgElement: remote logo, unknown host */}
-      <img src="https://api.maptiler.com/resources/logo.svg" alt="MapTiler" width={110} height={30} />
+      <img
+        src="https://api.maptiler.com/resources/logo.svg"
+        alt="MapTiler"
+        width={110}
+        height={30}
+      />
     </a>
   );
 }

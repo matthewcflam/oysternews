@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoryGroup } from "../src/lib/types.ts";
-import { REGION_TOP_N, buildRegionIndex, indexStats } from "./regions.ts";
+import { buildRegionIndex, indexStats, REGION_TOP_N } from "./regions.ts";
 
 function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   return {
@@ -76,7 +76,7 @@ describe("buildRegionIndex", () => {
 
   it("caps each region independently", () => {
     const many = Array.from({ length: REGION_TOP_N + 5 }, (_, i) =>
-      group({ id: `${i}`, salience: 100 - i }),
+      group({ id: `${i}`, salience: 100 - i })
     );
     const index = buildRegionIndex([...many, group({ id: "fr", countryCode: "FR", adm1: "" })]);
     expect(index.US.stories).toHaveLength(REGION_TOP_N);
@@ -101,12 +101,16 @@ describe("buildRegionIndex", () => {
 
 describe("buildRegionIndex — continents (§4)", () => {
   it("files under a continent key when a resolver is supplied", () => {
-    const index = buildRegionIndex([group({ countryCode: "US", adm1: "USCA" })], undefined, () => "CONT:NA");
+    const index = buildRegionIndex(
+      [group({ countryCode: "US", adm1: "USCA" })],
+      undefined,
+      () => "CONT:NA"
+    );
     expect(Object.keys(index).sort()).toEqual(["CONT:NA", "US", "USCA"]);
     expect(index["CONT:NA"].stories[0].title).toBe("A headline");
   });
 
-  it("files nothing when the resolver returns \"\"", () => {
+  it('files nothing when the resolver returns ""', () => {
     const index = buildRegionIndex([group()], undefined, () => "");
     expect(Object.keys(index).sort()).toEqual(["US", "USCA"]);
   });
@@ -120,10 +124,12 @@ describe("buildRegionIndex — continents (§4)", () => {
     const index = buildRegionIndex(
       [group({ countryCode: "US", adm1: "USCA" }), group({ countryCode: "FR", adm1: "" })],
       undefined,
-      (fips) => (fips === "US" ? "CONT:NA" : "CONT:EU"),
+      (fips) => (fips === "US" ? "CONT:NA" : "CONT:EU")
     );
     for (const key of Object.keys(index)) {
-      expect(key === "CONT:NA" || key === "CONT:EU" || /^[A-Z]{2}([A-Z0-9]{2})?$/.test(key)).toBe(true);
+      expect(key === "CONT:NA" || key === "CONT:EU" || /^[A-Z]{2}([A-Z0-9]{2})?$/.test(key)).toBe(
+        true
+      );
     }
   });
 });

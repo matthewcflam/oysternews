@@ -13,7 +13,7 @@ export function parseGkgDate(date: string): number {
     Number(date.slice(6, 8)),
     Number(date.slice(8, 10)),
     Number(date.slice(10, 12)),
-    Number(date.slice(12, 14)),
+    Number(date.slice(12, 14))
   );
 }
 
@@ -21,7 +21,10 @@ export function salienceOf(distinctDomains: number, distinctSourceCountries: num
   return Math.log1p(distinctDomains) + SOURCE_COUNTRY_WEIGHT * Math.log1p(distinctSourceCountries);
 }
 
-export function summarise(members: PlacedArticle[], now: number): {
+export function summarise(
+  members: PlacedArticle[],
+  now: number
+): {
   distinctDomains: number;
   distinctSourceCountries: number;
   salience: number;
@@ -44,8 +47,7 @@ export function summarise(members: PlacedArticle[], now: number): {
 
   // Clock from NEWEST tier-1 article: follow-ups renew the 48-hour window.
   const tier1Fresh =
-    newestTier1 !== "" &&
-    now - parseGkgDate(newestTier1) <= TIER1_WINDOW_HOURS * 3600 * 1000;
+    newestTier1 !== "" && now - parseGkgDate(newestTier1) <= TIER1_WINDOW_HOURS * 3600 * 1000;
 
   return {
     distinctDomains: domains.size,

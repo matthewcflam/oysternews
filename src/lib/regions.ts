@@ -74,4 +74,3 @@ export function gkgToMillis(stamp: string): number {
   const [, year, month, day, hour, minute, second] = match.map(Number);
   return Date.UTC(year, month - 1, day, hour, minute, second);
 }
-

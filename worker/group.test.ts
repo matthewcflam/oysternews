@@ -58,7 +58,9 @@ describe("title tokens", () => {
 
   it("scores an identical headline as 1 and a disjoint one as 0", () => {
     expect(jaccard(titleTokens("Flood warning Perth"), titleTokens("Flood warning Perth"))).toBe(1);
-    expect(jaccard(titleTokens("Flood warning Perth"), titleTokens("Cricket result Leeds"))).toBe(0);
+    expect(jaccard(titleTokens("Flood warning Perth"), titleTokens("Cricket result Leeds"))).toBe(
+      0
+    );
   });
 });
 
@@ -82,7 +84,7 @@ describe("grouping", () => {
           themes: ["WILDFIRE", "EVACUATION", "EMERGENCY"],
         }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(1);
     expect(groups[0].distinctDomains).toBe(2);
@@ -94,7 +96,7 @@ describe("grouping", () => {
         article({ title: "Wildfire forces evacuations", themes: ["WILDFIRE", "EVACUATION"] }),
         article({ title: "Council approves new budget", themes: ["GOVERNMENT", "TAX"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
@@ -105,7 +107,7 @@ describe("grouping", () => {
         article({ title: "Flood warning issued for Perth", themes: ["FLOOD", "A"] }),
         article({ title: "Flood warning issued for Perth region", themes: ["FLOOD", "B"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
@@ -116,7 +118,7 @@ describe("grouping", () => {
         article({ title: "Wildfire near Azusa", themes: ["WILDFIRE", "EVACUATION"] }),
         article({ title: "Council approves stadium funding", themes: ["WILDFIRE", "EVACUATION"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
@@ -124,10 +126,18 @@ describe("grouping", () => {
   it("requires the same cell — the same story 3 degrees away is a different pin", () => {
     const groups = groupArticles(
       [
-        article({ title: "Wildfire forces evacuations", themes: ["WILDFIRE", "EVACUATION"], lat: 40 }),
-        article({ title: "Wildfire forces evacuations", themes: ["WILDFIRE", "EVACUATION"], lat: 43 }),
+        article({
+          title: "Wildfire forces evacuations",
+          themes: ["WILDFIRE", "EVACUATION"],
+          lat: 40,
+        }),
+        article({
+          title: "Wildfire forces evacuations",
+          themes: ["WILDFIRE", "EVACUATION"],
+          lat: 43,
+        }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
@@ -140,7 +150,7 @@ describe("grouping", () => {
         article({ title: "Markets close higher on jobs data", themes: ["A"] }),
         article({ title: "Markets close higher on jobs data", themes: ["Z"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(1);
     expect(groups[0].distinctDomains).toBe(2);
@@ -168,7 +178,7 @@ describe("grouping", () => {
           themes: ["LEGISLATION_X", "INFRASTRUCTURE"],
         }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(1);
     expect(groups[0].distinctDomains).toBe(3);
@@ -179,8 +189,18 @@ describe("grouping", () => {
     // its domains twice. state.ts dedupes by (domain, url); this asserts the
     // salience that results is identical either way.
     const members = [
-      article({ domain: "a.com", url: "https://a.com/1", title: "Quake hits the coast", themes: ["QUAKE", "DAMAGE"] }),
-      article({ domain: "b.com", url: "https://b.com/1", title: "Quake hits coast towns", themes: ["QUAKE", "DAMAGE"] }),
+      article({
+        domain: "a.com",
+        url: "https://a.com/1",
+        title: "Quake hits the coast",
+        themes: ["QUAKE", "DAMAGE"],
+      }),
+      article({
+        domain: "b.com",
+        url: "https://b.com/1",
+        title: "Quake hits coast towns",
+        themes: ["QUAKE", "DAMAGE"],
+      }),
     ];
     const once = groupArticles(members, { now: NOW, themeCeiling: 1 });
     const twice = groupArticles([...members, ...members.map((m) => ({ ...m }))], {
@@ -195,7 +215,11 @@ describe("grouping", () => {
   it("shows the tier-1 article as the group's face", () => {
     const groups = groupArticles(
       [
-        article({ domain: "local.com", title: "Quake hits the coast", themes: ["QUAKE", "DAMAGE"] }),
+        article({
+          domain: "local.com",
+          title: "Quake hits the coast",
+          themes: ["QUAKE", "DAMAGE"],
+        }),
         article({
           domain: "bbc.co.uk",
           title: "Quake hits coast towns",
@@ -203,7 +227,7 @@ describe("grouping", () => {
           tier1: true,
         }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups[0].domain).toBe("bbc.co.uk");
     expect(groups[0].tier1Fresh).toBe(true);
@@ -221,7 +245,7 @@ describe("grouping", () => {
     const first = groupArticles([oldest], { now: NOW, themeCeiling: 1 });
     const later = groupArticles(
       [oldest, article({ title: "Quake hits coast towns", themes: ["QUAKE", "DAMAGE"] })],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(later[0].id).toBe(first[0].id);
   });

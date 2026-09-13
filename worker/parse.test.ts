@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  MIN_COLS,
   columns,
+  MIN_COLS,
   parseBundle,
   parseLocations,
   parseRow,
@@ -21,7 +21,7 @@ function row(
     image: string;
     extras: string;
   }>,
-  columnCount = MIN_COLS,
+  columnCount = MIN_COLS
 ): string {
   const cells = new Array(Math.max(columnCount, MIN_COLS)).fill("");
   cells[1] = fields.date ?? "20260812050000";
@@ -62,7 +62,7 @@ describe("the schema canary", () => {
 describe("titles", () => {
   it("extracts and unescapes PAGE_TITLE", () => {
     const { article } = parseRow(
-      row({ extras: "<PAGE_TITLE>Bath &amp; North East Somerset</PAGE_TITLE>" }),
+      row({ extras: "<PAGE_TITLE>Bath &amp; North East Somerset</PAGE_TITLE>" })
     );
     expect(article?.title).toBe("Bath & North East Somerset");
   });
@@ -159,11 +159,11 @@ describe("the sharing image", () => {
     // Documented as multi-valued; 6 of 1,085 sampled rows carried a ';'. The
     // publisher's order is the preference order.
     expect(parseSharingImage("https://a.test/1.jpg;https://b.test/2.jpg")).toBe(
-      "https://a.test/1.jpg",
+      "https://a.test/1.jpg"
     );
     // A hostile value first must not poison the usable one behind it.
     expect(parseSharingImage("javascript:alert(1);https://b.test/2.jpg")).toBe(
-      "https://b.test/2.jpg",
+      "https://b.test/2.jpg"
     );
   });
 });

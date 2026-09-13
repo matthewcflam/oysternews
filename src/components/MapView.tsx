@@ -1,35 +1,41 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import type { FeatureCollection } from "geojson";
 import {
-  MapLibreMap,
-  NavigationControl,
   addProtocol,
-  removeProtocol,
-  setWorkerUrl,
   type ErrorEvent,
   type GeoJSONSource,
+  MapLibreMap,
   type MapMouseEvent,
+  NavigationControl,
+  removeProtocol,
+  setWorkerUrl,
 } from "maplibre-gl";
 import { Protocol } from "pmtiles";
-import type { FeatureCollection } from "geojson";
+import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { DEFAULT_CENTER, DEFAULT_ZOOM, basemap } from "@/lib/basemap";
+import { basemap, DEFAULT_CENTER, DEFAULT_ZOOM } from "@/lib/basemap";
 import { CITY_SNAP_KM, loadCityShard, nearestCity } from "@/lib/cities";
 import { CONTINENT_BBOX, continentIdFor } from "@/lib/continents";
 import { countryName, fipsForIso } from "@/lib/flag";
-import { firstLabel, labelAnchor, labelName, type LabelLevel } from "@/lib/labels";
+import { firstLabel, type LabelLevel, labelAnchor, labelName } from "@/lib/labels";
 import {
   BOUNDARIES_ARCHIVE,
   BOUNDARIES_SOURCE_ID,
+  boundaryLayers,
+  bubbleLabelFilter,
   CLICKABLE_LAYER_IDS,
   COUNTRY_LAYER_ID,
   COUNTRY_OUTLINE_ID,
   COUNTRY_SOURCE_LAYER,
+  firstPlaceLabelLayerId,
   HIT_LAYER_FOR,
+  hitLayers,
   LABELS_LAYER_ID,
   MATCH_NOTHING,
+  matchId,
   OUTLINE_LAYER_FOR,
+  outlineFor,
   PIN_IMAGE_ID,
   REGION_OUTLINE_ID,
   SELECTED_SOURCE_ID,
@@ -38,17 +44,11 @@ import {
   SPIDER_SOURCE_ID,
   STORIES_LAYER_ID,
   STORIES_SOURCE_LAYER,
-  TOP_LAYER_ID,
-  TOP_STATE_KEY,
-  boundaryLayers,
-  bubbleLabelFilter,
-  firstPlaceLabelLayerId,
-  hitLayers,
-  matchId,
-  outlineFor,
   selectedPinLayer,
   spiderLayers,
   storyLayers,
+  TOP_LAYER_ID,
+  TOP_STATE_KEY,
   topFilter,
   topPinLayer,
 } from "@/lib/layers";
@@ -56,24 +56,24 @@ import { loadManifest } from "@/lib/manifest";
 import { PIN_PIXEL_RATIO, trianglePin } from "@/lib/pin";
 import type { PlaceEntry } from "@/lib/place-search";
 import {
-  FIT_PADDING,
-  MAX_FIT_ZOOM,
-  bboxFor,
-  loadRegionBboxes,
   type BboxTable,
+  bboxFor,
+  FIT_PADDING,
+  loadRegionBboxes,
+  MAX_FIT_ZOOM,
 } from "@/lib/region-bbox";
 import { entryFor, loadRegionIndex } from "@/lib/regions";
-import { panelStory, type PanelStory } from "@/lib/story";
 import {
-  EMPTY_SPIDER,
-  SPIDERFY_ZOOM,
   displacedUrls,
+  EMPTY_SPIDER,
   leafPositions,
+  SPIDERFY_ZOOM,
+  type Stack,
   sameStacks,
   spiderData,
   stacksFrom,
-  type Stack,
 } from "@/lib/spiderfy";
+import { type PanelStory, panelStory } from "@/lib/story";
 import { sameKeys, topKeys } from "@/lib/top";
 import type { CityShard, RegionIndex } from "@/lib/types";
 import HeadlineToggle from "./HeadlineToggle";
@@ -137,7 +137,7 @@ const HEADLINES_STORAGE_KEY = "oyster.headlines";
 // can both call it without duplicating the match.
 function cityRecordFor(
   selection: Selection | null,
-  cityShard: { country: string; shard: CityShard } | null,
+  cityShard: { country: string; shard: CityShard } | null
 ) {
   if (!selection || selection.kind !== "city") return null;
   if (cityShard?.country !== selection.country) return null;
@@ -155,9 +155,11 @@ const showPin = (map: MapLibreMap | null, at: [number, number] | null) => {
     at
       ? {
           type: "FeatureCollection",
-          features: [{ type: "Feature", geometry: { type: "Point", coordinates: at }, properties: {} }],
+          features: [
+            { type: "Feature", geometry: { type: "Point", coordinates: at }, properties: {} },
+          ],
         }
-      : NO_PIN,
+      : NO_PIN
   );
 };
 
@@ -179,11 +181,13 @@ export default function MapView() {
   // margin. The observer watches the corner, not just the group: attribution
   // loading or wrapping moves the group without resizing it, and a group-only
   // observer left the toggle stranded at its pre-attribution height.
-  const [cornerCtrlPos, setCornerCtrlPos] = useState<{ right: number; bottom: number } | null>(null);
+  const [cornerCtrlPos, setCornerCtrlPos] = useState<{ right: number; bottom: number } | null>(
+    null
+  );
   // The globe button's slot: directly above the zoom group, sharing its right
   // edge and width so the icon centers on the +/- buttons.
   const [globePos, setGlobePos] = useState<{ right: number; bottom: number; width: number } | null>(
-    null,
+    null
   );
 
   useEffect(() => {
@@ -329,12 +333,15 @@ export default function MapView() {
 
     for (const sourceLayer of [STORIES_SOURCE_LAYER, COUNTRY_SOURCE_LAYER]) {
       if (previous) {
-        map.removeFeatureState({ source: SOURCE_ID, sourceLayer, id: previous }, SELECTED_STATE_KEY);
+        map.removeFeatureState(
+          { source: SOURCE_ID, sourceLayer, id: previous },
+          SELECTED_STATE_KEY
+        );
       }
       if (url) {
         map.setFeatureState(
           { source: SOURCE_ID, sourceLayer, id: url },
-          { [SELECTED_STATE_KEY]: true },
+          { [SELECTED_STATE_KEY]: true }
         );
       }
     }
@@ -356,64 +363,62 @@ export default function MapView() {
     }
   };
 
- const BBOX_OVERRIDES: Record<string, [number, number, number, number]> = {
-  FR: [-5.14, 41.33, 9.56, 51.10],    // Metropolitan France
-  US: [-137.0, 24.39, -66.93, 49.38],  // Contiguous USA (Lower 48)
-  NO: [4.5, 57.9, 31.1, 71.2],
-  NL: [3.3, 50.7, 7.2, 53.6],
-  EC: [-100.0, -5.5, -70.0, 2.5],
-};
+  const BBOX_OVERRIDES: Record<string, [number, number, number, number]> = {
+    FR: [-5.14, 41.33, 9.56, 51.1], // Metropolitan France
+    US: [-137.0, 24.39, -66.93, 49.38], // Contiguous USA (Lower 48)
+    NO: [4.5, 57.9, 31.1, 71.2],
+    NL: [3.3, 50.7, 7.2, 53.6],
+    EC: [-100.0, -5.5, -70.0, 2.5],
+  };
 
-/** Degrees of padding around a city's coordinate — there is no polygon to fit, only a point. */
-const CITY_ZOOM_PAD = 0.12;
+  /** Degrees of padding around a city's coordinate — there is no polygon to fit, only a point. */
+  const CITY_ZOOM_PAD = 0.12;
 
-// The box zoomToRegion would fit for the current selection, or null —
-// which also gates the button's presence below, so the two can never
-// disagree about whether "Zoom to" does anything.
-const zoomTargetFor = (
-  current: Selection | null,
-): [number, number, number, number] | null => {
-  if (!current) return null;
-  switch (current.kind) {
-    case "country":
-    case "state":
-      return BBOX_OVERRIDES[current.id] ?? bboxFor(bboxes, current.id);
-    case "continent":
-      return CONTINENT_BBOX[current.id as keyof typeof CONTINENT_BBOX] ?? null;
-    case "city": {
-      const record = cityRecordFor(current, cityShard);
-      if (!record) return null;
-      return [
-        record.lon - CITY_ZOOM_PAD,
-        record.lat - CITY_ZOOM_PAD,
-        record.lon + CITY_ZOOM_PAD,
-        record.lat + CITY_ZOOM_PAD,
-      ];
+  // The box zoomToRegion would fit for the current selection, or null —
+  // which also gates the button's presence below, so the two can never
+  // disagree about whether "Zoom to" does anything.
+  const zoomTargetFor = (current: Selection | null): [number, number, number, number] | null => {
+    if (!current) return null;
+    switch (current.kind) {
+      case "country":
+      case "state":
+        return BBOX_OVERRIDES[current.id] ?? bboxFor(bboxes, current.id);
+      case "continent":
+        return CONTINENT_BBOX[current.id as keyof typeof CONTINENT_BBOX] ?? null;
+      case "city": {
+        const record = cityRecordFor(current, cityShard);
+        if (!record) return null;
+        return [
+          record.lon - CITY_ZOOM_PAD,
+          record.lat - CITY_ZOOM_PAD,
+          record.lon + CITY_ZOOM_PAD,
+          record.lat + CITY_ZOOM_PAD,
+        ];
+      }
     }
-  }
-};
+  };
 
-// Fly the camera to a box — shared by the region panel's "Zoom to" button
-// and a search selection, so the two gestures cannot drift apart on padding
-// or the z9 ceiling. fitBounds, not flyTo with a computed zoom: the box is
-// the datum, and fitBounds accounts for viewport aspect ratio. MAX_FIT_ZOOM
-// keeps a small region from overshooting the archive's z12 ceiling.
-const fitTo = (box: [number, number, number, number] | null) => {
-  const map = mapRef.current;
-  if (!map || !box || box.length < 4) return;
+  // Fly the camera to a box — shared by the region panel's "Zoom to" button
+  // and a search selection, so the two gestures cannot drift apart on padding
+  // or the z9 ceiling. fitBounds, not flyTo with a computed zoom: the box is
+  // the datum, and fitBounds accounts for viewport aspect ratio. MAX_FIT_ZOOM
+  // keeps a small region from overshooting the archive's z12 ceiling.
+  const fitTo = (box: [number, number, number, number] | null) => {
+    const map = mapRef.current;
+    if (!map || !box || box.length < 4) return;
 
-  const [minLng, minLat, maxLng, maxLat] = box;
+    const [minLng, minLat, maxLng, maxLat] = box;
 
-  map.fitBounds(
-    [
-      [minLng, minLat],
-      [maxLng, maxLat],
-    ],
-    { padding: FIT_PADDING, maxZoom: MAX_FIT_ZOOM },
-  );
-};
+    map.fitBounds(
+      [
+        [minLng, minLat],
+        [maxLng, maxLat],
+      ],
+      { padding: FIT_PADDING, maxZoom: MAX_FIT_ZOOM }
+    );
+  };
 
-const zoomToRegion = () => fitTo(zoomTargetFor(selection));
+  const zoomToRegion = () => fitTo(zoomTargetFor(selection));
 
   // Close the story panel and drop the container outline it drew. Shares
   // clearRegion's outline clearing since only one outline may exist on the
@@ -461,7 +466,7 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
               setBboxes(table);
               return BBOX_OVERRIDES[place.id] ?? bboxFor(table, place.id);
             },
-            () => null,
+            () => null
           );
 
     fitTo(box);
@@ -726,7 +731,10 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
           // Keyed on the bubbles themselves, not `marked` — the two part
           // company once the ring re-ranks, and dismissBubbles emptying
           // this list is what gives the five their small labels back.
-          map.setFilter(LABELS_LAYER_ID, bubbleLabelFilter(bubbles.map((bubble) => bubble.story.url)));
+          map.setFilter(
+            LABELS_LAYER_ID,
+            bubbleLabelFilter(bubbles.map((bubble) => bubble.story.url))
+          );
           // Filter and feature state are set together, always, so the
           // top-5 copy layer and an ordinary pin can never swap places.
           map.setFilter(TOP_LAYER_ID, topFilter(visible));
@@ -872,9 +880,11 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
                 .map((key) => bubbled.get(key))
                 .filter((bubble): bubble is TopStory => Boolean(bubble))
                 .map((bubble) => {
-                  const leaf = displaced.has(bubble.story.url) ? leaves?.get(bubble.story.url) : null;
+                  const leaf = displaced.has(bubble.story.url)
+                    ? leaves?.get(bubble.story.url)
+                    : null;
                   return leaf ? { ...bubble, lngLat: leaf } : bubble;
-                }),
+                })
             );
           }
 
@@ -985,7 +995,12 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
             if (!country) return;
 
             showPin(map, anchor ?? fallback);
-            setSelection({ kind: "city", country, name: labelName(label.feature), at: anchor ?? fallback });
+            setSelection({
+              kind: "city",
+              country,
+              name: labelName(label.feature),
+              at: anchor ?? fallback,
+            });
             return;
           }
 
@@ -1055,7 +1070,7 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
             selected,
             feature.geometry.type === "Point"
               ? (feature.geometry.coordinates as [number, number])
-              : [event.lngLat.lng, event.lngLat.lat],
+              : [event.lngLat.lng, event.lngLat.lat]
           );
         });
 
@@ -1076,7 +1091,7 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
         setError(
           `Story data unavailable — could not read the manifest. (${
             cause instanceof Error ? cause.message : String(cause)
-          })`,
+          })`
         );
       });
 
@@ -1216,8 +1231,8 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
       )}
       {provider === "openfreemap" && (
         <div className="notice notice--info">
-          Keyless basemap (OpenFreeMap escape hatch). Set{" "}
-          <code>NEXT_PUBLIC_MAPTILER_KEY</code> for the MapTiler style.
+          Keyless basemap (OpenFreeMap escape hatch). Set <code>NEXT_PUBLIC_MAPTILER_KEY</code> for
+          the MapTiler style.
         </div>
       )}
       {error && <div className="notice notice--error">{error}</div>}

@@ -28,12 +28,12 @@
  *       highest-suspicion placements for eyeballing.
  */
 
+import type { Article } from "../src/lib/types.ts";
 import { fetchBundle, newestStamp, shiftStamp } from "../worker/fetch.ts";
 import { filterArticles } from "../worker/filter.ts";
 import { parseBundle } from "../worker/parse.ts";
-import { type PlacementTrace, explainPlacement } from "../worker/place.ts";
+import { explainPlacement, type PlacementTrace } from "../worker/place.ts";
 import { loadRefData } from "../worker/refdata.ts";
-import type { Article } from "../src/lib/types.ts";
 
 const DEFAULT_BUNDLES = 4;
 
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
     const pinHits = hits.filter(({ trace }) => trace.placement.kind === "PIN");
     console.log(
       `  ${shape.name.padEnd(20)} ${String(hits.length).padStart(5)}  ${pct(hits.length, placed.length)}` +
-        `   pins ${String(pinHits.length).padStart(5)}  ${pct(pinHits.length, pins.length)}`,
+        `   pins ${String(pinHits.length).padStart(5)}  ${pct(pinHits.length, pins.length)}`
     );
     console.log(`  ${"".padEnd(20)} ${shape.note}`);
   }
@@ -148,11 +148,15 @@ async function main(): Promise<void> {
       for (const { article, trace } of hits) {
         const level = trace.placement.kind === "PIN" ? trace.city : (trace.adm1 ?? trace.country);
         console.log(`  ${article.title.slice(0, 88)}`);
-        console.log(`    ${article.domain}  ->  ${trace.placement.location?.name}  [${trace.reason}]`);
+        console.log(
+          `    ${article.domain}  ->  ${trace.placement.location?.name}  [${trace.reason}]`
+        );
         console.log(
           `    winner x${trace.winnerMentions}` +
-            (level?.runnerUp ? `, runner-up ${level.runnerUp.name} x${level.runnerUp.mentions}` : "") +
-            (trace.countryRatio !== null ? `, country ${trace.countryRatio.toFixed(1)}x city` : ""),
+            (level?.runnerUp
+              ? `, runner-up ${level.runnerUp.name} x${level.runnerUp.mentions}`
+              : "") +
+            (trace.countryRatio !== null ? `, country ${trace.countryRatio.toFixed(1)}x city` : "")
         );
       }
     }

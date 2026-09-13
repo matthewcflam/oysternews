@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   loadPlaceIndex,
   normalize,
+  type PlaceEntry,
   resetPlaceIndexCache,
   searchablePlaces,
   searchPlaces,
-  type PlaceEntry,
 } from "./place-search";
 
 afterEach(() => {

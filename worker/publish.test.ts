@@ -6,24 +6,24 @@ import type { StoryGroup } from "../src/lib/types.ts";
 import {
   ARCHIVE_DIR,
   ARCHIVE_PREFIX,
-  BAND_RELAX_AFTER_MS,
-  COUNT_BAND_MAX,
-  COUNT_BAND_MIN,
-  REGIONS_PREFIX,
-  HISTORY_KEY,
   type ArchiveStore,
-  type HistoryEntry,
-  MANIFEST_KEY,
-  MIN_COUNTRIES,
   archiveKey,
   archivesToPrune,
   assertPublicHostReachable,
   assertStoreReachable,
+  BAND_RELAX_AFTER_MS,
+  COUNT_BAND_MAX,
+  COUNT_BAND_MIN,
   checkInvariants,
   contentHash,
+  HISTORY_KEY,
+  type HistoryEntry,
+  MANIFEST_KEY,
+  MIN_COUNTRIES,
   nextHistory,
   pingHealthcheck,
   publish,
+  REGIONS_PREFIX,
   staleness,
   statsOf,
 } from "./publish.ts";
@@ -71,7 +71,7 @@ function healthyGroups(count = 3_000): StoryGroup[] {
       // Well above MIN_COUNTRIES, and spread so no single country dominates.
       countryCode: `C${i % (MIN_COUNTRIES + 5)}`,
       tier1Fresh: i % 20 === 0,
-    }),
+    })
   );
 }
 
@@ -213,7 +213,7 @@ describe("checkInvariants", () => {
     // anything in the pipeline noticing. The floors catch actual garbage and must
     // not be relaxed with it.
     const collapsed = statsOf(
-      healthyGroups(COUNT_BAND_MAX + 5_000).map((g) => ({ ...g, countryCode: "US" })),
+      healthyGroups(COUNT_BAND_MAX + 5_000).map((g) => ({ ...g, countryCode: "US" }))
     );
     const violations = checkInvariants(collapsed, BAND_RELAX_AFTER_MS * 10);
     expect(violations).toHaveLength(1);
@@ -244,7 +244,9 @@ describe("contentHash", () => {
   it("is stable for identical bytes and differs for changed bytes", () => {
     expect(contentHash(Buffer.from("abc"))).toBe(contentHash(Buffer.from("abc")));
     expect(contentHash(Buffer.from("abc"))).not.toBe(contentHash(Buffer.from("abd")));
-    expect(archiveKey(contentHash(Buffer.from("abc")))).toMatch(/^archives\/stories-[0-9a-f]{8}\.pmtiles$/);
+    expect(archiveKey(contentHash(Buffer.from("abc")))).toMatch(
+      /^archives\/stories-[0-9a-f]{8}\.pmtiles$/
+    );
   });
 });
 
@@ -274,7 +276,9 @@ describe("archivesToPrune", () => {
     // finish uploading — see the comment on `entry.cities` in publish.ts.
     const dir = `${ARCHIVE_DIR}cities-abcd1234/`;
     const stored = [`${dir}US.json`, `${dir}IN.json`, `${dir}FR.json`];
-    const history: HistoryEntry[] = [{ stamp: "1", archive: "archives/stories-x.pmtiles", cities: dir, groups: 100 }];
+    const history: HistoryEntry[] = [
+      { stamp: "1", archive: "archives/stories-x.pmtiles", cities: dir, groups: 100 },
+    ];
     expect(archivesToPrune(stored, history)).toEqual([]);
   });
 
@@ -296,7 +300,9 @@ describe("nextHistory", () => {
     const repeat = nextHistory(past, { stamp: "s", archive: "a1", groups: 2 });
     expect(repeat.map((h) => h.archive)).toEqual(["a0", "a2", "a1"]);
 
-    expect(nextHistory(history([1, 2, 3, 4, 5]), { stamp: "s", archive: "a9", groups: 9 }, 2)).toHaveLength(2);
+    expect(
+      nextHistory(history([1, 2, 3, 4, 5]), { stamp: "s", archive: "a9", groups: 9 }, 2)
+    ).toHaveLength(2);
   });
 });
 
@@ -346,9 +352,16 @@ describe("publish", () => {
     // §7 critical gap 1. If this order ever inverts, a failed archive upload
     // leaves the manifest pointing at a key that does not exist.
     const store = memoryStore();
-    await publish({ store, archivePath, groups: healthyGroups(), regions: {}, watermark: "1", now: NOW });
+    await publish({
+      store,
+      archivePath,
+      groups: healthyGroups(),
+      regions: {},
+      watermark: "1",
+      now: NOW,
+    });
     expect(store.writes.indexOf(MANIFEST_KEY)).toBeGreaterThan(
-      store.writes.findIndex((key) => key.startsWith(ARCHIVE_PREFIX)),
+      store.writes.findIndex((key) => key.startsWith(ARCHIVE_PREFIX))
     );
   });
 
@@ -366,7 +379,7 @@ describe("publish", () => {
       now: NOW,
     });
     expect(store.writes.indexOf(MANIFEST_KEY)).toBeGreaterThan(
-      store.writes.findIndex((key) => key.startsWith(REGIONS_PREFIX)),
+      store.writes.findIndex((key) => key.startsWith(REGIONS_PREFIX))
     );
   });
 
@@ -394,8 +407,28 @@ describe("publish", () => {
       groups: healthyGroups(),
       regions: {},
       cities: {
-        US: [{ name: "Chicago", adm1Name: "Illinois", lat: 41.9, lon: -87.6, total: 5, sources: 2, stories: [] }],
-        IN: [{ name: "Mumbai", adm1Name: "Maharashtra", lat: 19.1, lon: 72.9, total: 3, sources: 1, stories: [] }],
+        US: [
+          {
+            name: "Chicago",
+            adm1Name: "Illinois",
+            lat: 41.9,
+            lon: -87.6,
+            total: 5,
+            sources: 2,
+            stories: [],
+          },
+        ],
+        IN: [
+          {
+            name: "Mumbai",
+            adm1Name: "Maharashtra",
+            lat: 19.1,
+            lon: 72.9,
+            total: 3,
+            sources: 1,
+            stories: [],
+          },
+        ],
       },
       watermark: "1",
       now: NOW,
@@ -412,7 +445,9 @@ describe("publish", () => {
 
     expect(shardIndices).toHaveLength(2);
     expect(Math.max(...shardIndices)).toBeLessThan(manifestIndex);
-    expect(result.manifest.citiesBase).toMatch(/^https:\/\/blob\.example\/archives\/cities-[0-9a-f]{8}\/$/);
+    expect(result.manifest.citiesBase).toMatch(
+      /^https:\/\/blob\.example\/archives\/cities-[0-9a-f]{8}\/$/
+    );
 
     const dir = result.manifest.citiesBase!.replace("https://blob.example/", "");
     expect(JSON.parse(String(store.data.get(`${dir}US.json`)))[0].name).toBe("Chicago");
@@ -431,7 +466,7 @@ describe("publish", () => {
           archive: `archives/stories-gen${n}.pmtiles`,
           cities: `archives/cities-gen${n}/`,
           groups: 3_000,
-        })),
+        }))
       ),
     };
     for (const n of [1, 2, 3]) {
@@ -445,7 +480,19 @@ describe("publish", () => {
       archivePath,
       groups: healthyGroups(),
       regions: {},
-      cities: { US: [{ name: "Chicago", adm1Name: "IL", lat: 41.9, lon: -87.6, total: 1, sources: 1, stories: [] }] },
+      cities: {
+        US: [
+          {
+            name: "Chicago",
+            adm1Name: "IL",
+            lat: 41.9,
+            lon: -87.6,
+            total: 1,
+            sources: 1,
+            stories: [],
+          },
+        ],
+      },
       watermark: "4",
       now: NOW,
     });
@@ -464,7 +511,12 @@ describe("publish", () => {
       "archives/stories-old.pmtiles": "old",
       "archives/regions-old.json": "old",
       [HISTORY_KEY]: JSON.stringify([
-        { stamp: "1", archive: "archives/stories-old.pmtiles", regions: "archives/regions-old.json", groups: 100 },
+        {
+          stamp: "1",
+          archive: "archives/stories-old.pmtiles",
+          regions: "archives/regions-old.json",
+          groups: 100,
+        },
       ]),
     });
 
@@ -505,7 +557,7 @@ describe("publish", () => {
           archive: `archives/stories-gen${n}.pmtiles`,
           regions: `archives/regions-gen${n}.json`,
           groups: 3_000,
-        })),
+        }))
       ),
     };
     for (const n of [1, 2, 3]) {
@@ -539,7 +591,14 @@ describe("publish", () => {
     store.failOn = ARCHIVE_PREFIX;
 
     await expect(
-      publish({ store, archivePath, groups: healthyGroups(), regions: {}, watermark: "1", now: NOW }),
+      publish({
+        store,
+        archivePath,
+        groups: healthyGroups(),
+        regions: {},
+        watermark: "1",
+        now: NOW,
+      })
     ).rejects.toThrow("upload failed");
 
     expect(String(store.data.get(MANIFEST_KEY))).toContain("stories-old.pmtiles");
@@ -596,7 +655,9 @@ describe("publish", () => {
     const older = ["p1", "p2", "p3", "p4"].map((h) => `${ARCHIVE_PREFIX}${h}.pmtiles`);
     const store = memoryStore({
       ...Object.fromEntries(older.map((key) => [key, "old"])),
-      [HISTORY_KEY]: JSON.stringify(older.map((archive, i) => ({ stamp: `${i}`, archive, groups: 100 }))),
+      [HISTORY_KEY]: JSON.stringify(
+        older.map((archive, i) => ({ stamp: `${i}`, archive, groups: 100 }))
+      ),
     });
 
     const result = await publish({
@@ -648,7 +709,7 @@ describe("staleness", () => {
   it("reports an unpublished store as infinitely stale rather than 1970", () => {
     expect(staleness([], now)).toBe(Number.POSITIVE_INFINITY);
     expect(staleness([{ stamp: "not-a-stamp", archive: "a", groups: 1 }], now)).toBe(
-      Number.POSITIVE_INFINITY,
+      Number.POSITIVE_INFINITY
     );
   });
 });
@@ -682,7 +743,7 @@ describe("assertPublicHostReachable", () => {
     }) as unknown as typeof globalThis.fetch;
 
     await expect(
-      assertPublicHostReachable("https://cdn.example", doFetch),
+      assertPublicHostReachable("https://cdn.example", doFetch)
     ).resolves.toBeUndefined();
     expect(seen).toEqual([["https://cdn.example/manifest.json", "HEAD"]]);
   });
@@ -694,7 +755,7 @@ describe("assertPublicHostReachable", () => {
     const doFetch = (async () =>
       new Response(null, { status: 404 })) as unknown as typeof globalThis.fetch;
     await expect(
-      assertPublicHostReachable("https://cdn.example", doFetch),
+      assertPublicHostReachable("https://cdn.example", doFetch)
     ).resolves.toBeUndefined();
   });
 
@@ -710,7 +771,7 @@ describe("assertPublicHostReachable", () => {
     }) as unknown as typeof globalThis.fetch;
 
     await expect(assertPublicHostReachable("https://cdn.example", doFetch)).rejects.toThrow(
-      "CDN_BASE",
+      "CDN_BASE"
     );
     await expect(assertPublicHostReachable("https://cdn.example", doFetch)).rejects.toMatchObject({
       cause,

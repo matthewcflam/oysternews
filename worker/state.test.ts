@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { PlacedArticle } from "../src/lib/types.ts";
 import {
-  RUN_PREFIX,
-  TIER1_PREFIX,
-  type ShardStore,
   appendShards,
   dedupe,
   fromJsonl,
   isLive,
   pruneShards,
+  RUN_PREFIX,
   readPool,
+  type ShardStore,
   stampOf,
+  TIER1_PREFIX,
 } from "./state.ts";
 
 const NOW = Date.UTC(2026, 7, 12, 12, 0, 0);
@@ -47,7 +47,9 @@ function article(patch: Partial<PlacedArticle> = {}): PlacedArticle {
 }
 
 /** In-memory store, which is all the tests need and all the interface promises. */
-function memoryStore(seed: Record<string, string> = {}): ShardStore & { data: Map<string, string> } {
+function memoryStore(
+  seed: Record<string, string> = {}
+): ShardStore & { data: Map<string, string> } {
   const data = new Map(Object.entries(seed));
   return {
     data,
@@ -144,10 +146,10 @@ describe("the pool", () => {
       [`${RUN_PREFIX}${gkg(2)}.jsonl`]: JSON.stringify(shared),
       [`${TIER1_PREFIX}${gkg(2)}.jsonl`]: JSON.stringify(shared),
       [`${TIER1_PREFIX}${gkg(30)}.jsonl`]: JSON.stringify(
-        article({ domain: "cnn.com", url: "https://cnn.com/1", tier1: true }),
+        article({ domain: "cnn.com", url: "https://cnn.com/1", tier1: true })
       ),
       [`${RUN_PREFIX}${gkg(30)}.jsonl`]: JSON.stringify(
-        article({ domain: "old.com", url: "https://old.com/1" }),
+        article({ domain: "old.com", url: "https://old.com/1" })
       ),
     });
 
@@ -166,7 +168,7 @@ describe("the pool", () => {
     // after one day and the §2.5 comparator would still "work".
     const store = memoryStore({
       [`${TIER1_PREFIX}${gkg(30)}.jsonl`]: JSON.stringify(
-        article({ domain: "bbc.co.uk", url: "https://bbc.co.uk/x", tier1: true, date: gkg(30) }),
+        article({ domain: "bbc.co.uk", url: "https://bbc.co.uk/x", tier1: true, date: gkg(30) })
       ),
     });
     return readPool(store, NOW).then((pool) => {
@@ -185,7 +187,9 @@ describe("writing and pruning", () => {
 
     expect(result.tier1Written).toBe(1);
     expect(fromJsonl(store.data.get(`${RUN_PREFIX}20260812050000.jsonl`)!).articles.length).toBe(2);
-    expect(fromJsonl(store.data.get(`${TIER1_PREFIX}20260812050000.jsonl`)!).articles.length).toBe(1);
+    expect(fromJsonl(store.data.get(`${TIER1_PREFIX}20260812050000.jsonl`)!).articles.length).toBe(
+      1
+    );
   });
 
   it("writes an empty tier-1 shard rather than omitting it", async () => {
@@ -206,7 +210,7 @@ describe("writing and pruning", () => {
     const pruned = await pruneShards(store, NOW);
     expect(pruned).toBe(2);
     expect([...store.data.keys()].sort()).toEqual(
-      [`${RUN_PREFIX}${gkg(2)}.jsonl`, `${TIER1_PREFIX}${gkg(40)}.jsonl`].sort(),
+      [`${RUN_PREFIX}${gkg(2)}.jsonl`, `${TIER1_PREFIX}${gkg(40)}.jsonl`].sort()
     );
   });
 });

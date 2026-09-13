@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StoryGroup } from "../src/lib/types.ts";
-import { CITY_TOP_N, buildCityIndex, cityIndexStats } from "./cities.ts";
+import { buildCityIndex, CITY_TOP_N, cityIndexStats } from "./cities.ts";
 
 function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   return {
@@ -52,7 +52,7 @@ describe("buildCityIndex", () => {
 
   it("counts total and sources before the cap, same contract as RegionEntry", () => {
     const many = Array.from({ length: CITY_TOP_N + 5 }, (_, i) =>
-      group({ id: `${i}`, domain: `outlet-${i}.com` }),
+      group({ id: `${i}`, domain: `outlet-${i}.com` })
     );
     const index = buildCityIndex(many);
     expect(index.US[0].stories).toHaveLength(CITY_TOP_N);
@@ -76,8 +76,18 @@ describe("buildCityIndex", () => {
 
   it("keeps two same-named cities in different countries in different shards", () => {
     const index = buildCityIndex([
-      group({ id: "1", countryCode: "US", adm1: "USCA", placeName: "Springfield, Illinois, United States" }),
-      group({ id: "2", countryCode: "AU", adm1: "AS02", placeName: "Springfield, Queensland, Australia" }),
+      group({
+        id: "1",
+        countryCode: "US",
+        adm1: "USCA",
+        placeName: "Springfield, Illinois, United States",
+      }),
+      group({
+        id: "2",
+        countryCode: "AU",
+        adm1: "AS02",
+        placeName: "Springfield, Queensland, Australia",
+      }),
     ]);
     expect(Object.keys(index).sort()).toEqual(["AU", "US"]);
     expect(index.US[0].name).toBe("Springfield");
@@ -87,7 +97,12 @@ describe("buildCityIndex", () => {
   it("never lets a cluster straddle two shards — an adm1's first two characters are its own country", () => {
     const index = buildCityIndex([
       group({ id: "1", countryCode: "US", adm1: "USCA" }),
-      group({ id: "2", countryCode: "US", adm1: "USNY", placeName: "New York, New York, United States" }),
+      group({
+        id: "2",
+        countryCode: "US",
+        adm1: "USNY",
+        placeName: "New York, New York, United States",
+      }),
     ]);
     expect(Object.keys(index)).toEqual(["US"]);
     expect(index.US).toHaveLength(2);

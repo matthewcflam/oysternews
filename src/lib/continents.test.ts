@@ -32,7 +32,15 @@ describe("continentIdFor", () => {
 
 describe("CONTINENT_BBOX", () => {
   it("has exactly the seven ids continentIdFor can produce", () => {
-    const ids = ["CONT:AF", "CONT:AN", "CONT:AS", "CONT:EU", "CONT:NA", "CONT:OC", "CONT:SA"].sort();
+    const ids = [
+      "CONT:AF",
+      "CONT:AN",
+      "CONT:AS",
+      "CONT:EU",
+      "CONT:NA",
+      "CONT:OC",
+      "CONT:SA",
+    ].sort();
     expect(Object.keys(CONTINENT_BBOX).sort()).toEqual(ids);
   });
 
@@ -53,7 +61,9 @@ describe("CONTINENT_BBOX", () => {
 
 describe("data/crosswalk.json's continent column", () => {
   it("gives every country a name continentIdFor can resolve, or leaves it empty", () => {
-    const rows = Object.values((crosswalk as { fips: Record<string, { continent?: string }> }).fips);
+    const rows = Object.values(
+      (crosswalk as { fips: Record<string, { continent?: string }> }).fips
+    );
     for (const row of rows) {
       if (!row.continent) continue;
       expect(continentIdFor(row.continent)).not.toBeNull();

@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { placeLine, publishedAt, type PanelStory } from "@/lib/story";
-
+import { type PanelStory, placeLine, publishedAt } from "@/lib/story";
 
 /**
  * The story panel: what a click on a pin opens.
@@ -169,12 +168,7 @@ export default function StoryPanel({ story, onClose }: StoryPanelProps) {
           )}
 
           {/* §2.6: link-out only. Title, source, link — never article text. */}
-          <a
-            className="panel__cta"
-            href={story.url}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a className="panel__cta" href={story.url} target="_blank" rel="noopener noreferrer">
             Read The Story
           </a>
         </div>

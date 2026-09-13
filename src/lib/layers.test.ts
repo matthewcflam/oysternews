@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCENT,
+  boundaryLayers,
   CLICKABLE_LAYER_IDS,
   COUNTRIES_SOURCE_LAYER,
   COUNTRY_HIT_ID,
@@ -8,34 +9,33 @@ import {
   COUNTRY_LAYER_MAXZOOM,
   COUNTRY_OUTLINE_ID,
   COUNTRY_SOURCE_LAYER,
+  firstPlaceLabelLayerId,
   HIT_LAYER_FOR,
-  LABELS_LAYER_ID,
+  hitLayers,
   LABEL_FONT,
   LABEL_GAP,
   LABEL_TEXT_SIZE,
+  LABELS_LAYER_ID,
   MARK,
   MATCH_NOTHING,
+  matchId,
   NOT_CONTAINER,
   OUTLINE_LAYER_FOR,
+  outlineFor,
   PIN_IMAGE_ID,
-  REGIONS_SOURCE_LAYER,
   REGION_HIT_ID,
   REGION_OUTLINE_ID,
+  REGIONS_SOURCE_LAYER,
   SELECTED_LAYER_ID,
   SELECTED_SOURCE_ID,
   SELECTED_STATE_KEY,
   STORIES_LAYER_ID,
   STORIES_SOURCE_LAYER,
-  TOP_LAYER_ID,
-  TOP_STATE_KEY,
-  boundaryLayers,
-  firstPlaceLabelLayerId,
-  hitLayers,
-  matchId,
-  outlineFor,
   selectedPinLayer,
   spiderLayers,
   storyLayers,
+  TOP_LAYER_ID,
+  TOP_STATE_KEY,
   topFilter,
   topPinLayer,
 } from "./layers";
@@ -230,7 +230,7 @@ describe("storyLayers", () => {
     // is the whole point of raising the floor, and nothing else here prevents
     // it regressing.
     const radius = stories.paint?.["circle-radius"] as unknown[];
-    const zoom1Footprint = ((radius[4] as unknown[])[3] as unknown[]) as unknown[];
+    const zoom1Footprint = (radius[4] as unknown[])[3] as unknown[] as unknown[];
     const stops = [4, 6, 8, 10].map((i) => zoom1Footprint[i] as number);
     for (const stop of stops) expect(stop).toBeGreaterThanOrEqual(6);
   });
@@ -299,7 +299,7 @@ describe("the top-5 layer and the leaves' sort key", () => {
   it("keeps the clickable layers in drawn order, top-most first", () => {
     // Whatever is drawn on top is what a reader thinks they are clicking.
     expect(CLICKABLE_LAYER_IDS.indexOf(TOP_LAYER_ID)).toBeLessThan(
-      CLICKABLE_LAYER_IDS.indexOf(STORIES_LAYER_ID),
+      CLICKABLE_LAYER_IDS.indexOf(STORIES_LAYER_ID)
     );
     expect(CLICKABLE_LAYER_IDS).not.toContain(LABELS_LAYER_ID);
   });

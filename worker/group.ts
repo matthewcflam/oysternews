@@ -10,10 +10,53 @@ export const CELL_DEGREES = 0.5;
 
 // Deliberately short: real stopword list would delete separating words.
 const STOPWORDS = new Set([
-  "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "for", "with",
-  "from", "by", "as", "is", "are", "was", "were", "be", "been", "it", "its", "this",
-  "that", "these", "those", "will", "has", "have", "had", "not", "new", "says", "said",
-  "after", "over", "into", "about", "up", "out", "more", "than", "his", "her", "their",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "but",
+  "of",
+  "to",
+  "in",
+  "on",
+  "at",
+  "for",
+  "with",
+  "from",
+  "by",
+  "as",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "it",
+  "its",
+  "this",
+  "that",
+  "these",
+  "those",
+  "will",
+  "has",
+  "have",
+  "had",
+  "not",
+  "new",
+  "says",
+  "said",
+  "after",
+  "over",
+  "into",
+  "about",
+  "up",
+  "out",
+  "more",
+  "than",
+  "his",
+  "her",
+  "their",
 ]);
 
 export function titleTokens(title: string): Set<string> {
@@ -36,7 +79,10 @@ export function jaccard(a: Set<string>, b: Set<string>): number {
 
 /** Exact-syndication key: the same headline, punctuation and spacing aside. */
 export function normalizeTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 export function cellOf(lat: number, lon: number): string {
@@ -106,10 +152,7 @@ export type GroupOptions = {
  * theme and a location. A naive all-pairs pass over a 24-hour window (~40,700
  * articles) would be 830M comparisons.
  */
-export function groupArticles(
-  articles: PlacedArticle[],
-  options: GroupOptions = {},
-): StoryGroup[] {
+export function groupArticles(articles: PlacedArticle[], options: GroupOptions = {}): StoryGroup[] {
   const now = options.now ?? Date.now();
   const jaccardFloor = options.jaccardFloor ?? JACCARD_FLOOR;
   const common = overCommonThemes(articles, options.themeCeiling ?? THEME_CEILING);
@@ -117,7 +160,7 @@ export function groupArticles(
   const sets = new DisjointSet(articles.length);
   const tokens = articles.map((article) => titleTokens(article.title));
   const significant = articles.map(
-    (article) => new Set(article.themes.filter((theme) => !common.has(theme))),
+    (article) => new Set(article.themes.filter((theme) => !common.has(theme)))
   );
 
   /** cell -> theme -> article indices. */

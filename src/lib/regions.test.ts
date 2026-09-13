@@ -3,7 +3,15 @@ import { gkgToMillis, loadRegionIndex, resetRegionIndexCache, storiesFor } from 
 import type { RegionIndex } from "./types";
 
 const index: RegionIndex = {
-  PK: [{ title: "A", source: "dawn.com", url: "https://dawn.com/a", date: "20260813091500", place: "Pakistan" }],
+  PK: [
+    {
+      title: "A",
+      source: "dawn.com",
+      url: "https://dawn.com/a",
+      date: "20260813091500",
+      place: "Pakistan",
+    },
+  ],
   USCA: [],
 };
 

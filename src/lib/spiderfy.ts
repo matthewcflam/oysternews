@@ -158,7 +158,7 @@ export const EMPTY_SPIDER: SpiderData = { type: "FeatureCollection", features: [
  */
 export function leafPositions(
   stacks: readonly Stack[],
-  projection: Projection,
+  projection: Projection
 ): Map<string, [number, number]> {
   const positions = new Map<string, [number, number]>();
 
@@ -191,7 +191,7 @@ export function spiderData(
   stacks: readonly Stack[],
   projection: Projection,
   topUrls: readonly string[] = [],
-  selectedUrl: string | null = null,
+  selectedUrl: string | null = null
 ): SpiderData {
   const top = new Set(topUrls);
   const legs: Feature[] = [];

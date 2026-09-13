@@ -32,7 +32,7 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
 /** `count` groups at the SAME coordinate, descending in salience — one city. */
 function crowd(count: number, lat = 40, lon = -74): StoryGroup[] {
   return Array.from({ length: count }, (_, i) =>
-    group({ id: `g${String(i).padStart(3, "0")}`, lat, lon, salience: count - i }),
+    group({ id: `g${String(i).padStart(3, "0")}`, lat, lon, salience: count - i })
   );
 }
 
@@ -51,7 +51,7 @@ function spread(count: number, lat = 40, lon = -74): StoryGroup[] {
       lat,
       lon: lon + i * 0.001,
       salience: count - i,
-    }),
+    })
   );
 }
 
@@ -92,7 +92,7 @@ describe("the per-tile budget", () => {
         group({ id: "ordinary", salience: 99, lat: 40, lon: -74 }),
         group({ id: "tier1", salience: 0.1, tier1Fresh: true, lat: 40, lon: -74 }),
       ],
-      { k: 1 },
+      { k: 1 }
     );
     expect(groups.find((g) => g.id === "tier1")?.minzoom).toBe(0);
     expect(groups.find((g) => g.id === "ordinary")?.minzoom).toBeGreaterThan(0);
@@ -114,7 +114,7 @@ describe("the per-tile budget", () => {
     const k = 4;
     const { groups } = assignMinzoom(
       [...crowd(30, 40, -74), ...crowd(30, -33, 151).map((g) => ({ ...g, id: `s${g.id}` }))],
-      { k, maxZoom: 5 },
+      { k, maxZoom: 5 }
     );
     for (let zoom = 0; zoom <= 5; zoom++) {
       const perTile = new Map<string, number>();
@@ -134,7 +134,7 @@ describe("the per-tile budget", () => {
     // floor layer exists to fill, not something the budget is meant to fix.
     const { groups } = assignMinzoom(
       [...spread(50, 40, -74), group({ id: "hormuz", lat: 26.6, lon: 56.3, salience: 0.01 })],
-      { k: 5 },
+      { k: 5 }
     );
     expect(groups.find((g) => g.id === "hormuz")?.minzoom).toBe(1);
   });
@@ -165,7 +165,7 @@ describe("the per-tile budget", () => {
     // they consume one, and the rest of the world fits at z0.
     const { groups } = assignMinzoom(
       [...crowd(50, 40, -74), group({ id: "hormuz", lat: 26.6, lon: 56.3, salience: 0.01 })],
-      { k: 5 },
+      { k: 5 }
     );
     expect(groups.find((g) => g.id === "hormuz")?.minzoom).toBe(0);
   });

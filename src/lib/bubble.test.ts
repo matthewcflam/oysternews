@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   BUBBLE_MAX_HEIGHT,
   BUBBLE_WIDTH,
-  CHROME_TOP,
-  TAIL_DROP,
-  TAIL_REACH,
-  TAIL_TIP_GAP,
+  type BubbleInput,
   bubbleBox,
+  CHROME_TOP,
   chooseLifts,
   chooseSides,
   placeBubbles,
   sideCap,
-  type BubbleInput,
+  TAIL_DROP,
+  TAIL_REACH,
+  TAIL_TIP_GAP,
 } from "./bubble";
 
 /** The frame the mockup is drawn on. */

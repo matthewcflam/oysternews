@@ -55,7 +55,7 @@ export function wilson(correct: number, n: number, z = 1.96): [number, number] {
 export function scoreLevel(
   kind: "PIN" | "CONTAINER",
   drawn: ScoredRecord[],
-  judged: Judgement[],
+  judged: Judgement[]
 ): LevelResult {
   const byId = new Map(drawn.map((r) => [r.id, r]));
   const rows = judged.filter((j) => byId.get(j.id)?.kind === kind);

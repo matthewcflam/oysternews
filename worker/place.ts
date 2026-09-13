@@ -25,7 +25,7 @@ export function isDemonym(name: string, data: RefData): boolean {
 // for the same place across mentions, which would split its own count.
 function mostMentioned(
   candidates: GdeltLocation[],
-  mentions: Map<string, number>,
+  mentions: Map<string, number>
 ): GdeltLocation | null {
   if (candidates.length === 0) return null;
   return candidates.reduce((winner, candidate) => {
@@ -102,7 +102,7 @@ export type PlacementTrace = {
 /** Winner at a level plus the shape of the contest it won. */
 function summarize(
   candidates: GdeltLocation[],
-  mentions: Map<string, number>,
+  mentions: Map<string, number>
 ): LevelCandidate | null {
   const winner = mostMentioned(candidates, mentions);
   if (!winner) return null;

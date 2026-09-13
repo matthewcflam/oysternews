@@ -59,8 +59,7 @@ function haversineKm(a: [number, number], b: [number, number]): number {
   const dLon = toRad(lon2 - lon1);
   const sinLat = Math.sin(dLat / 2);
   const sinLon = Math.sin(dLon / 2);
-  const h =
-    sinLat * sinLat + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sinLon * sinLon;
+  const h = sinLat * sinLat + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * sinLon * sinLon;
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -76,7 +75,7 @@ function normalizeLng(lng: number): number {
 export function nearestCity(
   shard: CityShard,
   at: [number, number],
-  maxKm = CITY_SNAP_KM,
+  maxKm = CITY_SNAP_KM
 ): CityRecord | null {
   const query: [number, number] = [normalizeLng(at[0]), at[1]];
 

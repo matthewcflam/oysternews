@@ -1,5 +1,5 @@
 import type { Article } from "../src/lib/types.ts";
-import { CITY_TYPES, ADM1_TYPES, LOCATION_COUNTRY } from "../src/lib/types.ts";
+import { ADM1_TYPES, CITY_TYPES, LOCATION_COUNTRY } from "../src/lib/types.ts";
 import type { RefData } from "./refdata.ts";
 
 export type FilterResult = {

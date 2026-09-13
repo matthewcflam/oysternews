@@ -85,7 +85,7 @@ describe("salience", () => {
         article({ domain: "b.com", sourceCountry: "" }),
         article({ domain: "c.co.uk", sourceCountry: "GB" }),
       ],
-      NOW,
+      NOW
     );
     expect(stats.distinctSourceCountries).toBe(1);
     expect(stats.distinctDomains).toBe(3);
@@ -111,7 +111,7 @@ describe("tier-1 freshness (§6 decision 10 — newest, not oldest)", () => {
         article({ tier1: true, date: gkg(70), domain: "old.com" }),
         article({ tier1: true, date: gkg(2), domain: "new.com" }),
       ],
-      NOW,
+      NOW
     );
     expect(stats.tier1Fresh).toBe(true);
     expect(stats.newestTier1).toBe(gkg(2));

@@ -63,7 +63,7 @@ const coverage = (x: number, y: number, width: number, height: number): number =
 export function trianglePin(
   cssWidth: number = PIN_WIDTH,
   cssHeight: number = PIN_HEIGHT,
-  pixelRatio: number = PIN_PIXEL_RATIO,
+  pixelRatio: number = PIN_PIXEL_RATIO
 ): { width: number; height: number; data: Uint8ClampedArray } {
   const width = Math.round(cssWidth * pixelRatio);
   const height = Math.round(cssHeight * pixelRatio);

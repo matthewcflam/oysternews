@@ -76,7 +76,7 @@ describe("labelLevelOf", () => {
     // They are drawn like any other country label, so refusing them would leave
     // an unexplainable dead spot on the map.
     expect(
-      labelLevelOf({ sourceLayer: "country_disputed_label", properties: { name: "Kosovo" } }),
+      labelLevelOf({ sourceLayer: "country_disputed_label", properties: { name: "Kosovo" } })
     ).toBe("country");
   });
 
@@ -88,13 +88,17 @@ describe("labelLevelOf", () => {
     expect(labelLevelOf({ sourceLayer: "place", properties: { class: "town" } })).toBeNull();
     expect(labelLevelOf({ sourceLayer: "place", properties: { class: "suburb" } })).toBeNull();
     expect(labelLevelOf({ sourceLayer: "town_label", properties: { class: "town" } })).toBeNull();
-    expect(labelLevelOf({ sourceLayer: "place_label", properties: { class: "village" } })).toBeNull();
+    expect(
+      labelLevelOf({ sourceLayer: "place_label", properties: { class: "village" } })
+    ).toBeNull();
     expect(labelLevelOf({ sourceLayer: "place_label", properties: { class: "city" } })).toBeNull();
   });
 
   it("refuses our own layers, so a pin is never mistaken for a label", () => {
     expect(labelLevelOf({ sourceLayer: "stories", properties: { kind: "PIN" } })).toBeNull();
-    expect(labelLevelOf({ sourceLayer: "country-top", properties: { kind: "CONTAINER" } })).toBeNull();
+    expect(
+      labelLevelOf({ sourceLayer: "country-top", properties: { kind: "CONTAINER" } })
+    ).toBeNull();
     expect(labelLevelOf({ sourceLayer: "countries", properties: { id: "PK" } })).toBeNull();
   });
 
@@ -144,7 +148,9 @@ describe("labelAnchor", () => {
 
 describe("labelName", () => {
   it("prefers the English name where the provider has one (§2.6)", () => {
-    expect(labelName({ properties: { name: "Deutschland", "name:en": "Germany" } })).toBe("Germany");
+    expect(labelName({ properties: { name: "Deutschland", "name:en": "Germany" } })).toBe(
+      "Germany"
+    );
   });
 
   it("falls back to the bare name OpenFreeMap ships", () => {

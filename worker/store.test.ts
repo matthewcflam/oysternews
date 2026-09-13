@@ -24,7 +24,7 @@ describe("r2Store", () => {
     vi.restoreAllMocks();
   });
 
-  it("get() throws on 404 — callers depend on the throw meaning \"first run\"", async () => {
+  it('get() throws on 404 — callers depend on the throw meaning "first run"', async () => {
     global.fetch = vi.fn().mockResolvedValue(response(404)) as unknown as typeof fetch;
     await expect(r2Store(CREDENTIALS).get("manifest.json")).rejects.toThrow();
   });
@@ -40,7 +40,10 @@ describe("r2Store", () => {
       const url = typeof input === "string" ? input : input.url;
       calls.push(url);
       const token = new URL(url).searchParams.get("continuation-token");
-      return response(200, token ? listPageXml(["archives/b.pmtiles"]) : listPageXml(["archives/a.pmtiles"], "tok1"));
+      return response(
+        200,
+        token ? listPageXml(["archives/b.pmtiles"]) : listPageXml(["archives/a.pmtiles"], "tok1")
+      );
     }) as unknown as typeof fetch;
 
     const keys = await r2Store(CREDENTIALS).list("archives/");
@@ -55,7 +58,9 @@ describe("r2Store", () => {
     global.fetch = vi.fn().mockResolvedValue(response(403, "Forbidden")) as unknown as typeof fetch;
     await expect(r2Store(CREDENTIALS).list("archives/")).rejects.toThrow();
 
-    global.fetch = vi.fn().mockResolvedValue(response(401, "Unauthorized")) as unknown as typeof fetch;
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(response(401, "Unauthorized")) as unknown as typeof fetch;
     await expect(r2Store(CREDENTIALS).list("archives/")).rejects.toThrow();
   });
 
@@ -102,7 +107,9 @@ describe("r2Store", () => {
   });
 
   it("remove() throws on a real failure", async () => {
-    global.fetch = vi.fn().mockResolvedValue(response(500, "server error")) as unknown as typeof fetch;
+    global.fetch = vi
+      .fn()
+      .mockResolvedValue(response(500, "server error")) as unknown as typeof fetch;
     await expect(r2Store(CREDENTIALS).remove("state/run-1.jsonl")).rejects.toThrow();
   });
 });
@@ -127,7 +134,8 @@ describe("parseListPage", () => {
   });
 
   it("unescapes XML entities in keys", () => {
-    const xml = "<ListBucketResult><Contents><Key>archives/a&amp;b.json</Key></Contents></ListBucketResult>";
+    const xml =
+      "<ListBucketResult><Contents><Key>archives/a&amp;b.json</Key></Contents></ListBucketResult>";
     expect(parseListPage(xml).keys).toEqual(["archives/a&b.json"]);
   });
 });

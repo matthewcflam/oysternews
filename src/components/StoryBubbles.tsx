@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { MapLibreMap } from "maplibre-gl";
-import { placeBubbles, type PlacedBubble } from "@/lib/bubble";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type PlacedBubble, placeBubbles } from "@/lib/bubble";
 import type { PanelStory } from "@/lib/story";
 
 /**
@@ -116,8 +116,8 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
           const point = pointFor(map, entry.lngLat);
           return { url: entry.story.url, x: point.x, y: point.y };
         }),
-        viewport,
-      ),
+        viewport
+      )
     );
   }, [map, stories, selectedUrl]);
 
@@ -171,7 +171,13 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
                 x=24 is the body's corner, so the wedge's outer edge continues the
                 body's edge rather than stepping in from it; x=32 is the pin.
               */}
-              <svg className="bubble__tail" width="32" height="62" viewBox="0 0 32 52" aria-hidden="true">
+              <svg
+                className="bubble__tail"
+                width="32"
+                height="62"
+                viewBox="0 0 32 52"
+                aria-hidden="true"
+              >
                 <path d="M0 0 L24 0 L32 52 Z" />
               </svg>
             </button>

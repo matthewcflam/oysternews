@@ -35,11 +35,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { PlacementTrace } from "../worker/place.ts";
 // Wilson lives in lib/ so `lib/accuracy.test.ts` can re-derive the published
 // figures with the SAME arithmetic this script prints. Two copies would let the
 // About page agree with a bug instead of with the judge.
 import { wilson } from "../src/lib/audit-score.ts";
+import type { PlacementTrace } from "../worker/place.ts";
 import { drawFingerprint, fingerprintOf } from "./judge-draw-id.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -54,7 +54,10 @@ const THRESHOLDS = {
   ],
   CONTAINER: [
     { min: 60, verdict: "Containers ship as specified (§2.2)" },
-    { min: 0, verdict: "KILL CONTAINERS — drop country-and-ADM1-only records (FINDINGS §6 path 1)" },
+    {
+      min: 0,
+      verdict: "KILL CONTAINERS — drop country-and-ADM1-only records (FINDINGS §6 path 1)",
+    },
   ],
 };
 
@@ -88,7 +91,9 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const samplePath = args.includes("--sample") ? args[args.indexOf("--sample") + 1] : DEFAULT_SAMPLE;
+  const samplePath = args.includes("--sample")
+    ? args[args.indexOf("--sample") + 1]
+    : DEFAULT_SAMPLE;
 
   const drawn = readJsonl<SampleRecord>(await readFile(samplePath, "utf8"));
   const sample = new Map(drawn.map((r) => [r.id, r]));
@@ -108,7 +113,7 @@ async function main(): Promise<void> {
       `\n  REFUSING TO SCORE — this sheet was not judged against this sample.` +
         `\n  sheet says ${claimed}, ${path.basename(samplePath)} fingerprints as ${actual}.` +
         `\n  The ids will still join, and the answer would be meaningless.` +
-        `\n  Find the sample the sheet was drawn from; do not re-draw it.\n`,
+        `\n  Find the sample the sheet was drawn from; do not re-draw it.\n`
     );
     process.exitCode = 1;
     return;
@@ -117,7 +122,7 @@ async function main(): Promise<void> {
     console.log(
       `\n  WARN  this sheet predates draw fingerprints (2026-08-14), so it cannot` +
         `\n        be verified against ${path.basename(samplePath)}. Ids joining is NOT` +
-        `\n        evidence they belong together — see judge-draw-id.ts.`,
+        `\n        evidence they belong together — see judge-draw-id.ts.`
     );
   }
 
@@ -143,12 +148,12 @@ async function main(): Promise<void> {
       `  ${kind.padEnd(12)} ${String(judgeable.length).padStart(6)}` +
         `${String(correct).padStart(9)}` +
         `${point.toFixed(1).padStart(10)}%   [${lo.toFixed(1)}, ${hi.toFixed(1)}]`.padEnd(24) +
-        `  ${band(kind, lo)}`,
+        `  ${band(kind, lo)}`
     );
     const unjudgeable = all.length - judgeable.length;
     if (unjudgeable) {
       console.log(
-        `  ${"".padEnd(12)} ${unjudgeable} UNJUDGEABLE, excluded from the denominator and reported (§5.1)`,
+        `  ${"".padEnd(12)} ${unjudgeable} UNJUDGEABLE, excluded from the denominator and reported (§5.1)`
       );
     }
   }
@@ -160,9 +165,12 @@ async function main(): Promise<void> {
   if (wrong.length) {
     console.log(`\n  why ${wrong.length} were wrong`);
     const byReason = new Map<string, number>();
-    for (const r of wrong) byReason.set(r.reason || "(none)", (byReason.get(r.reason || "(none)") ?? 0) + 1);
+    for (const r of wrong)
+      byReason.set(r.reason || "(none)", (byReason.get(r.reason || "(none)") ?? 0) + 1);
     for (const [reason, n] of [...byReason].sort((a, b) => b[1] - a[1])) {
-      console.log(`  ${reason.padEnd(16)} ${String(n).padStart(4)}  ${((100 * n) / wrong.length).toFixed(1)}%`);
+      console.log(
+        `  ${reason.padEnd(16)} ${String(n).padStart(4)}  ${((100 * n) / wrong.length).toFixed(1)}%`
+      );
     }
   }
 
@@ -181,7 +189,10 @@ async function main(): Promise<void> {
         return !!level?.runnerUp && level.mentions - level.runnerUp.mentions <= 1;
       },
     },
-    { name: "runaway-country", test: (t) => t.reason === "country-dominates" && (t.countryRatio ?? 0) >= 6 },
+    {
+      name: "runaway-country",
+      test: (t) => t.reason === "country-dominates" && (t.countryRatio ?? 0) >= 6,
+    },
   ];
 
   const judgeable = rows.filter((r) => r.verdict === "CORRECT" || r.verdict === "WRONG");
@@ -199,7 +210,7 @@ async function main(): Promise<void> {
   }
   console.log(
     "\n  A gap here is a HYPOTHESIS, not a rule. The last signal that looked this\n" +
-      "  good (p=0.053 on six pins) went flat on 110. Check n before acting.\n",
+      "  good (p=0.053 on six pins) went flat on 110. Check n before acting.\n"
   );
 }
 

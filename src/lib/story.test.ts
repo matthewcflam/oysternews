@@ -74,16 +74,13 @@ describe("panelStory", () => {
     // rendered as hrefs the reader clicks, and `javascript:` and `data:` are the
     // two schemes that turn a link into code. A pipeline change that started
     // emitting one would otherwise reach the DOM before anyone read the diff.
-    expect(panelStory(pin)?.more).toEqual([
-      "https://ap.org/storm",
-      "https://reuters.com/storm",
-    ]);
+    expect(panelStory(pin)?.more).toEqual(["https://ap.org/storm", "https://reuters.com/storm"]);
 
     expect(
       panelStory({
         ...pin,
         more: "javascript:alert(1)\nhttps://ap.org/storm\ndata:text/html,<script>",
-      })?.more,
+      })?.more
     ).toEqual(["https://ap.org/storm"]);
   });
 

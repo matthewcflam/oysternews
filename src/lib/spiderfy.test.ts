@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  EMPTY_SPIDER,
-  SPIDERFY_ZOOM,
   coordKey,
   displacedUrls,
+  EMPTY_SPIDER,
   leafOffsets,
   leafPositions,
+  type Projection,
+  SPIDERFY_ZOOM,
   sameStacks,
   spiderData,
   stacksFrom,
-  type Projection,
 } from "./spiderfy";
 
 /** A rendered pin, with only what the grouping is allowed to look at. */
@@ -125,7 +125,9 @@ describe("leafOffsets", () => {
 
   it("never repeats a bearing, so legs do not stack into spokes", () => {
     // An even 2π/n step puts every nth leaf on the same line out of the anchor.
-    const bearings = leafOffsets(14).map(([x, y]) => Math.round((Math.atan2(y, x) * 180) / Math.PI));
+    const bearings = leafOffsets(14).map(([x, y]) =>
+      Math.round((Math.atan2(y, x) * 180) / Math.PI)
+    );
     expect(new Set(bearings).size).toBe(bearings.length);
   });
 
@@ -212,9 +214,11 @@ describe("spiderData", () => {
     const near = spiderData(stacks, flat(1));
     const far = spiderData(stacks, flat(4));
     const first = (data: typeof near) =>
-      (data.features.find((f) => f.geometry.type === "Point")!.geometry as unknown as {
-        coordinates: [number, number];
-      }).coordinates;
+      (
+        data.features.find((f) => f.geometry.type === "Point")!.geometry as unknown as {
+          coordinates: [number, number];
+        }
+      ).coordinates;
     const [nearLng] = first(near);
     const [farLng] = first(far);
     // Same pixel offset, so four times the scale means a quarter of the degrees.
@@ -244,7 +248,8 @@ describe("leafPositions", () => {
     const leaves = spiderData(stacks, flat()).features.filter((f) => f.geometry.type === "Point");
     for (const leaf of leaves) {
       const url = leaf.properties?.url as string;
-      const coordinates = (leaf.geometry as unknown as { coordinates: [number, number] }).coordinates;
+      const coordinates = (leaf.geometry as unknown as { coordinates: [number, number] })
+        .coordinates;
       expect(positions.get(url)).toEqual(coordinates);
     }
   });

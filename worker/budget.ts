@@ -1,4 +1,4 @@
-import { SPIDERFY_ZOOM, coordKey } from "../src/lib/spiderfy.ts";
+import { coordKey, SPIDERFY_ZOOM } from "../src/lib/spiderfy.ts";
 import type { StoryGroup } from "../src/lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
@@ -14,7 +14,7 @@ export function tileOf(lat: number, lon: number, zoom: number): { x: number; y: 
   const clamped = Math.max(-85.05112878, Math.min(85.05112878, lat));
   const radians = (clamped * Math.PI) / 180;
   const y = Math.floor(
-    ((1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2) * scale,
+    ((1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2) * scale
   );
   // A point exactly on the antimeridian or pole lands one tile past the edge.
   return { x: Math.min(Math.max(x, 0), scale - 1), y: Math.min(Math.max(y, 0), scale - 1) };

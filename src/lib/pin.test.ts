@@ -3,11 +3,8 @@ import { MARK } from "./layers";
 import { PIN_HEIGHT, PIN_LEFT_PAD, PIN_PIXEL_RATIO, PIN_WIDTH, trianglePin } from "./pin";
 
 /** Alpha of the pixel at `(x, y)`. */
-const alphaAt = (
-  image: { width: number; data: Uint8ClampedArray },
-  x: number,
-  y: number,
-): number => image.data[(y * image.width + x) * 4 + 3];
+const alphaAt = (image: { width: number; data: Uint8ClampedArray }, x: number, y: number): number =>
+  image.data[(y * image.width + x) * 4 + 3];
 
 /** The alpha of every pixel in a row, left to right. */
 const row = (image: { width: number; data: Uint8ClampedArray }, y: number): number[] =>

@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Article, GdeltLocation } from "../src/lib/types.ts";
 import { LOCATION_COUNTRY, LOCATION_WORLD_CITY } from "../src/lib/types.ts";
-import { type RefData, loadRefData } from "./refdata.ts";
-import { type RunSummary, formatSummary, stampOfDate, toPlaced } from "./run.ts";
+import { loadRefData, type RefData } from "./refdata.ts";
+import { formatSummary, type RunSummary, stampOfDate, toPlaced } from "./run.ts";
 
 // Against the REAL reference data, for the reason refdata.test.ts gives: the
 // thing that breaks is a data file, and a mock cannot break the same way.
@@ -64,7 +64,11 @@ describe("toPlaced", () => {
 
   it("carries a CONTAINER's regionId", () => {
     const country = location({ type: LOCATION_COUNTRY, name: "Ukraine", adm1Code: "" });
-    const placed = toPlaced(article(), { kind: "CONTAINER", location: country, regionId: "UP" }, data);
+    const placed = toPlaced(
+      article(),
+      { kind: "CONTAINER", location: country, regionId: "UP" },
+      data
+    );
     expect(placed).toMatchObject({ kind: "CONTAINER", regionId: "UP" });
   });
 
@@ -74,22 +78,32 @@ describe("toPlaced", () => {
 
   it("marks a tier-1 domain, and does not mark a lookalike", () => {
     const tier1 = [...data.tier1][0];
-    expect(toPlaced(article({ domain: tier1 }), { kind: "PIN", location: location() }, data)?.tier1).toBe(true);
+    expect(
+      toPlaced(article({ domain: tier1 }), { kind: "PIN", location: location() }, data)?.tier1
+    ).toBe(true);
     // §2.5 is a membership test, not a substring test. `notbbc.co.uk` is not the BBC.
-    expect(toPlaced(article({ domain: `not${tier1}` }), { kind: "PIN", location: location() }, data)?.tier1).toBe(false);
+    expect(
+      toPlaced(article({ domain: `not${tier1}` }), { kind: "PIN", location: location() }, data)
+        ?.tier1
+    ).toBe(false);
   });
 
   it("infers the publisher country for the secondary salience term", () => {
-    const placed = toPlaced(article({ domain: "bbc.co.uk" }), { kind: "PIN", location: location() }, data);
+    const placed = toPlaced(
+      article({ domain: "bbc.co.uk" }),
+      { kind: "PIN", location: location() },
+      data
+    );
     expect(placed?.sourceCountry).toBe("GB");
   });
 
   it("keeps the article's own date, not the run's", () => {
     // Freshness (§2.3) and the 48-hour tier-1 clock both read this field; using
     // the run time would make every story permanently fresh.
-    expect(toPlaced(article({ date: "20260810000000" }), { kind: "PIN", location: location() }, data)?.date).toBe(
-      "20260810000000",
-    );
+    expect(
+      toPlaced(article({ date: "20260810000000" }), { kind: "PIN", location: location() }, data)
+        ?.date
+    ).toBe("20260810000000");
   });
 });
 
@@ -150,9 +164,16 @@ describe("formatSummary", () => {
 
   it("does not warn about tier-1 on a run with no groups at all", () => {
     // That run has a much louder problem and the invariants already said so.
-    expect(formatSummary(summary({ groups: 0, tier1Groups: 0, published: false, violations: ["no groups to publish (0)"] }))).not.toContain(
-      "degraded to plain salience",
-    );
+    expect(
+      formatSummary(
+        summary({
+          groups: 0,
+          tier1Groups: 0,
+          published: false,
+          violations: ["no groups to publish (0)"],
+        })
+      )
+    ).not.toContain("degraded to plain salience");
   });
 
   it("names every unknown FIPS code with its story count", () => {
@@ -162,7 +183,12 @@ describe("formatSummary", () => {
 
   it("prints the violations and no archive when publication is refused", () => {
     const text = formatSummary(
-      summary({ published: false, violations: ["only 3 distinct countries, floor is 15"], archive: "", pinged: false }),
+      summary({
+        published: false,
+        violations: ["only 3 distinct countries, floor is 15"],
+        archive: "",
+        pinged: false,
+      })
     );
     expect(text).toContain("PUBLISHED    NOTHING");
     expect(text).toContain("only 3 distinct countries");

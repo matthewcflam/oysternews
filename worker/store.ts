@@ -32,7 +32,7 @@ export type ListPage = {
 export function parseListPage(xml: string): ListPage {
   if (!xml.includes("<ListBucketResult")) {
     throw new Error(
-      "r2 list: response body is not a ListBucketResult — bad credentials, wrong bucket, or a proxy error page returned with 200",
+      "r2 list: response body is not a ListBucketResult — bad credentials, wrong bucket, or a proxy error page returned with 200"
     );
   }
   const keys = [...xml.matchAll(/<Key>([^<]*)<\/Key>/g)].map((match) => unescapeXml(match[1]));
@@ -66,7 +66,7 @@ export function r2Store(credentials: R2Credentials): ArchiveStore {
     key: string,
     body: BodyInit,
     contentType: string,
-    cacheControl: string,
+    cacheControl: string
   ): Promise<string> {
     const response = await client.fetch(objectUrl(key), {
       method: "PUT",
@@ -125,7 +125,7 @@ export function r2Store(credentials: R2Credentials): ArchiveStore {
         key,
         new Blob([new Uint8Array(body)]),
         "application/octet-stream",
-        `public, max-age=${maxAge}, immutable, no-transform`,
+        `public, max-age=${maxAge}, immutable, no-transform`
       );
     },
 

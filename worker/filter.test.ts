@@ -86,7 +86,7 @@ describe("filterArticles", () => {
   it("separates the two drop reasons", () => {
     const result = filterArticles(
       [article("iheart.com", [4]), article("example.com", []), article("example.com", [4])],
-      refdata,
+      refdata
     );
     expect(result.blocked).toBe(1);
     expect(result.noLocation).toBe(1);

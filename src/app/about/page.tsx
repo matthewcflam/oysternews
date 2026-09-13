@@ -1,5 +1,5 @@
-import Link from "next/link";
 import type { Metadata } from "next";
+import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "About Oyster News",
@@ -11,7 +11,6 @@ export default function About() {
   return (
     <main className="about">
       <article>
-        
         <h2>Credits</h2>
         <p>
           News data from the{" "}

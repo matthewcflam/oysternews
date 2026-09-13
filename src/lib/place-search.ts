@@ -81,12 +81,7 @@ export function searchablePlaces(index: IndexEntry[]): PlaceEntry[] {
  * type, and the index carries the accented spellings.
  */
 export function normalize(text: string): string {
-  return text
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
+  return text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim().replace(/\s+/g, " ");
 }
 
 const KIND_RANK: Record<PlaceKind, number> = { continent: 0, country: 1, state: 2 };
@@ -121,10 +116,7 @@ export function searchPlaces(places: PlaceEntry[], query: string, limit = 7): Pl
   for (const place of places) {
     const nameTier = tierFor(place.name, normalizedQuery);
     const altTier = place.alt
-      ? Math.min(
-          ...place.alt.map((alt) => tierFor(alt, normalizedQuery) ?? Infinity),
-          Infinity,
-        )
+      ? Math.min(...place.alt.map((alt) => tierFor(alt, normalizedQuery) ?? Infinity), Infinity)
       : Infinity;
 
     // An alias hit ranks at tiers 1-3 (never as good as an exact/prefix hit

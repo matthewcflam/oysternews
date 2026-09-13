@@ -84,7 +84,7 @@ const radiusBySalience = (
   single: number,
   few: number,
   many: number,
-  huge: number,
+  huge: number
 ): ExpressionSpecification => [
   "interpolate",
   ["linear"],
@@ -105,7 +105,7 @@ const radiusBySalience = (
 // which is why the state logic is pushed down into this function rather
 // than multiplied over its result.
 const byZoom = (
-  perZoom: (single: number, few: number, many: number, huge: number) => ExpressionSpecification,
+  perZoom: (single: number, few: number, many: number, huge: number) => ExpressionSpecification
 ): ExpressionSpecification => [
   "interpolate",
   ["linear"],
@@ -149,7 +149,7 @@ const discRadius = (
   single: number,
   few: number,
   many: number,
-  huge: number,
+  huge: number
 ): ExpressionSpecification => {
   const footprint = radiusBySalience(single, few, many, huge);
   return ["case", isTop, ["*", footprint, 1 - RING_RATIO], footprint];
@@ -160,7 +160,7 @@ const ringWidth = (
   single: number,
   few: number,
   many: number,
-  huge: number,
+  huge: number
 ): ExpressionSpecification => [
   "case",
   isTop,
@@ -183,7 +183,7 @@ const labelOffset = (
   single: number,
   few: number,
   many: number,
-  huge: number,
+  huge: number
 ): ExpressionSpecification => [
   "interpolate",
   ["linear"],
@@ -411,11 +411,10 @@ const PLACE_LABEL_SOURCE_LAYERS = [
 // (the honest answer for an unrecognized style — addLayer(layer,
 // undefined) appends, so headlines still draw, just without the priority).
 export function firstPlaceLabelLayerId(
-  layers: readonly { id: string; "source-layer"?: string }[],
+  layers: readonly { id: string; "source-layer"?: string }[]
 ): string | undefined {
-  return layers.find((layer) =>
-    PLACE_LABEL_SOURCE_LAYERS.includes(layer["source-layer"] ?? ""),
-  )?.id;
+  return layers.find((layer) => PLACE_LABEL_SOURCE_LAYERS.includes(layer["source-layer"] ?? ""))
+    ?.id;
 }
 
 /* -------------------------------------------------------------------------- */

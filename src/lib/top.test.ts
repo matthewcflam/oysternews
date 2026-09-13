@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TOP_COUNT, sameKeys, topKeys } from "./top";
+import { sameKeys, TOP_COUNT, topKeys } from "./top";
 
 /** A rendered feature, with only the properties the ranking may look at. */
 const feature = (url: string, salience: number, date = "2026-08-14", extra = {}) => ({
@@ -25,12 +25,7 @@ describe("topKeys", () => {
     // per visible copy of the planet — and below z4 it can also be in both the
     // stories layer and the country floor. Ranking the raw query result would
     // spend all five slots on one story.
-    const features = [
-      feature("a", 4.0),
-      feature("a", 4.0),
-      feature("a", 4.0),
-      feature("b", 1.0),
-    ];
+    const features = [feature("a", 4.0), feature("a", 4.0), feature("a", 4.0), feature("b", 1.0)];
     expect(topKeys(features)).toEqual(["a", "b"]);
   });
 
@@ -61,7 +56,7 @@ describe("topKeys", () => {
     // No URL means no feature-state key, so it could never be marked. Ranking
     // it would silently shrink the highlight to four.
     expect(topKeys([{ properties: { salience: 9 } }, feature("a", 0.1)])).toEqual(["a"]);
-    expect(topKeys([{ properties: null }, { }])).toEqual([]);
+    expect(topKeys([{ properties: null }, {}])).toEqual([]);
   });
 
   it("survives a feature whose properties are the wrong shape", () => {

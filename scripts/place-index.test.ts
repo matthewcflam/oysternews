@@ -17,22 +17,49 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 
 const countryFeature = (properties: Record<string, string>) => ({
   type: "Feature" as const,
-  geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1]]] },
+  geometry: {
+    type: "Polygon",
+    coordinates: [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ],
+    ],
+  },
   properties,
 });
 
 const regionFeature = (properties: Record<string, string>) => ({
   type: "Feature" as const,
-  geometry: { type: "Polygon", coordinates: [[[0, 0], [1, 0], [1, 1], [0, 1]]] },
+  geometry: {
+    type: "Polygon",
+    coordinates: [
+      [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ],
+    ],
+  },
   properties,
 });
 
 describe("countryOutlines: name and alias derivation", () => {
   it("prefers NAME_EN, falling back through NAME then NAME_LONG", () => {
     const [feature] = countryOutlines(
-      [countryFeature({ FIPS_10: "SP", NAME_EN: "Spain", NAME: "España", NAME_LONG: "Kingdom of Spain" })],
+      [
+        countryFeature({
+          FIPS_10: "SP",
+          NAME_EN: "Spain",
+          NAME: "España",
+          NAME_LONG: "Kingdom of Spain",
+        }),
+      ],
       new Map(),
-      {},
+      {}
     );
     expect(feature.properties.name).toBe("Spain");
   });
@@ -41,7 +68,7 @@ describe("countryOutlines: name and alias derivation", () => {
     const [feature] = countryOutlines(
       [countryFeature({ FIPS_10: "XX", NAME_EN: "-99", NAME: "Realname", NAME_LONG: "-99" })],
       new Map(),
-      {},
+      {}
     );
     expect(feature.properties.name).toBe("Realname");
   });
@@ -58,7 +85,7 @@ describe("countryOutlines: name and alias derivation", () => {
         }),
       ],
       new Map(),
-      { RS: { iso: "RU", name: "Russian Federation" } },
+      { RS: { iso: "RU", name: "Russian Federation" } }
     );
     expect(feature.properties.alt).toEqual(["Russian Federation", "Rus."]);
   });
@@ -76,7 +103,7 @@ describe("regionOutlines: the US postal rewrite and name/parent derivation", () 
           iso_a2: "US",
         }),
       ],
-      byIso,
+      byIso
     );
     expect(feature.properties.id).toBe("USCA");
     expect(feature.properties.id).not.toBe("US06");
@@ -93,7 +120,7 @@ describe("regionOutlines: the US postal rewrite and name/parent derivation", () 
           iso_a2: "FR",
         }),
       ],
-      new Map(),
+      new Map()
     );
     expect(feature.properties.name).toBe("Alsace");
   });
@@ -102,7 +129,7 @@ describe("regionOutlines: the US postal rewrite and name/parent derivation", () 
     const byIso = new Map([["US", "US"]]);
     const [feature] = regionOutlines(
       [regionFeature({ iso_3166_2: "US-TX", fips: "US48", name_en: "Texas", iso_a2: "US" })],
-      byIso,
+      byIso
     );
     expect(feature.properties.parent).toBe("US");
   });

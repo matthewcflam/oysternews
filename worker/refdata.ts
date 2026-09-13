@@ -37,26 +37,33 @@ async function json(file: string): Promise<Record<string, unknown>> {
 }
 
 export async function loadRefData(): Promise<RefData> {
-  const [crosswalkFile, overridesFile, nonCountriesFile, sourceFile, demonymText, tier1Text, blockText] =
-    await Promise.all([
-      json("crosswalk.json"),
-      json("fips-overrides.json"),
-      json("non-countries.json"),
-      json("source-countries.json"),
-      readFile(path.join(DATA_DIR, "demonyms.txt"), "utf8"),
-      readFile(path.join(DATA_DIR, "tier1-domains.txt"), "utf8"),
-      readFile(path.join(DATA_DIR, "blocklist.txt"), "utf8"),
-    ]);
+  const [
+    crosswalkFile,
+    overridesFile,
+    nonCountriesFile,
+    sourceFile,
+    demonymText,
+    tier1Text,
+    blockText,
+  ] = await Promise.all([
+    json("crosswalk.json"),
+    json("fips-overrides.json"),
+    json("non-countries.json"),
+    json("source-countries.json"),
+    readFile(path.join(DATA_DIR, "demonyms.txt"), "utf8"),
+    readFile(path.join(DATA_DIR, "tier1-domains.txt"), "utf8"),
+    readFile(path.join(DATA_DIR, "blocklist.txt"), "utf8"),
+  ]);
 
   const countries = new Map<string, Country>();
   for (const [code, entry] of Object.entries(
-    (crosswalkFile.fips ?? {}) as Record<string, Country>,
+    (crosswalkFile.fips ?? {}) as Record<string, Country>
   )) {
     countries.set(code, entry);
   }
   // Overrides last: they exist to correct and to fill, so they must win.
   for (const [code, entry] of Object.entries(
-    (overridesFile.fips ?? {}) as Record<string, Country>,
+    (overridesFile.fips ?? {}) as Record<string, Country>
   )) {
     countries.set(code, entry);
   }
@@ -80,12 +87,12 @@ export async function loadRefData(): Promise<RefData> {
         Object.entries((sourceFile.domains ?? {}) as Record<string, string>).map(([k, v]) => [
           k.toLowerCase(),
           v,
-        ]),
+        ])
       ),
       cctldExceptions: new Map(
         Object.entries((sourceFile.cctldExceptions ?? {}) as Record<string, string>).map(
-          ([k, v]) => [k.toLowerCase(), v],
-        ),
+          ([k, v]) => [k.toLowerCase(), v]
+        )
       ),
     },
   };
@@ -105,10 +112,14 @@ export function assertUsable(data: RefData): void {
   const problems: string[] = [];
 
   if (data.countries.size < MINIMUMS.countries) {
-    problems.push(`crosswalk has ${data.countries.size} countries, expected >= ${MINIMUMS.countries}`);
+    problems.push(
+      `crosswalk has ${data.countries.size} countries, expected >= ${MINIMUMS.countries}`
+    );
   }
   if (data.demonyms.size < MINIMUMS.demonyms) {
-    problems.push(`demonym list has ${data.demonyms.size} entries, expected >= ${MINIMUMS.demonyms}`);
+    problems.push(
+      `demonym list has ${data.demonyms.size} entries, expected >= ${MINIMUMS.demonyms}`
+    );
   }
   if (data.tier1.size < MINIMUMS.tier1) {
     problems.push(`tier-1 list has ${data.tier1.size} domains, expected >= ${MINIMUMS.tier1}`);

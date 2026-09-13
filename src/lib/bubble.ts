@@ -195,7 +195,7 @@ function chooseAxis<T extends string>(inputs: readonly BubbleInput[], axis: Axis
 /** The balanced left/right assignment, in input order. */
 export function chooseSides(
   inputs: readonly BubbleInput[],
-  viewport: Viewport,
+  viewport: Viewport
 ): Array<{ url: string; side: BubbleSide }> {
   const sides = chooseAxis(inputs, horizontal(viewport));
   return inputs.map((input, index) => ({ url: input.url, side: sides[index] }));
@@ -204,7 +204,7 @@ export function chooseSides(
 /** The balanced up/down assignment, in input order. */
 export function chooseLifts(
   inputs: readonly BubbleInput[],
-  viewport: Viewport,
+  viewport: Viewport
 ): Array<{ url: string; lift: BubbleLift }> {
   const lifts = chooseAxis(inputs, vertical(viewport));
   return inputs.map((input, index) => ({ url: input.url, lift: lifts[index] }));
@@ -251,7 +251,13 @@ export function placeBubbles(inputs: readonly BubbleInput[], viewport: Viewport)
   rebalance(kept, viewport, SIDES, (placed) => placed.side, assignSide);
   rebalance(kept, viewport, LIFTS, (placed) => placed.lift, assignLift);
 
-  return kept.map(({ input, side, lift }) => ({ url: input.url, side, lift, x: input.x, y: input.y }));
+  return kept.map(({ input, side, lift }) => ({
+    url: input.url,
+    side,
+    lift,
+    x: input.x,
+    y: input.y,
+  }));
 }
 
 type Placement = { input: BubbleInput; side: BubbleSide; lift: BubbleLift; box: Box };
@@ -261,10 +267,10 @@ type Placement = { input: BubbleInput; side: BubbleSide; lift: BubbleLift; box: 
 // whichever direction they are near each other.
 const clearOfKeptPins = (input: BubbleInput, kept: readonly Placement[]): boolean =>
   kept.every(
-    (placed) => Math.hypot(placed.input.x - input.x, placed.input.y - input.y) >= TAIL_TIP_GAP,
+    (placed) => Math.hypot(placed.input.x - input.x, placed.input.y - input.y) >= TAIL_TIP_GAP
   );
 
-const other = <T,>(options: readonly [T, T], option: T): T =>
+const other = <T>(options: readonly [T, T], option: T): T =>
   option === options[0] ? options[1] : options[0];
 
 const assignSide = (placed: Placement, side: BubbleSide) => ({ ...placed, side });
@@ -278,7 +284,7 @@ function rebalance<T extends string>(
   viewport: Viewport,
   options: readonly [T, T],
   read: (placed: Placement) => T,
-  write: (placed: Placement, option: T) => Placement,
+  write: (placed: Placement, option: T) => Placement
 ): void {
   const cap = sideCap(kept.length);
 

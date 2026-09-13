@@ -124,7 +124,7 @@ describe("the feature payload", () => {
         "tier1",
         "title",
         "url",
-      ].sort(),
+      ].sort()
     );
   });
 

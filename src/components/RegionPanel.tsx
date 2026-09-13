@@ -112,8 +112,15 @@ export default function RegionPanel({
             */}
             <p className="panel__crumbs">
               {trail.map((crumb, at) => (
-                <span key={crumb} className={at === trail.length - 1 ? "panel__crumb--here" : undefined}>
-                  {at > 0 && <span className="panel__crumb-sep" aria-hidden="true">›</span>}
+                <span
+                  key={crumb}
+                  className={at === trail.length - 1 ? "panel__crumb--here" : undefined}
+                >
+                  {at > 0 && (
+                    <span className="panel__crumb-sep" aria-hidden="true">
+                      ›
+                    </span>
+                  )}
                   {crumb}
                 </span>
               ))}

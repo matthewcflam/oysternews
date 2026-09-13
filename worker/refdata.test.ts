@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertUsable, loadRefData, sourceCountry, type RefData } from "./refdata.ts";
+import { assertUsable, loadRefData, type RefData, sourceCountry } from "./refdata.ts";
 
 /**
  * These run against the REAL data/ directory rather than fixtures. That is the
@@ -110,7 +110,7 @@ describe("assertUsable", () => {
 
   it("rejects a domain that is both tier-1 and blocklisted", () => {
     expect(() =>
-      assertUsable(broken({ blocklist: new Set([...data.blocklist, "reuters.com"]) })),
+      assertUsable(broken({ blocklist: new Set([...data.blocklist, "reuters.com"]) }))
     ).toThrow(/both tier-1 and blocklist/);
   });
 });

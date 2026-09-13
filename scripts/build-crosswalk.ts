@@ -36,8 +36,7 @@ type Feature = {
 };
 
 /** Natural Earth writes -99 rather than null for "no value". */
-const value = (raw: string | undefined): string =>
-  raw && raw !== "-99" ? raw.trim() : "";
+const value = (raw: string | undefined): string => (raw && raw !== "-99" ? raw.trim() : "");
 
 /**
  * Natural Earth's seven inhabited continents, read straight through —

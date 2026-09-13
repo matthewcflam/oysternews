@@ -60,7 +60,12 @@ body {
   height: 100%;
   background: #0d0f12;
   color: #f2f4f7;
-  font: 15px/1.45 var(--font-newsreader), Newsreader, Georgia, "Times New Roman", serif;
+  font:
+    15px / 1.45 var(--font-newsreader),
+    Newsreader,
+    Georgia,
+    "Times New Roman",
+    serif;
 }
 
 main {
@@ -1357,7 +1362,11 @@ main .bubbles {
   border-radius: 4px;
   background: #fff;
   color: #333;
-  font: 600 14px/1 var(--font-inter), Inter, system-ui, sans-serif;
+  font:
+    600 14px / 1 var(--font-inter),
+    Inter,
+    system-ui,
+    sans-serif;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   user-select: none;

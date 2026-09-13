@@ -18,7 +18,7 @@ function rowOf(group: StoryGroup): RegionStory {
 export function buildRegionIndex(
   groups: StoryGroup[],
   topN = REGION_TOP_N,
-  continentOf: (countryCode: string) => string = () => "",
+  continentOf: (countryCode: string) => string = () => ""
   // Return type is narrow, not union: writes never produce the legacy form.
 ): Record<string, RegionEntry> {
   const index: Record<string, RegionEntry> = {};

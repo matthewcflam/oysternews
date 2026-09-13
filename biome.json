@@ -7,8 +7,8 @@
   "files": {
     "includes": [
       "**",
-      "!**/public/**",
-      "!**/data/**",
+      "!**/public",
+      "!**/data",
       "!**/*.pmtiles",
       "!**/package-lock.json",
       "!**/node_modules",

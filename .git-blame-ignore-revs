@@ -1,0 +1,3 @@
+# Formatting pass: biome check --write
+# Run: git blame --ignore-revs-file=.git-blame-ignore-revs
+# Phase 6 automated formatting (will be filled after commit)

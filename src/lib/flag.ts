@@ -10,9 +10,9 @@
  * that could drift.
  */
 
+import { shortCountry } from "@/lib/story";
 import crosswalk from "../../data/crosswalk.json";
 import overrides from "../../data/fips-overrides.json";
-import { shortCountry } from "@/lib/story";
 
 // flagcdn: public-domain flag PNGs keyed by lowercase ISO alpha-2, no key,
 // no rate limit. w640 rather than full-resolution — this is decoration
@@ -34,12 +34,12 @@ const MERGED: [string, CrosswalkRow][] = [
 ];
 
 const FIPS_TO_ISO: Record<string, string> = Object.fromEntries(
-  MERGED.map(([fips, entry]) => [fips, entry.iso]),
+  MERGED.map(([fips, entry]) => [fips, entry.iso])
 );
 
 /** The same merge, read for the other column — see `countryName`. */
 const FIPS_TO_NAME: Record<string, string> = Object.fromEntries(
-  MERGED.map(([fips, entry]) => [fips, entry.name]),
+  MERGED.map(([fips, entry]) => [fips, entry.name])
 );
 
 // Inverse of FIPS_TO_ISO, for the city shard lookup: city_label carries
@@ -51,7 +51,7 @@ for (const [fips, entry] of MERGED) {
   if (iso && !(iso in ISO_TO_FIPS)) ISO_TO_FIPS[iso] = fips;
 }
 for (const [fips, entry] of Object.entries(
-  (overrides as { fips: Record<string, CrosswalkRow> }).fips,
+  (overrides as { fips: Record<string, CrosswalkRow> }).fips
 )) {
   const iso = entry.iso.toUpperCase();
   if (iso) ISO_TO_FIPS[iso] = fips;

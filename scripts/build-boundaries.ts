@@ -35,8 +35,8 @@
  * news in Serbia.
  */
 
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -162,7 +162,7 @@ const stripped = (features: Feature[]): Feature[] =>
 export function countryOutlines(
   features: Feature[],
   byIso: Map<string, string>,
-  crosswalk: Record<string, CrosswalkEntry>,
+  crosswalk: Record<string, CrosswalkEntry>
 ): Feature[] {
   const out: Feature[] = [];
   let recovered = 0;
@@ -190,7 +190,7 @@ export function countryOutlines(
           value(feature.properties.FORMAL_EN),
           value(feature.properties.ABBREV),
           crosswalk[fips]?.name ?? "",
-        ].filter((candidate) => candidate && candidate !== name),
+        ].filter((candidate) => candidate && candidate !== name)
       ),
     ];
 
@@ -242,8 +242,7 @@ export function regionOutlines(features: Feature[], byIso: Map<string, string>):
     if (iso3166.startsWith("US-")) usPostal += 1;
     if (ADM1_FIPS_OVERRIDES[iso3166]) overridden += 1;
 
-    const country =
-      value(feature.properties.iso_a2) || value(feature.properties.adm0_a3) || "??";
+    const country = value(feature.properties.iso_a2) || value(feature.properties.adm0_a3) || "??";
     (countriesById.get(id) ?? countriesById.set(id, new Set()).get(id)!).add(country);
 
     const name = value(feature.properties.name_en) || value(feature.properties.name);
@@ -254,7 +253,7 @@ export function regionOutlines(features: Feature[], byIso: Map<string, string>):
 
   console.log(
     `  regions:   ${out.length} outlines (${usPostal} rewritten to US postal codes,` +
-      ` ${overridden} corrected by ADM1_FIPS_OVERRIDES)`,
+      ` ${overridden} corrected by ADM1_FIPS_OVERRIDES)`
   );
 
   /**
@@ -278,7 +277,7 @@ export function regionOutlines(features: Feature[], byIso: Map<string, string>):
     console.warn(
       `  WARN ${crossBorder.length} region ids span more than one country and may ` +
         `outline the wrong place: ` +
-        crossBorder.map(([id, c]) => `${id} (${[...c].join("/")})`).join(", "),
+        crossBorder.map(([id, c]) => `${id} (${[...c].join("/")})`).join(", ")
     );
   }
 
@@ -403,7 +402,7 @@ export type PlaceEntry = {
 export function placeIndexFrom(
   countries: Feature[],
   regions: Feature[],
-  bboxes: Record<string, Bbox>,
+  bboxes: Record<string, Bbox>
 ): PlaceEntry[] {
   const entries: PlaceEntry[] = [];
   const seen = new Set<string>();
@@ -460,7 +459,7 @@ function runTippecanoe(args: string[]): Promise<void> {
     });
     child.on("error", reject);
     child.on("close", (code) =>
-      code === 0 ? resolve() : reject(new Error(`tippecanoe exited ${code}`)),
+      code === 0 ? resolve() : reject(new Error(`tippecanoe exited ${code}`))
     );
   });
 }
@@ -495,7 +494,7 @@ async function main(): Promise<void> {
   const bboxSize = (await stat(BBOX_OUTPUT)).size;
   console.log(
     `  bbox:      ${Object.keys(bboxes).length} regions -> ${BBOX_OUTPUT}` +
-      ` (${(bboxSize / 1024).toFixed(0)} KB)`,
+      ` (${(bboxSize / 1024).toFixed(0)} KB)`
   );
 
   const places = placeIndexFrom(countries, regions, bboxes);
@@ -503,7 +502,7 @@ async function main(): Promise<void> {
   const placeSize = (await stat(PLACE_INDEX_OUTPUT)).size;
   console.log(
     `  places:    ${places.length} entries -> ${PLACE_INDEX_OUTPUT}` +
-      ` (${(placeSize / 1024).toFixed(0)} KB)`,
+      ` (${(placeSize / 1024).toFixed(0)} KB)`
   );
 
   /**
@@ -559,7 +558,8 @@ async function main(): Promise<void> {
  * unguarded `main()` would kick off a 54 MB parse and a tippecanoe run the
  * moment a test file imported it.
  */
-const invokedDirectly = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+const invokedDirectly =
+  process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 
 if (invokedDirectly) {
   main().catch((error: unknown) => {

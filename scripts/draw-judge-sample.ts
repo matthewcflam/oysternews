@@ -36,15 +36,15 @@
  *       estimate holds. See §5.2 for why that margin matters.
  */
 
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Article } from "../src/lib/types.ts";
 import { fetchBundle, newestStamp, shiftStamp } from "../worker/fetch.ts";
 import { filterArticles } from "../worker/filter.ts";
 import { parseBundle } from "../worker/parse.ts";
-import { type PlacementTrace, explainPlacement } from "../worker/place.ts";
+import { explainPlacement, type PlacementTrace } from "../worker/place.ts";
 import { loadRefData } from "../worker/refdata.ts";
-import type { Article } from "../src/lib/types.ts";
 import { drawFingerprint } from "./judge-draw-id.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -126,7 +126,7 @@ function sheetHtml(records: SampleRecord[], meta: Record<string, unknown>): stri
   }));
   const payload = JSON.stringify({ meta, records: blind, reasons: FAILURE_REASONS }).replace(
     /</g,
-    "\\u003c",
+    "\\u003c"
   );
 
   return `<!doctype html>

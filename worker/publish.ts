@@ -76,7 +76,7 @@ export function statsOf(groups: StoryGroup[]): PublishStats {
 export function checkInvariants(
   stats: PublishStats,
   /** Milliseconds since the last successful publish. Past BAND_RELAX_AFTER_MS the band stands down. */
-  staleFor = 0,
+  staleFor = 0
 ): string[] {
   const violations: string[] = [];
 
@@ -88,9 +88,7 @@ export function checkInvariants(
 
   if (staleFor < BAND_RELAX_AFTER_MS) {
     if (stats.groups < COUNT_BAND_MIN || stats.groups > COUNT_BAND_MAX) {
-      violations.push(
-        `group count ${stats.groups} outside [${COUNT_BAND_MIN}, ${COUNT_BAND_MAX}]`,
-      );
+      violations.push(`group count ${stats.groups} outside [${COUNT_BAND_MIN}, ${COUNT_BAND_MAX}]`);
     }
   }
 
@@ -101,7 +99,7 @@ export function checkInvariants(
   const titleRate = stats.titled / stats.groups;
   if (titleRate < MIN_TITLE_RATE) {
     violations.push(
-      `${(titleRate * 100).toFixed(1)}% of groups have a title, floor is ${MIN_TITLE_RATE * 100}%`,
+      `${(titleRate * 100).toFixed(1)}% of groups have a title, floor is ${MIN_TITLE_RATE * 100}%`
     );
   }
 
@@ -121,7 +119,7 @@ export function archiveKey(hash: string): string {
 export function archivesToPrune(
   stored: string[],
   history: HistoryEntry[],
-  keep = KEEP_ARCHIVES,
+  keep = KEEP_ARCHIVES
 ): string[] {
   const live = new Set<string>();
   const liveDirs: string[] = [];
@@ -138,14 +136,14 @@ export function archivesToPrune(
   }
   return stored.filter(
     (key) =>
-      key.startsWith(ARCHIVE_DIR) && !live.has(key) && !liveDirs.some((dir) => key.startsWith(dir)),
+      key.startsWith(ARCHIVE_DIR) && !live.has(key) && !liveDirs.some((dir) => key.startsWith(dir))
   );
 }
 
 export function nextHistory(
   history: HistoryEntry[],
   entry: HistoryEntry,
-  limit = HISTORY_LIMIT,
+  limit = HISTORY_LIMIT
 ): HistoryEntry[] {
   return [...history.filter((h) => h.archive !== entry.archive), entry].slice(-limit);
 }
@@ -168,7 +166,13 @@ export type PublishInput = {
 };
 
 export type PublishResult =
-  | { published: true; manifest: Manifest; stats: PublishStats; pruned: number; bandRelaxed: boolean }
+  | {
+      published: true;
+      manifest: Manifest;
+      stats: PublishStats;
+      pruned: number;
+      bandRelaxed: boolean;
+    }
   | { published: false; violations: string[]; stats: PublishStats };
 
 export function staleness(history: HistoryEntry[], now: Date): number {
@@ -191,7 +195,7 @@ export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
         "value, and `node --env-file` strips them locally, so a credential can work " +
         "here and fail in Actions. Note this check cannot catch a read-only token — " +
         "it passes on `list` and the run then dies later inside appendShards.",
-      { cause },
+      { cause }
     );
   }
 }
@@ -201,7 +205,7 @@ export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
 export async function assertPublicHostReachable(
   base: string = CDN_BASE,
   // Injected so the test can drive it without a network.
-  doFetch: typeof globalThis.fetch = globalThis.fetch,
+  doFetch: typeof globalThis.fetch = globalThis.fetch
 ): Promise<void> {
   try {
     await doFetch(`${base}/${MANIFEST_KEY}`, { method: "HEAD" });
@@ -214,7 +218,7 @@ export async function assertPublicHostReachable(
         "connected and that its zone is Active in Cloudflare — an undelegated " +
         "or unconnected domain fails here as a DNS or TLS error, not an HTTP " +
         "status. Any HTTP response, 404 included, passes this check.",
-      { cause },
+      { cause }
     );
   }
 }
@@ -233,7 +237,11 @@ export async function readHistory(store: ArchiveStore): Promise<HistoryEntry[]> 
 // Run worker(item) over items with at most `limit` in flight. A plain pool
 // is enough for a shard upload (one round trip, nothing else); a rejection
 // propagates through Promise.all, failing the run before the manifest flip.
-async function pooled<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+async function pooled<T>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<void>
+): Promise<void> {
   let next = 0;
   const lane = async () => {
     while (next < items.length) {
@@ -267,7 +275,7 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     regionsKey,
     regionsBody,
     "application/json",
-    ARCHIVE_MAX_AGE,
+    ARCHIVE_MAX_AGE
   );
 
   const cities = input.cities ?? {};
@@ -277,7 +285,7 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
 
   if (countryCodes.length > 0) {
     const citiesHash = contentHash(
-      Buffer.from(countryCodes.map((code) => `${code}:${JSON.stringify(cities[code])}`).join("\n")),
+      Buffer.from(countryCodes.map((code) => `${code}:${JSON.stringify(cities[code])}`).join("\n"))
     );
     citiesDir = `${CITIES_PREFIX}${citiesHash}/`;
 
@@ -307,7 +315,7 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     MANIFEST_KEY,
     `${JSON.stringify(manifest, null, 2)}\n`,
     "application/json",
-    MANIFEST_MAX_AGE,
+    MANIFEST_MAX_AGE
   );
 
   const updated = nextHistory(history, {

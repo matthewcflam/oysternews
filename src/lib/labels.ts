@@ -85,7 +85,7 @@ export function labelLevelOf(feature: LabelFeature | null | undefined): LabelLev
  * clicking "Texas" selects Texas, not the United States.
  */
 export function firstLabel<T extends LabelFeature>(
-  features: readonly T[],
+  features: readonly T[]
 ): { feature: T; level: LabelLevel } | null {
   for (const feature of features) {
     const level = labelLevelOf(feature);

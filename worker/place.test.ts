@@ -36,7 +36,15 @@ function loc(type: number, name: string, extra: Partial<GdeltLocation> = {}): Gd
 }
 
 function article(locations: GdeltLocation[]): Article {
-  return { date: "20260812050000", domain: "example.com", url: "u", title: "t", image: "", themes: [], locations };
+  return {
+    date: "20260812050000",
+    domain: "example.com",
+    url: "u",
+    title: "t",
+    image: "",
+    themes: [],
+    locations,
+  };
 }
 
 /** `n` mentions of the same place, as GDELT emits them: one entry per mention. */
@@ -66,10 +74,7 @@ describe("the demonym trap", () => {
 
 describe("Rule H — specificity unless dominated", () => {
   it("pins an undominated city", () => {
-    const placement = placeStory(
-      article([...repeat(3, 4, "Perth"), loc(1, "Australia")]),
-      refdata,
-    );
+    const placement = placeStory(article([...repeat(3, 4, "Perth"), loc(1, "Australia")]), refdata);
     expect(placement.kind).toBe("PIN");
     expect(placement.location?.name).toBe("Perth");
   });
@@ -78,8 +83,11 @@ describe("Rule H — specificity unless dominated", () => {
     // The audit case that killed the original rule: a Minnesota Twins story
     // pinned to Chicago because Chicago was the more *specific* mention.
     const placement = placeStory(
-      article([loc(3, "Chicago, Illinois, United States"), ...repeat(4, 2, "Minnesota, United States")]),
-      refdata,
+      article([
+        loc(3, "Chicago, Illinois, United States"),
+        ...repeat(4, 2, "Minnesota, United States"),
+      ]),
+      refdata
     );
     expect(placement.kind).toBe("CONTAINER");
     expect(placement.location?.name).toBe("Minnesota, United States");
@@ -88,7 +96,7 @@ describe("Rule H — specificity unless dominated", () => {
   it("sends London x4 vs United Kingdom x14 to the country container", () => {
     const placement = placeStory(
       article([...repeat(4, 4, "London, United Kingdom"), ...repeat(14, 1, "United Kingdom")]),
-      refdata,
+      refdata
     );
     expect(placement.kind).toBe("CONTAINER");
     expect(placement.location?.name).toBe("United Kingdom");
@@ -99,7 +107,7 @@ describe("Rule H — specificity unless dominated", () => {
     // constantly, and pure dominance would send ~75% of stories to countries.
     const placement = placeStory(
       article([...repeat(3, 4, "Perth"), ...repeat(8, 1, "Australia")]),
-      refdata,
+      refdata
     );
     expect(placement.kind).toBe("PIN");
     expect(placement.location?.name).toBe("Perth");
@@ -108,25 +116,21 @@ describe("Rule H — specificity unless dominated", () => {
   it("applies the margins at exactly the threshold, not past it", () => {
     const atThreshold = placeStory(
       article([...repeat(2, 4, "Perth"), ...repeat(6, 1, "Australia")]),
-      refdata,
+      refdata
     );
     expect(atThreshold.kind).toBe("CONTAINER");
 
     const justUnder = placeStory(
       article([...repeat(2, 4, "Perth"), ...repeat(5, 1, "Australia")]),
-      refdata,
+      refdata
     );
     expect(justUnder.kind).toBe("PIN");
   });
 
   it("prefers adm1 over country when both dominate", () => {
     const placement = placeStory(
-      article([
-        loc(4, "Springfield"),
-        ...repeat(4, 5, "Region"),
-        ...repeat(9, 1, "Country"),
-      ]),
-      refdata,
+      article([loc(4, "Springfield"), ...repeat(4, 5, "Region"), ...repeat(9, 1, "Country")]),
+      refdata
     );
     expect(placement.kind).toBe("CONTAINER");
     expect(placement.location?.name).toBe("Region");
@@ -140,14 +144,14 @@ describe("Rule H — specificity unless dominated", () => {
         ...repeat(2, 4, "Later", { offset: 900 }),
         ...repeat(2, 4, "Earlier", { offset: 10 }),
       ]),
-      refdata,
+      refdata
     );
     expect(placement.location?.name).toBe("Earlier");
   });
 
   it("falls back to adm1, then country, when there is no city", () => {
     expect(placeStory(article([loc(5, "Region"), loc(1, "Country")]), refdata).location?.name).toBe(
-      "Region",
+      "Region"
     );
     expect(placeStory(article([loc(1, "Country")]), refdata).kind).toBe("CONTAINER");
     expect(placeStory(article([]), refdata).kind).toBe("DROP");
@@ -157,7 +161,7 @@ describe("Rule H — specificity unless dominated", () => {
     // "British" x5 must not dominate London x2 — it is an adjective, not a place.
     const placement = placeStory(
       article([...repeat(2, 4, "London, United Kingdom"), ...repeat(5, 1, "British")]),
-      refdata,
+      refdata
     );
     expect(placement.kind).toBe("PIN");
     expect(placement.location?.name).toBe("London, United Kingdom");
@@ -188,17 +192,14 @@ describe("the weak-city DROP", () => {
     // Reversing the order would rewrite placements the audit judged and liked.
     const placement = placeStory(
       article([loc(4, "Springfield"), ...repeat(2, 5, "Region")]),
-      refdata,
+      refdata
     );
     expect(placement.kind).toBe("CONTAINER");
     expect(placement.location?.name).toBe("Region");
   });
 
   it("still containers a weak city that a country dominates", () => {
-    const placement = placeStory(
-      article([loc(4, "Seoul"), ...repeat(3, 1, "India")]),
-      refdata,
-    );
+    const placement = placeStory(article([loc(4, "Seoul"), ...repeat(3, 1, "India")]), refdata);
     expect(placement.kind).toBe("CONTAINER");
     expect(placement.location?.name).toBe("India");
   });
@@ -216,7 +217,7 @@ describe("the weak-city DROP", () => {
     // Fall-through would move the error into the container number, not remove it.
     const trace = explainPlacement(
       article([loc(4, "Dublin, Dublin, Ireland"), ...repeat(2, 1, "United Kingdom")]),
-      refdata,
+      refdata
     );
     expect(trace.placement.kind).toBe("DROP");
     expect(trace.reason).toBe("weak-city");
@@ -242,7 +243,10 @@ describe("the why trace", () => {
   it("agrees with placeStory on every case above, by construction", () => {
     const cases = [
       article([...repeat(3, 4, "Perth"), loc(1, "Australia")]),
-      article([loc(3, "Chicago, Illinois, United States"), ...repeat(4, 2, "Minnesota, United States")]),
+      article([
+        loc(3, "Chicago, Illinois, United States"),
+        ...repeat(4, 2, "Minnesota, United States"),
+      ]),
       article([...repeat(4, 4, "London, United Kingdom"), ...repeat(14, 1, "United Kingdom")]),
       article([loc(4, "Springfield"), ...repeat(4, 5, "Region"), ...repeat(9, 1, "Country")]),
       article([loc(5, "Region"), loc(1, "Country")]),
@@ -258,10 +262,14 @@ describe("the why trace", () => {
   it("names the branch that fired", () => {
     const reason = (a: Article) => explainPlacement(a, refdata).reason;
     expect(reason(article([...repeat(3, 4, "Perth"), loc(1, "Australia")]))).toBe("city-survives");
-    expect(reason(article([loc(4, "Springfield"), ...repeat(4, 5, "Region")]))).toBe("adm1-dominates");
-    expect(reason(article([...repeat(4, 4, "London, United Kingdom"), ...repeat(14, 1, "United Kingdom")]))).toBe(
-      "country-dominates",
+    expect(reason(article([loc(4, "Springfield"), ...repeat(4, 5, "Region")]))).toBe(
+      "adm1-dominates"
     );
+    expect(
+      reason(
+        article([...repeat(4, 4, "London, United Kingdom"), ...repeat(14, 1, "United Kingdom")])
+      )
+    ).toBe("country-dominates");
     expect(reason(article([loc(5, "Region"), loc(1, "Country")]))).toBe("adm1-only");
     expect(reason(article([loc(1, "Country")]))).toBe("country-only");
   });
@@ -294,7 +302,7 @@ describe("the why trace", () => {
         loc(4, "Rajkot, Gujarat, India", { offset: 80 }),
         loc(4, "Vatva, Gujarat, India", { offset: 20 }),
       ]),
-      refdata,
+      refdata
     );
     expect(trace.placement.kind).toBe("DROP");
     expect(trace.reason).toBe("weak-city");
@@ -324,7 +332,7 @@ describe("the why trace", () => {
   it("reports the runner-up it beat", () => {
     const trace = explainPlacement(
       article([...repeat(4, 4, "Thruxton"), ...repeat(2, 4, "Knockhill")]),
-      refdata,
+      refdata
     );
     expect(trace.city?.name).toBe("Thruxton");
     expect(trace.city?.runnerUp).toEqual({ name: "Knockhill", mentions: 2 });
@@ -339,7 +347,7 @@ describe("the why trace", () => {
   it("reports how far each margin was cleared or missed", () => {
     const fired = explainPlacement(
       article([...repeat(2, 4, "Seoul"), ...repeat(12, 1, "India")]),
-      refdata,
+      refdata
     );
     expect(fired.reason).toBe("country-dominates");
     expect(fired.countryRatio).toBe(6);
@@ -347,7 +355,7 @@ describe("the why trace", () => {
     // The near miss the margin exists to allow through as a pin.
     const missed = explainPlacement(
       article([...repeat(3, 4, "Perth"), ...repeat(8, 1, "Australia")]),
-      refdata,
+      refdata
     );
     expect(missed.reason).toBe("city-survives");
     expect(missed.countryRatio).toBeCloseTo(2.667, 3);
@@ -357,7 +365,7 @@ describe("the why trace", () => {
   it("counts mentions after the demonym filter, not before", () => {
     const trace = explainPlacement(
       article([...repeat(2, 4, "London, United Kingdom"), ...repeat(5, 1, "British")]),
-      refdata,
+      refdata
     );
     expect(trace.reason).toBe("city-survives");
     expect(trace.country).toBeNull();

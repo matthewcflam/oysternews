@@ -22,9 +22,9 @@ import { useEffect, useId, useRef, useState } from "react";
 import { countryName } from "@/lib/flag";
 import {
   loadPlaceIndex,
+  type PlaceEntry,
   searchablePlaces,
   searchPlaces,
-  type PlaceEntry,
 } from "@/lib/place-search";
 
 export type SearchBarProps = {

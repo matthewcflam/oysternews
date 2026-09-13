@@ -1,27 +1,27 @@
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { Article, Placement, PlacedArticle } from "../src/lib/types.ts";
+import { continentIdFor } from "../src/lib/continents.ts";
+import type { Article, PlacedArticle, Placement } from "../src/lib/types.ts";
 import { assignMinzoom, countryTopGroups } from "./budget.ts";
-import { MAX_BUNDLES, fetchBundle, newestStamp, stampsToFetch } from "./fetch.ts";
+import { buildCityIndex, cityIndexStats } from "./cities.ts";
+import { fetchBundle, MAX_BUNDLES, newestStamp, stampsToFetch } from "./fetch.ts";
 import { filterArticles } from "./filter.ts";
 import { groupArticles } from "./group.ts";
 import { parseBundle } from "./parse.ts";
 import { placeStory } from "./place.ts";
 import {
-  MANIFEST_KEY,
   type ArchiveStore,
   assertPublicHostReachable,
   assertStoreReachable,
+  MANIFEST_KEY,
   pingHealthcheck,
   publish,
 } from "./publish.ts";
 import { rankGroups } from "./rank.ts";
+import { assertUsable, loadRefData, type RefData, sourceCountry } from "./refdata.ts";
 import { buildRegionIndex, indexStats } from "./regions.ts";
-import { buildCityIndex, cityIndexStats } from "./cities.ts";
-import { continentIdFor } from "../src/lib/continents.ts";
-import { type RefData, assertUsable, loadRefData, sourceCountry } from "./refdata.ts";
-import { r2Store } from "./store.ts";
 import { appendShards, pruneShards, readPool } from "./state.ts";
+import { r2Store } from "./store.ts";
 import { buildTiles } from "./tiles.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -39,7 +39,7 @@ export function stampOfDate(date: Date): string {
 export function toPlaced(
   article: Article,
   placement: Placement,
-  data: RefData,
+  data: RefData
 ): PlacedArticle | null {
   if (placement.kind === "DROP") return null;
   const { location } = placement;
@@ -256,27 +256,31 @@ export function formatSummary(summary: RunSummary): string {
   ];
 
   if (summary.shortRows > 0) {
-    lines.push(`WARN         ${summary.shortRows} rows failed the schema canary — GDELT may have changed`);
+    lines.push(
+      `WARN         ${summary.shortRows} rows failed the schema canary — GDELT may have changed`
+    );
   }
   if (summary.groups > 0 && summary.tier1Groups === 0) {
     lines.push("WARN         no tier-1 groups — ranking has degraded to plain salience");
   }
   for (const [code, count] of summary.unknownFips) {
-    lines.push(`WARN         unknown FIPS code ${code} on ${count} stories — needs a data/fips-overrides entry`);
+    lines.push(
+      `WARN         unknown FIPS code ${code} on ${count} stories — needs a data/fips-overrides entry`
+    );
   }
 
   if (summary.bandRelaxed) {
     lines.push(
       "WARN         count band stood down — blocked past 2× cadence.",
       "             Re-derive COUNT_BAND_MIN/MAX against a fresh volume",
-      "             measurement; do not nudge them until runs pass.",
+      "             measurement; do not nudge them until runs pass."
     );
   }
 
   if (summary.published) {
     lines.push(
       `published    ${summary.archive}, pruned ${summary.prunedArchives} archives and ${summary.prunedShards} shards`,
-      `healthcheck  ${summary.pinged ? "pinged" : "NOT pinged — check HEALTHCHECK_URL"}`,
+      `healthcheck  ${summary.pinged ? "pinged" : "NOT pinged — check HEALTHCHECK_URL"}`
     );
   } else {
     lines.push("PUBLISHED    NOTHING — output invariants failed:");

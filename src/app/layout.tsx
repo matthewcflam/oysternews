@@ -1,6 +1,6 @@
+import { Analytics } from "@vercel/analytics/next";
 import type { Metadata } from "next";
 import { Instrument_Serif, Inter, Newsreader } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 /**
@@ -50,8 +50,7 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "Oyster — a map of current world news",
-  description:
-    "A 2D web map of current world news. Stories are plotted where they happen.",
+  description: "A 2D web map of current world news. Stories are plotted where they happen.",
 };
 
 /**
@@ -71,7 +70,10 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${newsreader.variable} ${instrumentSerif.variable} ${inter.variable}`}>
+    <html
+      lang="en"
+      className={`${newsreader.variable} ${instrumentSerif.variable} ${inter.variable}`}
+    >
       <body>
         {children}
         <Analytics />

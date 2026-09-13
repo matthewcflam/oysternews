@@ -61,7 +61,7 @@ export async function buildTiles(
   stories: StoryGroup[],
   countryTop: StoryGroup[],
   workDir: string,
-  outputPath: string,
+  outputPath: string
 ): Promise<TileBuild> {
   await mkdir(workDir, { recursive: true });
   await mkdir(path.dirname(outputPath), { recursive: true });

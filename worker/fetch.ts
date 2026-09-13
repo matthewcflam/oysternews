@@ -71,7 +71,7 @@ export function stampToMs(stamp: string): number {
     Number(stamp.slice(6, 8)),
     Number(stamp.slice(8, 10)),
     Number(stamp.slice(10, 12)),
-    Number(stamp.slice(12, 14)),
+    Number(stamp.slice(12, 14))
   );
 }
 
