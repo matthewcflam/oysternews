@@ -5,7 +5,7 @@
 # warringtonguardian.co.uk, and dawn.com does not match dawnofthedawg.com; both
 # of those are real domains in the sample feed.
 #
-# THIS LIST IS LOAD-BEARING, not descriptive. HANDOFF.md §2.5: a story with a
+# THIS LIST IS LOAD-BEARING, not descriptive. A story with a
 # tier-1 article in the last 48 hours outranks every non-tier-1 story in its
 # tile, whatever their salience. tier1Fresh is the FIRST key of compareGroups,
 # so precedence is absolute, not weighted. The list was originally built to
@@ -16,7 +16,7 @@
 #
 # --- 2026-08-13 expansion -------------------------------------------------
 # Expanded from 28 domains to the regional list below. The old list was 91%
-# US/UK outlets (FINDINGS.md §11) — a "tier-1 outranks everything" rule built on
+# US/UK outlets (gdelt-findings.md §11) — a "tier-1 outranks everything" rule built on
 # it means a US or UK byline beats local reporting anywhere on Earth. The
 # expansion is the fix: every region gets outlets that can win their own tiles.
 #

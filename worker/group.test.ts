@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlacedArticle } from "../lib/types.ts";
+import type { PlacedArticle } from "../src/lib/types.ts";
 import { cellOf, groupArticles, jaccard, overCommonThemes, titleTokens } from "./group.ts";
 
 const NOW = Date.UTC(2026, 7, 12, 12, 0, 0);
@@ -30,8 +30,6 @@ function article(patch: Partial<PlacedArticle> = {}): PlacedArticle {
 
 describe("the theme ceiling", () => {
   it("excludes themes that appear on more than the ceiling of articles", () => {
-    // CRISISLEX_CRISISLEXREC is on 39.4% of all GDELT articles. Without the
-    // ceiling it alone joins 39% of the corpus into one story. FINDINGS §8.
     const articles = [
       ...Array.from({ length: 9 }, () => article({ themes: ["CRISISLEX", "RARE_A"] })),
       article({ themes: ["RARE_B"] }),
@@ -58,7 +56,9 @@ describe("title tokens", () => {
 
   it("scores an identical headline as 1 and a disjoint one as 0", () => {
     expect(jaccard(titleTokens("Flood warning Perth"), titleTokens("Flood warning Perth"))).toBe(1);
-    expect(jaccard(titleTokens("Flood warning Perth"), titleTokens("Cricket result Leeds"))).toBe(0);
+    expect(jaccard(titleTokens("Flood warning Perth"), titleTokens("Cricket result Leeds"))).toBe(
+      0
+    );
   });
 });
 
@@ -82,7 +82,7 @@ describe("grouping", () => {
           themes: ["WILDFIRE", "EVACUATION", "EMERGENCY"],
         }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(1);
     expect(groups[0].distinctDomains).toBe(2);
@@ -94,7 +94,7 @@ describe("grouping", () => {
         article({ title: "Wildfire forces evacuations", themes: ["WILDFIRE", "EVACUATION"] }),
         article({ title: "Council approves new budget", themes: ["GOVERNMENT", "TAX"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
@@ -105,7 +105,7 @@ describe("grouping", () => {
         article({ title: "Flood warning issued for Perth", themes: ["FLOOD", "A"] }),
         article({ title: "Flood warning issued for Perth region", themes: ["FLOOD", "B"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
@@ -116,7 +116,7 @@ describe("grouping", () => {
         article({ title: "Wildfire near Azusa", themes: ["WILDFIRE", "EVACUATION"] }),
         article({ title: "Council approves stadium funding", themes: ["WILDFIRE", "EVACUATION"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
@@ -124,32 +124,35 @@ describe("grouping", () => {
   it("requires the same cell — the same story 3 degrees away is a different pin", () => {
     const groups = groupArticles(
       [
-        article({ title: "Wildfire forces evacuations", themes: ["WILDFIRE", "EVACUATION"], lat: 40 }),
-        article({ title: "Wildfire forces evacuations", themes: ["WILDFIRE", "EVACUATION"], lat: 43 }),
+        article({
+          title: "Wildfire forces evacuations",
+          themes: ["WILDFIRE", "EVACUATION"],
+          lat: 40,
+        }),
+        article({
+          title: "Wildfire forces evacuations",
+          themes: ["WILDFIRE", "EVACUATION"],
+          lat: 43,
+        }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(2);
   });
 
   it("collapses exact syndication regardless of themes", () => {
-    // 22% of titles are duplicates, syndication 1.59x (§4). The same headline in
-    // the same cell is the same story even when GDELT tags it differently.
     const groups = groupArticles(
       [
         article({ title: "Markets close higher on jobs data", themes: ["A"] }),
         article({ title: "Markets close higher on jobs data", themes: ["Z"] }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(1);
     expect(groups[0].distinctDomains).toBe(2);
   });
 
   it("does NOT let title dedup alone invert the salience signal", () => {
-    // §2.5's whole argument for real grouping: three outlets writing their own
-    // headlines about one event must become a 3-domain story, not three
-    // 1-domain stories that rank below a syndicated wire copy.
     const groups = groupArticles(
       [
         article({
@@ -168,19 +171,26 @@ describe("grouping", () => {
           themes: ["LEGISLATION_X", "INFRASTRUCTURE"],
         }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups.length).toBe(1);
     expect(groups[0].distinctDomains).toBe(3);
   });
 
   it("path 5: a group assembled from duplicated members counts each domain once", () => {
-    // §7 path 5 / §3.5: a group present in BOTH shard families must not count
-    // its domains twice. state.ts dedupes by (domain, url); this asserts the
-    // salience that results is identical either way.
     const members = [
-      article({ domain: "a.com", url: "https://a.com/1", title: "Quake hits the coast", themes: ["QUAKE", "DAMAGE"] }),
-      article({ domain: "b.com", url: "https://b.com/1", title: "Quake hits coast towns", themes: ["QUAKE", "DAMAGE"] }),
+      article({
+        domain: "a.com",
+        url: "https://a.com/1",
+        title: "Quake hits the coast",
+        themes: ["QUAKE", "DAMAGE"],
+      }),
+      article({
+        domain: "b.com",
+        url: "https://b.com/1",
+        title: "Quake hits coast towns",
+        themes: ["QUAKE", "DAMAGE"],
+      }),
     ];
     const once = groupArticles(members, { now: NOW, themeCeiling: 1 });
     const twice = groupArticles([...members, ...members.map((m) => ({ ...m }))], {
@@ -195,7 +205,11 @@ describe("grouping", () => {
   it("shows the tier-1 article as the group's face", () => {
     const groups = groupArticles(
       [
-        article({ domain: "local.com", title: "Quake hits the coast", themes: ["QUAKE", "DAMAGE"] }),
+        article({
+          domain: "local.com",
+          title: "Quake hits the coast",
+          themes: ["QUAKE", "DAMAGE"],
+        }),
         article({
           domain: "bbc.co.uk",
           title: "Quake hits coast towns",
@@ -203,15 +217,13 @@ describe("grouping", () => {
           tier1: true,
         }),
       ],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(groups[0].domain).toBe("bbc.co.uk");
     expect(groups[0].tier1Fresh).toBe(true);
   });
 
   it("keeps a stable id while the oldest member stays in the window", () => {
-    // A hash over all members would change every time one more outlet picked
-    // the story up, and the id is what makes selection reproducible run to run.
     const oldest = article({
       date: "20260811000000",
       url: "https://first.com/1",
@@ -221,7 +233,7 @@ describe("grouping", () => {
     const first = groupArticles([oldest], { now: NOW, themeCeiling: 1 });
     const later = groupArticles(
       [oldest, article({ title: "Quake hits coast towns", themes: ["QUAKE", "DAMAGE"] })],
-      { now: NOW, themeCeiling: 1 },
+      { now: NOW, themeCeiling: 1 }
     );
     expect(later[0].id).toBe(first[0].id);
   });

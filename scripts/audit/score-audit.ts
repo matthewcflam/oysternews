@@ -1,0 +1,181 @@
+// The thresholds are pre-registered: never edit them to fit a result. band() reads the LOWER
+// bound, which is the conservative tie-break.
+
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { wilson } from "../../src/lib/audit-score.ts";
+import type { PlacementTrace } from "../../worker/place.ts";
+import { drawFingerprint, fingerprintOf } from "./judge-draw-id.ts";
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const DEFAULT_SAMPLE = path.join(
+  REPO_ROOT,
+  "docs",
+  "research",
+  "placement-audit",
+  "audit_sample_judge.jsonl"
+);
+
+// Pre-registered before the first audit. Do not edit to fit a result.
+const THRESHOLDS = {
+  PIN: [
+    { min: 70, verdict: "PROCEED as planned" },
+    { min: 50, verdict: "PROCEED — the About page must state the measured accuracy and interval" },
+    { min: 0, verdict: "KILL THE PROJECT — reconsider the data source before more pipeline code" },
+  ],
+  CONTAINER: [
+    { min: 60, verdict: "Containers ship as specified" },
+    {
+      min: 0,
+      verdict: "KILL CONTAINERS — drop country-and-ADM1-only records",
+    },
+  ],
+};
+
+type Judgement = { id: string; verdict: string; reason: string };
+type SampleRecord = {
+  id: string;
+  title: string;
+  url: string;
+  domain: string;
+  kind: "PIN" | "CONTAINER";
+  placedAt: string;
+  trace: PlacementTrace;
+};
+
+function readJsonl<T>(body: string): T[] {
+  return body
+    .split(/\r?\n/)
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line) as T);
+}
+
+function band(kind: "PIN" | "CONTAINER", lower: number): string {
+  return THRESHOLDS[kind].find((t) => lower >= t.min)!.verdict;
+}
+
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const judgedPath = args.find((a) => !a.startsWith("--"));
+  if (!judgedPath) {
+    console.error("usage: node scripts/audit/score-audit.ts judged-<draw>.jsonl [--sample path]");
+    process.exitCode = 1;
+    return;
+  }
+  const samplePath = args.includes("--sample")
+    ? args[args.indexOf("--sample") + 1]
+    : DEFAULT_SAMPLE;
+
+  const drawn = readJsonl<SampleRecord>(await readFile(samplePath, "utf8"));
+  const sample = new Map(drawn.map((r) => [r.id, r]));
+  const judged = readJsonl<Judgement>(await readFile(judgedPath, "utf8")).filter((j) => j.verdict);
+
+  // Ids alone can't prove this sheet belongs to this sample; the draw fingerprint can.
+  const claimed = judged.length ? fingerprintOf(judged[0].id) : null;
+  const actual = drawFingerprint(drawn.map((r) => r.url));
+  if (claimed && claimed !== actual) {
+    console.error(
+      `\n  REFUSING TO SCORE — this sheet was not judged against this sample.` +
+        `\n  sheet says ${claimed}, ${path.basename(samplePath)} fingerprints as ${actual}.` +
+        `\n  The ids will still join, and the answer would be meaningless.` +
+        `\n  Find the sample the sheet was drawn from; do not re-draw it.\n`
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (!claimed) {
+    console.log(
+      `\n  WARN  this sheet predates draw fingerprints (2026-08-14), so it cannot` +
+        `\n        be verified against ${path.basename(samplePath)}. Ids joining is NOT` +
+        `\n        evidence they belong together — see judge-draw-id.ts.`
+    );
+  }
+
+  const rows = judged
+    .map((j) => ({ ...j, record: sample.get(j.id) }))
+    .filter((r): r is Judgement & { record: SampleRecord } => !!r.record);
+
+  const unknown = judged.length - rows.length;
+  if (unknown) console.log(`\n  WARN  ${unknown} verdicts had no matching sample record`);
+
+  console.log(`\n  ${judged.length} judged of ${sample.size} drawn\n`);
+  console.log("  level        judgeable  correct   accuracy   95% Wilson        threshold");
+
+  for (const kind of ["PIN", "CONTAINER"] as const) {
+    const all = rows.filter((r) => r.record.kind === kind);
+    const judgeable = all.filter((r) => r.verdict === "CORRECT" || r.verdict === "WRONG");
+    const correct = judgeable.filter((r) => r.verdict === "CORRECT").length;
+    if (!judgeable.length) continue;
+
+    const [lo, hi] = wilson(correct, judgeable.length);
+    const point = (100 * correct) / judgeable.length;
+    console.log(
+      `  ${kind.padEnd(12)} ${String(judgeable.length).padStart(6)}` +
+        `${String(correct).padStart(9)}` +
+        `${point.toFixed(1).padStart(10)}%   [${lo.toFixed(1)}, ${hi.toFixed(1)}]`.padEnd(24) +
+        `  ${band(kind, lo)}`
+    );
+    const unjudgeable = all.length - judgeable.length;
+    if (unjudgeable) {
+      console.log(
+        `  ${"".padEnd(12)} ${unjudgeable} UNJUDGEABLE, excluded from the denominator and reported`
+      );
+    }
+  }
+
+  console.log("\n  The decision follows the LOWER bound, not the point estimate.");
+
+  const wrong = rows.filter((r) => r.verdict === "WRONG");
+  if (wrong.length) {
+    console.log(`\n  why ${wrong.length} were wrong`);
+    const byReason = new Map<string, number>();
+    for (const r of wrong)
+      byReason.set(r.reason || "(none)", (byReason.get(r.reason || "(none)") ?? 0) + 1);
+    for (const [reason, n] of [...byReason].sort((a, b) => b[1] - a[1])) {
+      console.log(
+        `  ${reason.padEnd(16)} ${String(n).padStart(4)}  ${((100 * n) / wrong.length).toFixed(1)}%`
+      );
+    }
+  }
+
+  // A PIN matching lone-mention means the draw predates the weak-city rule, or the rule was bypassed.
+  const shapes: { name: string; test: (t: PlacementTrace) => boolean }[] = [
+    { name: "lone-mention", test: (t) => t.winnerMentions === 1 },
+    { name: "tie-broken", test: (t) => t.tieBroken },
+    {
+      name: "narrow-win",
+      test: (t) => {
+        const level = t.placement.kind === "PIN" ? t.city : (t.adm1 ?? t.country);
+        return !!level?.runnerUp && level.mentions - level.runnerUp.mentions <= 1;
+      },
+    },
+    {
+      name: "runaway-country",
+      test: (t) => t.reason === "country-dominates" && (t.countryRatio ?? 0) >= 6,
+    },
+  ];
+
+  const judgeable = rows.filter((r) => r.verdict === "CORRECT" || r.verdict === "WRONG");
+  console.log("\n  accuracy by trace shape — is the signal real?");
+  console.log("  shape             with shape        without");
+  for (const shape of shapes) {
+    const fmt = (set: typeof judgeable) => {
+      if (!set.length) return "     -      ";
+      const c = set.filter((r) => r.verdict === "CORRECT").length;
+      return `n=${String(set.length).padStart(3)} ${((100 * c) / set.length).toFixed(1).padStart(5)}%`;
+    };
+    const withShape = judgeable.filter((r) => shape.test(r.record.trace));
+    const without = judgeable.filter((r) => !shape.test(r.record.trace));
+    console.log(`  ${shape.name.padEnd(18)}${fmt(withShape)}   ${fmt(without)}`);
+  }
+  console.log(
+    "\n  A gap here is a HYPOTHESIS, not a rule. The last signal that looked this\n" +
+      "  good (p=0.053 on six pins) went flat on 110. Check n before acting.\n"
+  );
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

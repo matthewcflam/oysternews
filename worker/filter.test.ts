@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Article } from "../lib/types.ts";
+import type { Article } from "../src/lib/types.ts";
 import { filterArticles, hasUsableLocation, isBlocked } from "./filter.ts";
 import type { RefData } from "./refdata.ts";
 
@@ -40,15 +40,11 @@ describe("the blocklist", () => {
   });
 
   it("leaves high-volume legitimate outlets alone", () => {
-    // FINDINGS §13: indiatimes/thehindu/hindustantimes top the same histogram as
-    // the spam domains. Blocking by volume would delete India from the map.
     expect(isBlocked("indiatimes.com", refdata)).toBe(false);
     expect(isBlocked("thehindu.com", refdata)).toBe(false);
   });
 
   it("runs before anything tier-1 can see — a blocked tier-1 domain never survives", () => {
-    // §5's ordering guarantee. No domain is on both lists today (refdata asserts
-    // that), so this defends the ordering against a future edit.
     const blockedTier1 = { ...refdata, blocklist: new Set(["bbc.co.uk"]) } as unknown as RefData;
     const result = filterArticles([article("bbc.co.uk", [4])], blockedTier1);
     expect(result.kept).toEqual([]);
@@ -72,10 +68,6 @@ describe("usable locations", () => {
   });
 
   it("does NOT drop demonym-only records — that is placement's call", () => {
-    // A demonym parses as a type-1 country location, so it passes here and is
-    // dropped by placeStory(). Two stages, on purpose: 11.9% of all location
-    // mentions are demonyms and the counting rule needs them gone before the
-    // margins are applied, not before the record is considered.
     const demonymOnly = article("example.com", [1]);
     demonymOnly.locations[0].name = "British";
     expect(hasUsableLocation(demonymOnly)).toBe(true);
@@ -86,7 +78,7 @@ describe("filterArticles", () => {
   it("separates the two drop reasons", () => {
     const result = filterArticles(
       [article("iheart.com", [4]), article("example.com", []), article("example.com", [4])],
-      refdata,
+      refdata
     );
     expect(result.blocked).toBe(1);
     expect(result.noLocation).toBe(1);

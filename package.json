@@ -1,8 +1,12 @@
 {
-  "name": "sonder",
+  "name": "oyster",
   "version": "0.1.0",
+  "description": "Map of global political and cultural news, built with Vercel and MapLibre",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "predev": "node scripts/copy-maplibre-worker.mjs",
     "dev": "next dev",
@@ -10,16 +14,17 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "npm run typecheck && npm run lint && npm test",
     "test": "vitest run",
-    "crosswalk": "node scripts/build-crosswalk.ts",
-    "gkg": "node scripts/build-real-geojson.ts",
+    "data:crosswalk": "node scripts/build-crosswalk.ts",
     "worker": "node worker/run.ts",
-    "place:audit": "node scripts/place-audit.ts",
-    "judge:draw": "node scripts/draw-judge-sample.ts",
-    "judge:score": "node scripts/score-audit.ts",
-    "tiles:fake": "bash scripts/build-tiles.sh fixtures/fake-stories.geojson sonder-stories-fake",
-    "tiles:real": "bash scripts/build-tiles.sh build/stories.geojson sonder-stories",
-    "boundaries": "node scripts/build-boundaries.ts"
+    "audit:place": "node scripts/audit/place-audit.ts",
+    "audit:draw": "node scripts/audit/draw-judge-sample.ts",
+    "audit:score": "node scripts/audit/score-audit.ts",
+    "data:boundaries": "node scripts/build-boundaries.ts"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.11",
@@ -32,9 +37,11 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "knip": "^6.35.1",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
