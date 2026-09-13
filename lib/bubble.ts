@@ -1,11 +1,10 @@
 /**
- * Where the opening-card speech bubbles go. The top five stories on
- * screen wear a ring, but at world zoom the headline layer is off
- * entirely — a bubble puts the headline on the map next to its pin, tail
- * pointing back at it. Laid out once per opening (`MapView` captures the
- * five at the first `idle`, retires them on the reader's first camera
- * move), so this only has to fit one viewport, never stay stable under a
- * pan. Pure product rule — screen points in, sides and survivors out, no
+ * Where the speech bubbles go. The top five stories on screen wear a ring,
+ * but below zoom 4 the headline layer is off entirely — a bubble puts the
+ * headline on the map next to its pin, tail pointing back at it. Laid out
+ * once per settled camera (`MapView` ranks the five at each `idle`, retires
+ * them on the next camera move), so this only has to fit one viewport, never
+ * stay stable under a pan. Pure product rule — screen points in, sides and survivors out, no
  * MapLibre/DOM/measurement — same split as `lib/top.ts` and
  * `lib/spiderfy.ts`. See docs/DESIGN.md#the-selection-triangle-and-the-opening-card-bubbles.
  */

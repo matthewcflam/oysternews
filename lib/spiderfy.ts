@@ -17,7 +17,12 @@ import type { Feature, FeatureCollection } from "geojson";
 // for the two halves to line up again.
 export const SPIDERFY_ZOOM = 9;
 
-/** Pixel radius of the first ring of leaves, clear of the anchor's own disc. */
+/**
+ * Pixel radius of the first ring of leaves, clear of the anchor's own disc.
+ * The tightest ring (34 + 5.2*2 = 44.4px) clears a 16px anchor plus a 16px
+ * leaf (32px) by 12.4px — see the "keeps every leaf clear" test in
+ * spiderfy.test.ts, which pins the real invariant.
+ */
 const BASE_RADIUS = 34;
 
 /** How far each additional leaf pushes the ring out, so legs never overlap. */
@@ -144,6 +149,34 @@ export function leafOffsets(count: number): Array<[number, number]> {
 export type SpiderData = FeatureCollection;
 
 export const EMPTY_SPIDER: SpiderData = { type: "FeatureCollection", features: [] };
+
+/**
+ * The leaf coordinate for every displaced member of every stack, keyed by
+ * url. The anchor/offset/unproject sequence `spiderData` needs to draw a
+ * leaf is exactly what a bubble needs to point its tail at one — pulled out
+ * once so there is a single copy of the rule instead of two that could drift.
+ */
+export function leafPositions(
+  stacks: readonly Stack[],
+  projection: Projection,
+): Map<string, [number, number]> {
+  const positions = new Map<string, [number, number]>();
+
+  for (const stack of stacks) {
+    const anchor = projection.project([stack.lng, stack.lat]);
+    const displaced = stack.members.slice(1);
+    const offsets = leafOffsets(displaced.length);
+
+    displaced.forEach((properties, index) => {
+      const [dx, dy] = offsets[index];
+      const { lng, lat } = projection.unproject([anchor.x + dx, anchor.y + dy]);
+      const url = asString(properties.url);
+      if (url) positions.set(url, [lng, lat]);
+    });
+  }
+
+  return positions;
+}
 
 /**
  * The overlay: one leg per displaced member, one leaf on the end of it.

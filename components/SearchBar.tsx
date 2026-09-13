@@ -129,7 +129,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
           <input
             className="search__input"
             type="text"
-            placeholder="The world is yours"
+            placeholder="Find a Country/State"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onFocus={handleFocus}
