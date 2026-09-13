@@ -1064,7 +1064,9 @@ restated:
   hatch, and because deferring the switch is nearly free — the SDK wraps
   MapLibre GL JS closely enough that switching later stays a small change,
   so there is no lock-in penalty for waiting. Revisit trigger: sustained
-  traffic above ~200 visits/month.
+  traffic above ~200 visits/month. Vercel Analytics (`app/layout.tsx`)
+  exists to make that trigger observable: before it, nothing measured
+  visits, so the decision could only be revisited by accident.
 - **The OpenFreeMap escape hatch** is not merely a fallback — it is what
   the app actually ran on throughout the CASE-STUDY investigation itself
   (no key existed yet), and it is the only reason the tile-count

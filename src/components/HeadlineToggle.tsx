@@ -2,14 +2,6 @@
 
 import * as Checkbox from "@radix-ui/react-checkbox";
 
-/**
- * The reader's on/off switch for the headline bubbles, docked left of the
- * zoom control, below the globe (reset view) button — see
- * `docs/DESIGN.md#the-selection-triangle-and-the-opening-card-bubbles`.
- * Purely presentational: `MapView` owns the state, persistence, and what a
- * flip actually does to the map.
- */
-
 type Props = {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;

@@ -5,58 +5,19 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { type PlacedBubble, placeBubbles } from "@/lib/bubble";
 import type { PanelStory } from "@/lib/story";
 
-/**
- * Browse mode's speech bubbles: the headline of each top-5 story, next to its pin.
- *
- * **The top five where the reader is looking.** `MapView` takes the bubbles
- * down on any camera move and puts them back on the `idle` that follows,
- * re-ranked to the viewport the camera landed in — the same ranking, from the
- * same query, that the white ring marks. Pan to the far side of the world and
- * the headlines are that side's headlines. They rank and draw at every zoom;
- * from zoom 4 the basemap would otherwise caption every pin with its own 11px
- * headline too, so `bubbleLabelFilter` suppresses that caption for exactly
- * the stories carrying a bubble. A corner checkbox is the reader's own
- * control for turning bubbles off, not a zoom ceiling.
- *
- * That life is what makes the rest of this component small. The camera cannot
- * move while a bubble is on screen — down at `movestart`, up at `idle` — so the
- * layout runs when the list changes and the anchors are positioned once per
- * layout. No `idle` subscription of its own, no per-frame projection.
- *
- * **Where the layout rule lives is the point.** Which side a bubble opens on and
- * which bubbles survive a crowded view are in `lib/bubble.ts`, pure and tested;
- * this component is the wiring — projection, DOM, and the click.
- *
- * A DOM overlay rather than a MapLibre layer, and the choice is forced. A bubble
- * is a rounded box whose height depends on how a variable-width font wraps a
- * headline, ending in an ellipsis at the fourth line. MapLibre can draw text and
- * it can draw a stretchable icon behind it, but Newsreader is not in the
- * basemap's glyph set (`LABEL_FONT` is pinned to Noto for exactly that reason)
- * and per-feature truncation is not expressible in a style expression. In the DOM
- * it is `-webkit-line-clamp: 4` and nothing measures anything.
- */
+// A DOM overlay, not a MapLibre layer: Newsreader isn't in the basemap's glyphs, and
+// per-feature line clamping can't be expressed in a style.
 
-/** A ranked story and the coordinate its tail must land on. */
 export type TopStory = { story: PanelStory; lngLat: [number, number] };
 
 type Props = {
   map: MapLibreMap | null;
-  /** Best first — `lib/top.ts`'s ranking, already resolved to coordinates. */
   stories: readonly TopStory[];
-  /** The open story, if any. Its bubble is withheld; see below. */
   selectedUrl: string | null;
   onSelect: (story: PanelStory, lngLat: [number, number]) => void;
 };
 
-/**
- * The pixel a coordinate is drawn at, in the copy of the world nearest the
- * camera.
- *
- * `renderWorldCopies` is on, so a story exists at lng, lng plus or minus 360,
- * and `map.project` answers for whichever one it was handed. Snapping to the
- * copy nearest the centre is the same normalisation MapLibre does for its own
- * symbols.
- */
+// renderWorldCopies is on: project the copy of the world nearest the camera centre.
 const pointFor = (map: MapLibreMap, [lng, lat]: [number, number]) => {
   const centre = map.getCenter().lng;
   return map.project([lng + 360 * Math.round((centre - lng) / 360), lat]);
@@ -65,25 +26,12 @@ const pointFor = (map: MapLibreMap, [lng, lat]: [number, number]) => {
 export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Props) {
   const [placed, setPlaced] = useState<PlacedBubble[]>([]);
 
-  /** One anchor node per placed bubble, so positioning never goes through React. */
   const nodes = useRef(new globalThis.Map<string, HTMLDivElement>());
 
-  /**
-   * The story behind each placement. **Written only by `relayout`, alongside
-   * `placed`**, so the index and the layout can never disagree about which
-   * bubbles exist — a render that read one from state and the other from a ref
-   * would draw a headline for a story that was no longer in the ranking.
-   */
+  // Written only by relayout, alongside `placed`, so the index and the layout never disagree.
   const byUrl = useRef(new globalThis.Map<string, TopStory>());
 
-  /**
-   * Move the anchors onto their pins. **Straight to the node**, and once per
-   * layout: `docs/ui-refresh-2026-08.md` records why the selection triangle is a
-   * GeoJSON source and not a `Marker` — a DOM node repositioned a frame late
-   * slides its point off its own dot. A bubble has the same tip and the same
-   * tell, and here the camera is stationary for the whole of its life, so one
-   * write before paint is both necessary and sufficient.
-   */
+  // Straight to the node, before paint: a node positioned a frame late slides off its pin.
   const position = useCallback(() => {
     if (!map) return;
     for (const [url, node] of nodes.current) {
@@ -94,14 +42,7 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
     }
   }, [map]);
 
-  /**
-   * Run the layout.
-   *
-   * **The selected story gets no bubble.** The selection triangle already hangs
-   * up and to the left of that same pin, inside where the body would be, and the
-   * open panel is carrying the headline in full. Two marks and two copies of one
-   * sentence for one story.
-   */
+  // The selected story gets no bubble: the triangle and the open panel already show it.
   const relayout = useCallback(() => {
     if (!map) return;
     const canvas = map.getCanvas();
@@ -121,12 +62,6 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
     );
   }, [map, stories, selectedUrl]);
 
-  /**
-   * Once per settled camera, plus once per story opened: when a new five
-   * arrive, when `MapView` clears them on a camera move, and when a selection
-   * withholds one of them. Opening a story has to take its bubble down now,
-   * not when the reader next moves.
-   */
   useEffect(() => {
     relayout();
   }, [relayout]);
@@ -156,22 +91,10 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
             <button
               type="button"
               className={`bubble bubble--${bubble.side} bubble--${bubble.lift}`}
-              // The clamped headline is the label; the attribute carries the rest
-              // for anyone who wants the sentence the ellipsis ate.
               title={story.title}
               onClick={() => onSelect(story, lngLat)}
             >
               <span className="bubble__text">{story.title}</span>
-              {/*
-                Only the part of the tail beyond the body. The mockup's polygon
-                starts inside the box, where its fill merges with the body's, so
-                clipping its two edges at that border leaves this fixed wedge —
-                the same 32x52 at every headline length, and in all four
-                orientations, because CSS mirrors it about its own centre.
-
-                x=24 is the body's corner, so the wedge's outer edge continues the
-                body's edge rather than stepping in from it; x=32 is the pin.
-              */}
               <svg
                 className="bubble__tail"
                 width="32"
