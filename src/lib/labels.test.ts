@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { firstLabel, labelAnchor, labelLevelOf, labelName } from "./labels";
 
-/**
- * The two providers' real shapes, taken from their live styles on 2026-08-13 —
- * see `labels.ts`'s header for the probe output. These fixtures are the whole
- * point of the file: the gesture fails silently when a schema moves, so the
- * schemas are pinned here rather than trusted.
- */
 const maptilerCountry = {
   sourceLayer: "country_label",
   properties: { name: "Pakistan", "name:en": "Pakistan", iso_a2: "PK" },
@@ -64,8 +58,6 @@ describe("labelLevelOf", () => {
   });
 
   it("reads OpenFreeMap's single place layer by class", () => {
-    // OpenMapTiles puts countries, states, cities and villages in one layer.
-    // Accepting `place` wholesale would make every village a region click.
     expect(labelLevelOf(openfreemapCountry)).toBe("country");
     expect(labelLevelOf(openfreemapState)).toBe("state");
     expect(labelLevelOf(openfreemapCity)).toBe("city");
@@ -73,17 +65,12 @@ describe("labelLevelOf", () => {
   });
 
   it("accepts MapTiler's disputed-country labels as countries", () => {
-    // They are drawn like any other country label, so refusing them would leave
-    // an unexplainable dead spot on the map.
     expect(
       labelLevelOf({ sourceLayer: "country_disputed_label", properties: { name: "Kosovo" } })
     ).toBe("country");
   });
 
   it("refuses village, town and suburb labels on both providers", () => {
-    // These sit inside a city's own snap radius (`lib/cities.ts`) — accepting
-    // them would print the parent city's stories under a suburb's name, the
-    // same join-by-name trap this file avoids for states, worn as a radius.
     expect(labelLevelOf({ sourceLayer: "place", properties: { class: "village" } })).toBeNull();
     expect(labelLevelOf({ sourceLayer: "place", properties: { class: "town" } })).toBeNull();
     expect(labelLevelOf({ sourceLayer: "place", properties: { class: "suburb" } })).toBeNull();
@@ -112,8 +99,6 @@ describe("labelLevelOf", () => {
 
 describe("firstLabel", () => {
   it("takes the top-most label, so a state beats the country under it", () => {
-    // MapLibre returns render order, top-most first. Clicking "Texas" must
-    // select Texas even though the country label is under the same pixel.
     const hit = firstLabel([maptilerState, maptilerCountry]);
     expect(hit?.level).toBe("state");
     expect(hit?.feature).toBe(maptilerState);
@@ -138,7 +123,6 @@ describe("labelAnchor", () => {
   });
 
   it("returns null for anything that is not a usable point", () => {
-    // A polygon label, or a feature whose geometry did not survive the tile.
     expect(labelAnchor({ geometry: { type: "Polygon", coordinates: [] } })).toBeNull();
     expect(labelAnchor({ geometry: { type: "Point", coordinates: [1] } })).toBeNull();
     expect(labelAnchor({ geometry: { type: "Point", coordinates: [NaN, 5] } })).toBeNull();

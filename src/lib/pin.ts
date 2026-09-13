@@ -1,30 +1,14 @@
-/**
- * The selection triangle, rasterised in plain TypeScript rather than an
- * SVG/PNG asset — this repo has no binary image assets, so a colour that
- * lived in both a sprite and the palette would drift, and rasterising in
- * code makes the shape assertable in `lib/pin.test.ts`. A wedge with a
- * flat top and point at the bottom, same silhouette as a bubble's tail.
- * The apex sits at the image's horizontal centre via left padding
- * (`PIN_LEFT_PAD`), not `icon-offset`, keeping `icon-anchor: "bottom"`
- * correct by construction.
- */
-
 import { MARK } from "./layers";
 
-/** The image's size in CSS pixels, padding included. */
 export const PIN_WIDTH = 30;
 export const PIN_HEIGHT = 34;
 
-/** Where the wedge's top edge starts, as a share of width — everything left is transparent padding, which makes W/2 the apex. */
 export const PIN_LEFT_PAD = 0.2;
 
-/** Rasterised at 2x for clean sloped edges on a retina phone (1x visibly stairsteps). */
 export const PIN_PIXEL_RATIO = 2;
 
-/** Subsamples per axis for pixel coverage — 4 gives 16 alpha levels per slope, past where the edge reads as smooth. */
 const SUBSAMPLES = 4;
 
-/** `#RRGGBB` to a byte triple. Throws rather than guessing — see `MARK`. */
 const rgb = (hex: string): [number, number, number] => {
   const match = /^#([0-9a-f]{6})$/i.exec(hex);
   if (!match) throw new Error(`pin: expected #RRGGBB, got ${hex}`);
@@ -32,17 +16,13 @@ const rgb = (hex: string): [number, number, number] => {
   return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 };
 
-// How much of the pixel at (x, y) the wedge covers, in [0, 1]. The top
-// edge is horizontal, so at any height the wedge is one interval — two
-// comparisons rather than three half-plane cross products.
 const coverage = (x: number, y: number, width: number, height: number): number => {
   const apex = width / 2;
   const start = width * PIN_LEFT_PAD;
   let inside = 0;
 
   for (let sy = 0; sy < SUBSAMPLES; sy++) {
-    // Subpixel CENTRES, not corners — a corner sample landing on an edge
-    // would call an empty pixel 25% covered.
+    // Subpixel centres, not corners: a corner sample on an edge miscounts coverage.
     const py = y + (sy + 0.5) / SUBSAMPLES;
     const ratio = py / height;
     const left = start + (apex - start) * ratio;
@@ -57,9 +37,7 @@ const coverage = (x: number, y: number, width: number, height: number): number =
   return inside / (SUBSAMPLES * SUBSAMPLES);
 };
 
-// The wedge as an ImageData-shaped object, ready for map.addImage. RGBA is
-// NOT premultiplied — MapLibre expects that, so colour bytes are written
-// at full strength and only alpha carries the coverage.
+// Straight alpha, not premultiplied: MapLibre expects colour bytes at full strength.
 export function trianglePin(
   cssWidth: number = PIN_WIDTH,
   cssHeight: number = PIN_HEIGHT,

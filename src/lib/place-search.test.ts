@@ -33,7 +33,6 @@ describe("loadPlaceIndex", () => {
   it("throws on a bad response, and lets the next keystroke retry", async () => {
     const fetchMock = stubFetch(() => ({ ok: false, status: 404 }) as Response);
     await expect(loadPlaceIndex()).rejects.toThrow("HTTP 404");
-    // A cached rejected promise would make one blip permanent for the session.
     await expect(loadPlaceIndex()).rejects.toThrow("HTTP 404");
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

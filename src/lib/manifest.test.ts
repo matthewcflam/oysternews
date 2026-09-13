@@ -15,8 +15,6 @@ describe("freshnessLabel", () => {
   });
 
   it("does not report a future timestamp as negative", () => {
-    // Clock skew between the runner and the visitor is real and small. "Updated
-    // -3 minutes ago" reads as a bug; "just now" is both truer and calmer.
     expect(freshnessLabel(ago(-0.05), NOW)).toBe("Updated just now");
   });
 
@@ -27,14 +25,12 @@ describe("freshnessLabel", () => {
 
 describe("isStale", () => {
   it("tolerates one missed run and flags two", () => {
-    // §8: a single miss is operational noise; two means the worker is not running.
     expect(isStale(ago(CADENCE_HOURS), NOW)).toBe(false);
     expect(isStale(ago(2 * CADENCE_HOURS - 0.1), NOW)).toBe(false);
     expect(isStale(ago(2 * CADENCE_HOURS + 0.1), NOW)).toBe(true);
   });
 
   it("treats an unreadable timestamp as stale", () => {
-    // Fail loud. A manifest whose date cannot be read is not evidence of freshness.
     expect(isStale("", NOW)).toBe(true);
   });
 });

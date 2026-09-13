@@ -1,20 +1,9 @@
-/**
- * The browser's half of the city panel: fetching a country's published
- * shard, and finding the record nearest a clicked label. Fetched lazily
- * per country, on the first city label click in it — same reasoning as
- * `lib/regions.ts`'s region index. Purely geographic match: `city_label`
- * carries no stable id, so `nearestCity` is a haversine search capped at a
- * fixed radius, giving the same click the same answer at every zoom.
- */
-
 import type { CityRecord, CityShard } from "./types";
 
 const pending = new Map<string, Promise<CityShard>>();
 
-// Fetch one country's shard, memoized per URL like loadRegionIndex. A 404
-// is normal (a country with no clustered cities publishes no shard),
-// resolving to an empty array read the same as no record in range. Only a
-// 5xx/network failure clears the cache so the next click retries.
+// A 404 is normal (the country has no shard). Only a 5xx or network failure clears the
+// cache, so the next click retries.
 export function loadCityShard(base: string, fips: string): Promise<CityShard> {
   const url = `${base}${fips}.json`;
   const cached = pending.get(url);
@@ -35,22 +24,15 @@ export function loadCityShard(base: string, fips: string): Promise<CityShard> {
   return promise;
 }
 
-/** Test seam. */
 export function resetCityShardCache(): void {
   pending.clear();
 }
 
-/** How far a label click may snap to a clustered city. Fixed, not zoom- or rank-scaled: the same click must answer the same way at every zoom. */
+// Fixed, not zoom-scaled: the same click must give the same answer at every zoom.
 export const CITY_SNAP_KM = 25;
 
 const EARTH_RADIUS_KM = 6371;
 
-/**
- * Great-circle distance in kilometres.
- *
- * Longitude is not normalized here — `nearestCity` does that once, on the
- * query point, which is cheaper than normalizing every record on every call.
- */
 function haversineKm(a: [number, number], b: [number, number]): number {
   const [lon1, lat1] = a;
   const [lon2, lat2] = b;
@@ -63,15 +45,11 @@ function haversineKm(a: [number, number], b: [number, number]): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-/** Longitude into [-180, 180] — `renderWorldCopies` can hand a label anchor back at, e.g., 190 (`MapView.tsx`'s own note on the same hazard). */
+// renderWorldCopies can hand back longitudes outside [-180, 180].
 function normalizeLng(lng: number): number {
   return ((((lng + 180) % 360) + 360) % 360) - 180;
 }
 
-/**
- * The record nearest `at`, within `maxKm` — or `null` when nothing in the
- * shard is close enough, which is the honest empty state, not an error.
- */
 export function nearestCity(
   shard: CityShard,
   at: [number, number],

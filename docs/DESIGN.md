@@ -154,7 +154,7 @@ cron (GitHub Action, 9:20am/9:20pm Pacific = 16:20/04:20 UTC)
   -> ping        only after a real publish
   -> Cloudflare R2: stories-<hash>.pmtiles (immutable), boundaries.pmtiles
      (built once), manifest.json (stable key, cache-control max-age=60)
-  -> Next.js /api/stories (s-maxage=300, swr=600)
+  -> browser reads manifest.json from R2 directly (no API route)
   -> MapLibre GL JS
 ```
 
@@ -894,7 +894,13 @@ was drawn directly underneath another one, invisible. At or above
 `SPIDERFY_ZOOM` the cap lifts and the client spreads a stack into legs and
 leaves, computed from rendered features with pixel offsets through the
 live camera, as a GeoJSON overlay rather than individual map layers per
-leg.
+leg. Past a single ring the leaves follow a spiral stepped by the golden
+angle: an even division of the circle puts every nth leaf on the same
+bearing, so legs overlap into a few thick spokes.
+
+Headlines use `Noto Sans Regular` because it is the only font both basemaps
+ship: MapTiler's style lists Roboto first and OpenFreeMap has no Roboto, so
+naming it first 404s the glyph ranges on the keyless fallback.
 
 ### The selection triangle and the opening-card bubbles
 
@@ -1263,6 +1269,16 @@ manifest reads as "not yet indexed" rather than "confidently empty"),
 same reason), `generatedAt`, `watermark`, and a `stats` object
 (`groups`, `countries`, `tier1Groups`) that `#failure`'s monitoring reads
 directly. `KEEP_ARCHIVES = 3`, `HISTORY_LIMIT = 24`.
+
+The browser reads the manifest from R2 directly, with no API route in
+front: the manifest already is the indirection a route would provide, since
+the archive URL changes every run and lives inside it. Proxying the archive
+itself through a route stays rejected, because PMTiles makes many small
+range requests and each would become a billed Function invocation. The
+manifest URL is built from `CDN_BASE` (`lib/cdn.ts`, shared with the
+worker) rather than a `NEXT_PUBLIC_*` variable, because those are inlined
+at build time and a changed dashboard value does nothing until the next
+uncached build.
 
 ### Rejected Alternatives
 

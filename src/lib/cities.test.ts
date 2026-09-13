@@ -25,7 +25,7 @@ describe("nearestCity", () => {
   });
 
   it("returns null past the snap radius", () => {
-    const shard: CityShard = [record({ lat: 34.0, lon: -118.2 })]; // Los Angeles, far from Chicago
+    const shard: CityShard = [record({ lat: 34.0, lon: -118.2 })];
     expect(nearestCity(shard, [-87.6, 41.9])).toBeNull();
   });
 
@@ -36,8 +36,6 @@ describe("nearestCity", () => {
 
   it("respects a custom radius", () => {
     const shard: CityShard = [record({ lat: 41.9, lon: -87.6 })];
-    // ~0.2 degrees of longitude at this latitude is well under CITY_SNAP_KM
-    // but well over a 1km radius.
     expect(nearestCity(shard, [-87.8, 41.9], 1)).toBeNull();
     expect(nearestCity(shard, [-87.8, 41.9], CITY_SNAP_KM)).not.toBeNull();
   });
