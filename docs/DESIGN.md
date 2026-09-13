@@ -855,7 +855,7 @@ Collapsed 2026-08-14 from three marks to two. Before: a top-5 story was a
 solid orange disc scaled 1.15× larger (`TOP_SCALE`, since deleted); a PIN
 was an orange core inset inside a white ring; a CONTAINER was a solid
 white disc at full footprint — three visual identities on a map whose
-smallest pin is 3px across. After: any story is a solid `#D24F39`
+smallest pin is a 6px radius, a 12px disc. After: any story is a solid `#D24F39`
 (`ACCENT`) disc at full footprint; the top five on screen are the same
 disc with a white ring around it (`RING_RATIO = 0.32`, inset so both
 states share one footprint — MapLibre grows a stroke outward, so the ring
@@ -903,18 +903,48 @@ policy, so a colour used in two places (the map's paint palette and a
 sprite file) cannot drift, because there is only one file. `MARK` is
 imported from `lib/layers.ts` into `lib/pin.ts` for exactly this reason.
 
-The five bubbles that greet a reader on load (`components/StoryBubbles.tsx`,
-`lib/bubble.ts`) are **an opening card, not a live caption** — a deliberate
-reversal of the original design, which re-ranked and re-projected bubbles
-on every camera `idle`. They are now captured once, at the map's first
-`idle` on the default world view, and taken down for good on the reader's
-first camera move of any kind (drag, wheel, keyboard, or a search-driven
-`flyTo`) — `dismissBubbles` arms only after the capture, so a startup
-camera animation cannot dismiss bubbles that were never drawn. The ring
-that marks the current top-5 keeps recomputing live at every `idle`
-regardless — "which stories matter *here*" stays a live question even
-though the opening sentence, once said, is not repeated. `lib/bubble.ts`'s
-placement rule is pure and deliberately tested against a **constant** box
+The bubbles (`components/StoryBubbles.tsx`, `lib/bubble.ts`) caption **the top
+five stories in the current viewport** — the same ranking, from the same
+`queryRenderedFeatures` call, that the white ring marks. A reader who pans to
+the far side of the world reads that side's headlines. They are taken down on
+any camera move (drag, wheel, keyboard, or a search-driven `flyTo`), because a
+bubble is projected once per layout and does not follow a moving camera, and
+they come back on the `idle` after it.
+
+**Ranked on `idle`, never on `moveend`.** A move ends before the tiles it
+uncovered have loaded, so ranking at `moveend` would caption the new viewport
+with the old viewport's stories and never correct itself. `idle` is the first
+moment the query answers truthfully. An `idle` that ranks nothing leaves the
+previous five alone rather than blanking, so a tile load mid-sequence cannot
+flicker the headlines off; `sameKeys` skips the re-render when the ranking has
+not changed.
+
+**At every zoom, with a checkbox as the reader's own control.** `showBubbles`
+used to return early above a fixed zoom ceiling; that ceiling is gone, and
+bubbles now rank and draw wherever the reader has zoomed to. What made the
+ceiling safe to remove is `bubbleLabelFilter`: from `LABEL_MINZOOM` (4) the
+basemap captions every pin with its own 11px headline, and the filter
+suppresses exactly that caption for the stories currently carrying a bubble,
+so no story is ever captioned twice. Below zoom 4 the headline layer is off
+entirely and the bubbles remain the only headlines there are. A corner
+checkbox (`components/HeadlineToggle.tsx`, bottom-right, left of MapLibre's
+zoom control) is what silences bubbles now — `MapView` mirrors the choice into
+a ref the map effect's closures can read, persists it to `localStorage` under
+`sonder.headlines`, and re-runs the ranking immediately on a mid-session
+flip since the stationary camera would otherwise never fire the `idle` that
+normally does that work.
+
+A story displaced onto a spider leaf (`lib/spiderfy.ts`, zoom 9 and up) is
+drawn at its leaf, not its stack's anchor — the anchor copy is covered by the
+stack's best member. Its bubble's tail follows it there too, using
+`leafPositions`, the same anchor/offset/unproject sequence `spiderData` draws
+the leaf itself with, so a bubble can never point at a disc showing a
+different story.
+
+A bubble whose pin has left the canvas needs no handling of its own:
+`placeBubbles` drops any candidate whose reserved box fails `boxFits`, so a
+crowded or edge-heavy view shows the subset that fits and the rest keep their
+rings. `lib/bubble.ts`'s placement rule is pure and deliberately tested against a **constant** box
 size (135×131) rather than a real measured DOM height, because a bubble
 that renders shorter than its reservation only ever has more clearance
 than it was promised — measuring `offsetHeight` would put a DOM dependency
@@ -946,18 +976,20 @@ has to be taken again explicitly rather than drifting in silently. See
 ### Rejected Alternatives
 
 - **Three distinct pin marks (top-5 / pin / container).** Collapsed to two
-  — a third visual identity on a 3px-wide mark was unreadable, and the
+  — a third visual identity on a 6px-radius mark was unreadable, and the
   container mark's own affordance moved into the region panel instead.
 - **A `circle-color` `case` expression for ordinary story state.** Removed
   — nothing about a story's identity should be expressed through fill,
   only through radius and ring; the one exception (selection) is the
   reader's own gesture, not a story property.
-- **Bubbles that track the live viewport, re-ranking on every camera
-  move.** Reverted to a one-shot opening card — it removed most of the
-  event wiring (`render`/`idle` subscriptions, a ref-based ranking pass
-  needed to dodge a real ordering bug where the overlay's handler saw a
-  React value not yet committed) and matches what the bubbles are
-  actually for: an opening sentence, not a live caption.
+- **Bubbles that follow the camera frame by frame, re-ranking on `render`.**
+  Still rejected. The ranking now follows the viewport (see above), but it is
+  recomputed once per *settled* camera, on `idle`, and the bubbles are absent
+  between `movestart` and that idle. The rejected version subscribed to
+  `render` and re-projected under a moving camera, which is what forced the
+  ref-based ranking pass that dodged an ordering bug where the overlay's
+  handler saw a React value not yet committed. Ranking on `idle` and drawing
+  nothing during a move buys the same live headlines without any of that.
 - **Rendering, then measuring `offsetHeight` for bubble collision.**
   Rejected in favor of a constant reservation box, to keep the collision
   rule pure and unit-testable without a DOM.

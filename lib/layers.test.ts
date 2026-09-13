@@ -11,6 +11,8 @@ import {
   HIT_LAYER_FOR,
   LABELS_LAYER_ID,
   LABEL_FONT,
+  LABEL_GAP,
+  LABEL_TEXT_SIZE,
   MARK,
   MATCH_NOTHING,
   NOT_CONTAINER,
@@ -196,7 +198,7 @@ describe("storyLayers", () => {
   it("draws every state solid — no partial-alpha fills", () => {
     // An early identity made a container 22% opaque, which reads as "less
     // important" rather than "less precisely placed", and disappears entirely
-    // at the 3px end of the salience scale.
+    // at the 6px end of the salience scale.
     for (const layer of [stories, country]) {
       expect(JSON.stringify(layer.paint?.["circle-color"])).not.toContain("rgba");
       expect(layer.paint?.["circle-opacity"]).toBeUndefined();
@@ -221,6 +223,34 @@ describe("storyLayers", () => {
 
   it("sizes pins by salience, the §2.5 comparator's own term", () => {
     expect(propertiesRead(stories.paint?.["circle-radius"])).toContain("salience");
+  });
+
+  it("keeps every pin footprint at least 6px, even at the salience floor", () => {
+    // Half of all stories sit exactly at the p50 stop (the "single" arm) — this
+    // is the whole point of raising the floor, and nothing else here prevents
+    // it regressing.
+    const radius = stories.paint?.["circle-radius"] as unknown[];
+    const zoom1Footprint = ((radius[4] as unknown[])[3] as unknown[]) as unknown[];
+    const stops = [4, 6, 8, 10].map((i) => zoom1Footprint[i] as number);
+    for (const stop of stops) expect(stop).toBeGreaterThanOrEqual(6);
+  });
+
+  it("keeps the headline clear of its own disc at every salience stop", () => {
+    // The gap is measured from the disc's EDGE (radius + LABEL_GAP), not its
+    // center — this is the invariant the edge-measured offset exists to hold,
+    // and the one that silently broke as pins grew.
+    const radius = stories.paint?.["circle-radius"] as unknown[];
+    const offset = labels.layout?.["text-offset"] as unknown[];
+    for (const zoomIndex of [4, 6] as const) {
+      const footprint = (radius[zoomIndex] as unknown[])[3] as unknown[];
+      const offsetExpr = offset[zoomIndex] as unknown[];
+      for (const stopIndex of [4, 6, 8, 10] as const) {
+        const pinRadius = footprint[stopIndex] as number;
+        const literal = offsetExpr[stopIndex] as unknown[];
+        const offsetEm = (literal[1] as number[])[1];
+        expect(offsetEm * LABEL_TEXT_SIZE - pinRadius).toBeGreaterThanOrEqual(LABEL_GAP - 0.001);
+      }
+    }
   });
 });
 

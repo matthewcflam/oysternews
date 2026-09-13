@@ -5,6 +5,7 @@ import {
   coordKey,
   displacedUrls,
   leafOffsets,
+  leafPositions,
   sameStacks,
   spiderData,
   stacksFrom,
@@ -95,11 +96,13 @@ describe("leafOffsets", () => {
   });
 
   it("keeps every leaf clear of the anchor's own disc", () => {
-    // The largest pin is 13px + its ring at z8+. A leaf inside that radius would
-    // be hidden by the very disc it was displaced from.
+    // The largest pin is 16px + its ring at z8+, and a leaf is drawn at the same
+    // size — so the real invariant is anchor radius plus leaf radius (32), not a
+    // bare distance. A leaf inside that would overlap the disc it was displaced
+    // from, or another leaf.
     for (const count of [2, 5, 8, 14]) {
       for (const [x, y] of leafOffsets(count)) {
-        expect(Math.hypot(x, y)).toBeGreaterThan(16);
+        expect(Math.hypot(x, y)).toBeGreaterThan(32);
       }
     }
   });
@@ -220,6 +223,30 @@ describe("spiderData", () => {
 
   it("draws nothing for no stacks", () => {
     expect(spiderData([], flat())).toEqual(EMPTY_SPIDER);
+  });
+});
+
+describe("leafPositions", () => {
+  const stacks = stacksFrom([
+    pin("strong", 10, 20, 4),
+    pin("mid", 10, 20, 2),
+    pin("weak", 10, 20, 1),
+  ]);
+
+  it("returns one entry per displaced member and none for the best member", () => {
+    const positions = leafPositions(stacks, flat());
+    expect([...positions.keys()].sort()).toEqual(["mid", "weak"]);
+    expect(positions.has("strong")).toBe(false);
+  });
+
+  it("agrees with the leaf coordinates spiderData draws", () => {
+    const positions = leafPositions(stacks, flat());
+    const leaves = spiderData(stacks, flat()).features.filter((f) => f.geometry.type === "Point");
+    for (const leaf of leaves) {
+      const url = leaf.properties?.url as string;
+      const coordinates = (leaf.geometry as unknown as { coordinates: [number, number] }).coordinates;
+      expect(positions.get(url)).toEqual(coordinates);
+    }
   });
 });
 

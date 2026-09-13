@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, Newsreader } from "next/font/google";
+import { Instrument_Serif, Inter, Newsreader } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
@@ -41,6 +41,13 @@ const instrumentSerif = Instrument_Serif({
   variable: "--font-instrument-serif",
 });
 
+// Inter for the map's own UI chrome, matching the basemap's Inter labels.
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-inter",
+});
+
 export const metadata: Metadata = {
   title: "Oyster — a map of current world news",
   description:
@@ -64,7 +71,7 @@ export const metadata: Metadata = {
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${newsreader.variable} ${instrumentSerif.variable}`}>
+    <html lang="en" className={`${newsreader.variable} ${instrumentSerif.variable} ${inter.variable}`}>
       <body>
         {children}
         <Analytics />

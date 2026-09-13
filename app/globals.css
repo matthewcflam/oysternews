@@ -335,6 +335,7 @@ main .bubbles {
      would drag the whole block across the top of the map rather than wrap. */
   max-width: min(60vw, 260px);
   color: #ffffff;
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.35;
   letter-spacing: -0.02em;
@@ -362,6 +363,8 @@ main .bubbles {
   z-index: 2;
   display: flex;
   align-items: center;
+  /* Inherited by the input (`font: inherit`), placeholder, and suggestion list. */
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
   /* 17px, from the mockup's 637 → 669 sphere and 686 pill. That group spans 201px
      and its centre is 737.5 on a 1482 frame, 3.5px left of the frame's own centre
      — the sphere grew without the group being re-centred. Centring is kept; a
@@ -395,9 +398,10 @@ main .bubbles {
   align-items: center;
   width: 250px;
   height: 40px;
-  /* 17px in from the left and 10px from the right, which puts the 19px glyph's
-     left edge at exactly the mockup's 123px from the pill's own left edge. */
-  padding: 0 10px 0 17px;
+  /* Measured ink, not boxes: the placeholder's first glyph lands 20px in from
+     the left, and the icon's stroke is inset 2px in its SVG, so 18px on the
+     right puts its ink the same 20px from the right edge. */
+  padding: 0 18px 0 17px;
   border-radius: 20px;
   background: var(--pill);
   pointer-events: auto;
@@ -417,8 +421,20 @@ main .bubbles {
   outline: none;
 }
 
+/* Sized on the input, not ::placeholder: a smaller placeholder still sits on the
+   16px font's baseline and reads low. Typing ends :placeholder-shown, so typed
+   text keeps 16px. */
+.search__input:placeholder-shown {
+  font-size: 14px;
+}
+
 .search__input::placeholder {
   color: var(--muted);
+}
+
+/* Transparent rather than removed, so it still names the field for screen readers. */
+.search__input:focus::placeholder {
+  color: transparent;
 }
 
 .search__icon {
@@ -1284,14 +1300,51 @@ main .bubbles {
   font-size: 11px;
 }
 
-/* The "World" button: resets the camera to the opening view and restores
-   the orange headline bubbles. Docked to the left of MapLibre's own
-   NavigationControl group (29px, bottom-right at 10px) on the same row —
-   width is content-driven, so the right edge is pinned to the control's
-   left edge (10 + 29 + 6px gap) rather than a second fixed offset. z-index
-   2, same layer as the brand block and the notices: above the map, below
-   an open panel. White plate to match MapLibre's own control styling. */
-.reset-view-btn {
+/* The globe button: resets the camera to the opening view and restores the
+   orange headline bubbles. Stacked directly above MapLibre's NavigationControl
+   group — MapView measures the group and sets right/bottom/width inline so
+   the icon centers on the +/- buttons, with the same 6px gap from the icon's
+   ink as the Headlines plate has beside it (CORNER_CTRL_GAP,
+   GLOBE_INK_INSET); the values here are the pre-measure fallback. Height
+   matches the 28px icon so the box has no slack above or below it.
+   z-index 2, same layer as the brand block
+   and the notices: above the map, below an open panel. No plate — the white
+   icon sits on the map with a shadow for legibility over lighter land. */
+.globe-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 85px;
+  z-index: 2;
+  width: 29px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.globe-btn img {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+.globe-btn:hover img {
+  opacity: 0.85;
+}
+
+.globe-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 2px 2px #0096ff;
+}
+
+/* The headline checkbox: docked left of the zoom control on its bottom row
+   (see CORNER_CTRL_GAP in MapView.tsx) — positioned from the same measure
+   as the globe button above. */
+.headline-toggle {
   position: absolute;
   right: 45px;
   bottom: 10px;
@@ -1300,24 +1353,46 @@ main .bubbles {
   padding: 0 10px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: 0;
+  gap: 6px;
   border-radius: 4px;
   background: #fff;
   color: #333;
-  font-size: 12px;
-  font-weight: 600;
+  font: 600 14px/1 var(--font-inter), Inter, system-ui, sans-serif;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
   cursor: pointer;
+  user-select: none;
 }
 
-.reset-view-btn:hover {
+.headline-toggle:hover {
   background: #f2f2f2;
 }
 
-.reset-view-btn:focus-visible {
+.headline-toggle__box {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid #999;
+  border-radius: 3px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.headline-toggle__box[data-state="checked"] {
+  background: var(--accent, #e5484d);
+  border-color: transparent;
+}
+
+.headline-toggle__box:focus-visible {
   outline: none;
   box-shadow: 0 0 2px 2px #0096ff;
+}
+
+.headline-toggle__indicator {
+  display: flex;
+  color: #fff;
 }
 
 /* Phase 6's About page.

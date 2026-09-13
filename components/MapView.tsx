@@ -68,6 +68,7 @@ import {
   EMPTY_SPIDER,
   SPIDERFY_ZOOM,
   displacedUrls,
+  leafPositions,
   sameStacks,
   spiderData,
   stacksFrom,
@@ -75,6 +76,7 @@ import {
 } from "@/lib/spiderfy";
 import { sameKeys, topKeys } from "@/lib/top";
 import type { CityShard, RegionIndex } from "@/lib/types";
+import HeadlineToggle from "./HeadlineToggle";
 import MapTilerLogo from "./MapTilerLogo";
 import RegionPanel from "./RegionPanel";
 import SearchBar from "./SearchBar";
@@ -114,11 +116,22 @@ type Selection =
 
 const NO_PIN: FeatureCollection = { type: "FeatureCollection", features: [] };
 
-// The "World" button's own fixed height and its gap from MapLibre's zoom
-// control — both are CSS facts (see .reset-view-btn) needed here too since
-// the position effect computes the button's offset from the control's box.
-const WORLD_BTN_HEIGHT = 29;
-const WORLD_BTN_GAP = 6;
+// A bubble's identity, for comparing one ranking against the next and for
+// the label filter. The url is the story key everywhere else too.
+const keyOf = (bubble: TopStory) => bubble.story.url;
+
+// The docked control's horizontal gap from MapLibre's zoom control.
+const CORNER_CTRL_GAP = 6;
+// The globe icon's rendered size, and the transparent border inside
+// public/assets/earth.png (7px of 128) as a fraction. The globe has no plate,
+// so its gap above the zoom control is measured from the ink, not the box —
+// otherwise it reads closer than the Headlines plate's gap beside it.
+const GLOBE_ICON_SIZE = 28;
+const GLOBE_INK_INSET = (7 / 128) * GLOBE_ICON_SIZE;
+
+// The reader's own key for whether headlines draw at all — see `headlinesOn`
+// below. Persisted so the choice survives a reload.
+const HEADLINES_STORAGE_KEY = "sonder.headlines";
 
 // The city record a selection resolves to, or null (still loading, the
 // shard has nothing this country, or nothing is within CITY_SNAP_KM).
@@ -160,32 +173,44 @@ export default function MapView() {
   const provider = basemap().provider;
 
   // Where MapLibre's own zoom control actually sits, in `right`/`bottom`
-  // CSS px for the "World" button below to match. Measured rather than a
+  // CSS px for the docked controls below to match. Measured rather than a
   // fixed offset: the attribution control is stacked in the same
   // bottom-right corner underneath it, and attribution text can wrap to a
   // second line at a narrow viewport, which pushes the zoom control up by
-  // a variable amount. A ResizeObserver on the control keeps this correct
-  // through that and through the container itself resizing.
-  const [worldBtnPos, setWorldBtnPos] = useState<{ right: number; bottom: number } | null>(null);
+  // a variable amount. Bottom edges are aligned so both controls share one
+  // margin. The observer watches the corner, not just the group: attribution
+  // loading or wrapping moves the group without resizing it, and a group-only
+  // observer left the toggle stranded at its pre-attribution height.
+  const [cornerCtrlPos, setCornerCtrlPos] = useState<{ right: number; bottom: number } | null>(null);
+  // The globe button's slot: directly above the zoom group, sharing its right
+  // edge and width so the icon centers on the +/- buttons.
+  const [globePos, setGlobePos] = useState<{ right: number; bottom: number; width: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (!ready) return;
-    const group = ready
-      .getContainer()
-      .querySelector<HTMLElement>(".maplibregl-ctrl-bottom-right .maplibregl-ctrl-group");
-    if (!group) return;
+    const corner = ready.getContainer().querySelector<HTMLElement>(".maplibregl-ctrl-bottom-right");
+    const group = corner?.querySelector<HTMLElement>(".maplibregl-ctrl-group");
+    if (!corner || !group) return;
 
     const measure = () => {
       const containerRect = ready.getContainer().getBoundingClientRect();
       const groupRect = group.getBoundingClientRect();
-      setWorldBtnPos({
-        right: containerRect.right - groupRect.left + WORLD_BTN_GAP,
-        bottom: containerRect.bottom - (groupRect.top + groupRect.height / 2) - WORLD_BTN_HEIGHT / 2,
+      setCornerCtrlPos({
+        right: containerRect.right - groupRect.left + CORNER_CTRL_GAP,
+        bottom: containerRect.bottom - groupRect.bottom,
+      });
+      setGlobePos({
+        right: containerRect.right - groupRect.right,
+        bottom: containerRect.bottom - groupRect.top + CORNER_CTRL_GAP - GLOBE_INK_INSET,
+        width: groupRect.width,
       });
     };
 
     measure();
     const observer = new ResizeObserver(measure);
+    observer.observe(corner);
     observer.observe(group);
     window.addEventListener("resize", measure);
     return () => {
@@ -207,17 +232,65 @@ export default function MapView() {
   const selectedUrl = useRef<string | null>(null);
   const redrawSpider = useRef<(() => void) | null>(null);
 
-  // Fly back to the opening view and restore the orange headline bubbles —
-  // wired up inside the map effect, where the bubble capture and dismissal
-  // machinery already lives. Exposed as a ref so the "world" button below
-  // can call it without duplicating that state.
+  // Fly back to the opening view, which brings the orange headline bubbles
+  // back with the world's own top five — wired up inside the map effect,
+  // where the bubble ranking and dismissal machinery already lives. Exposed
+  // as a ref so the "world" button below can call it without duplicating
+  // that state.
   const resetHome = useRef<(() => void) | null>(null);
 
-  // The opening-card speech bubbles: the five stories the ring marks on
-  // arrival. Written exactly twice — once at the first idle (top five of
-  // the default world view), once back to empty on the first camera move.
-  // See dismissBubbles and docs/DESIGN.md#the-selection-triangle-and-the-opening-card-bubbles.
+  // The speech bubbles: the five stories the ring is marking right now.
+  // Emptied on every camera move and refilled, re-ranked to the new viewport,
+  // on the idle that follows — at every zoom, as long as the reader hasn't
+  // switched them off with the checkbox (`headlinesOn`).
+  // See dismissBubbles/showBubbles and
+  // docs/DESIGN.md#the-selection-triangle-and-the-opening-card-bubbles.
   const [tops, setTops] = useState<TopStory[]>([]);
+
+  // The reader's headline toggle. Read from localStorage in a mount effect
+  // rather than the useState initialiser: this component is rendered from a
+  // server component, and an initialiser that read storage would hydrate
+  // against a value the server never saw. Defaults to on until that effect
+  // runs, so the very first paint (server and client alike) matches.
+  const [headlinesOn, setHeadlinesOn] = useState(true);
+  // Mirrors `headlinesOn` for the map effect's closure, which cannot read
+  // React state — see `toggleHeadlines` below.
+  const headlinesOnRef = useRef(true);
+  // Imperative setter exposed from inside the map effect, following the same
+  // pattern as `resetHome`: a mid-session flip has to re-run `refresh()`
+  // itself, since the camera is stationary and no `idle` will fire on its own.
+  const toggleHeadlines = useRef<((on: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(HEADLINES_STORAGE_KEY);
+      if (stored !== null) setHeadlinesOn(stored === "true");
+    } catch {
+      // Storage throws in a private window — the default stands.
+    }
+  }, []);
+
+  // Ref sync and the map push, on every change including the mount-read
+  // above. Never writes to storage itself — see `setHeadlines` below for
+  // why: this effect also fires for that same mount-read, and a write here
+  // would persist the render's default value over whatever was just read,
+  // a heartbeat before the state update from that read had landed.
+  useEffect(() => {
+    headlinesOnRef.current = headlinesOn;
+    toggleHeadlines.current?.(headlinesOn);
+  }, [headlinesOn]);
+
+  // The checkbox's own handler. Persisting only here — never from the effect
+  // above — means a reload's storage read can never race a stale write from
+  // this component's own mount.
+  const setHeadlines = (on: boolean) => {
+    setHeadlinesOn(on);
+    try {
+      window.localStorage.setItem(HEADLINES_STORAGE_KEY, String(on));
+    } catch {
+      // Nothing to persist to — the toggle still works for this session.
+    }
+  };
 
   // There are three ways to close a panel: Escape below, a click on the
   // map background (the miss path in the click handler), and the panel's
@@ -679,26 +752,45 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
         // which small labels to suppress.
         let bubbles: TopStory[] = [];
 
-        // Has the opening ranking been taken? Taken once; see `refresh`.
-        let bubblesCaptured = false;
-
-        // The opening ranking itself, held onto after `bubbles` is emptied
-        // by dismissBubbles — this is what the "world" button restores.
-        let capturedBubbles: TopStory[] = [];
-
-        // Take the bubbles down permanently on the reader's first camera
-        // move (movestart — drag, wheel, keyboard, or a search flyTo all
-        // count). Armed only after the capture, so a startup camera
-        // animation can't dismiss bubbles that were never drawn.
+        // The bubbles' whole life, in two handlers: down on any camera move,
+        // back up — re-ranked to wherever the reader has landed — on the idle
+        // that follows it. `showBubbles` is called from `refresh`, which is
+        // where the ranking is computed.
+        //
+        // Down on movestart rather than on a zoom threshold because a bubble
+        // is positioned by projecting its coordinate once per layout
+        // (StoryBubbles' position) — it does not follow a moving camera, so it
+        // cannot be on screen during a pan at any zoom.
         const dismissBubbles = () => {
-          if (!bubblesCaptured || !bubbles.length) return;
+          if (!bubbles.length) return;
           bubbles = [];
           setTops(bubbles);
           // Directly, not through applyTop — its sameKeys guard would
           // skip this whenever the ranking hasn't changed, but the five
           // need their labels back on this move regardless.
           map.setFilter(LABELS_LAYER_ID, bubbleLabelFilter([]));
-          map.off("movestart", dismissBubbles);
+        };
+
+        // Up again on idle, carrying the top five IN THIS VIEWPORT — the same
+        // ranking, from the same query, that the white ring is marking, so a
+        // reader who pans to the other side of the world reads that side's
+        // headlines instead of the ones the map opened on. Ranks at every
+        // zoom now; the reader's own checkbox (`headlinesOnRef`) is what
+        // turns bubbles off, not a zoom ceiling.
+        //
+        // idle, not moveend: a move ends before the tiles it uncovered have
+        // loaded, so ranking at moveend would caption the new viewport with
+        // the old viewport's stories. sameKeys keeps an idle that changed
+        // nothing (a tile finishing under a stationary camera) from
+        // re-rendering the overlay.
+        const showBubbles = (ranked: TopStory[]) => {
+          if (!headlinesOnRef.current) return;
+          if (sameKeys(ranked.map(keyOf), bubbles.map(keyOf))) return;
+          bubbles = ranked;
+          setTops(bubbles);
+          // Same bypass as above, in the other direction: the five give up
+          // their small labels again for as long as they carry headlines.
+          map.setFilter(LABELS_LAYER_ID, bubbleLabelFilter(bubbles.map(keyOf)));
         };
 
         map.on("movestart", dismissBubbles);
@@ -735,52 +827,60 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
 
           marked = topKeys(features);
 
+          // Stacks are read BEFORE the bubbles and the highlight: which
+          // stories a spider has displaced decides both which of the five may
+          // be flagged on the vector source, and which bubble must point at a
+          // leaf instead of the anchor below.
+          const found = map.getZoom() < SPIDERFY_ZOOM ? [] : stacksFrom(features);
+          if (!sameStacks(found, stacks)) {
+            stacks = found;
+            displaced = displacedUrls(found);
+          }
+
           /**
-           * Mode 1's bubbles, from the same query and the same ranking — the
-           * headline and the coordinate for each of `marked`, best first.
+           * The bubbles, from the same query and the same ranking the ring
+           * uses — the headline and the coordinate for each of `marked`, best
+           * first. Rebuilt at every idle, so the headlines are always the top
+           * five where the reader is looking rather than the five the map
+           * opened on.
            *
-           * Taken once, at the first idle, over the default world view —
-           * these are the top five in the world, not wherever the reader
-           * is looking. dismissBubbles retires them on the first camera
-           * move. Deduplicated by url, since renderWorldCopies and the
-           * country floor can each draw a story more than once;
-           * StoryBubbles normalises longitude to the nearest copy before
-           * it projects, so which copy wins here doesn't matter.
+           * Deduplicated by url, since renderWorldCopies and the country floor
+           * can each draw a story more than once; StoryBubbles normalises
+           * longitude to the nearest copy before it projects, so which copy
+           * wins here doesn't matter.
+           *
+           * A displaced member is drawn as its leaf, not its anchor (the
+           * anchor copy is covered by the stack's best member) — so its
+           * bubble's tail must land there too, or it would point at a pin
+           * that isn't showing that story.
+           *
+           * An idle that ranked nothing leaves the bubbles alone — the style
+           * has loaded but this viewport's tiles have not, and blanking on it
+           * would flicker the headlines off between two idles that agree.
            */
-          if (!bubblesCaptured) {
-            const found = new Map<string, TopStory>();
+          if (marked.length) {
+            const bubbled = new Map<string, TopStory>();
             for (const feature of features) {
               if (feature.geometry.type !== "Point") continue;
               const selected = panelStory(feature.properties);
-              if (!selected || found.has(selected.url)) continue;
-              found.set(selected.url, {
+              if (!selected || bubbled.has(selected.url)) continue;
+              bubbled.set(selected.url, {
                 story: selected,
                 lngLat: feature.geometry.coordinates as [number, number],
               });
             }
 
-            const opening = marked
-              .map((key) => found.get(key))
-              .filter((bubble): bubble is TopStory => Boolean(bubble));
+            const leaves = stacks.length ? leafPositions(stacks, map) : null;
 
-            // An idle that ranked nothing is not the opening view — the style has
-            // loaded but this archive's first tiles have not. Leave the capture
-            // open rather than freezing an empty set for the whole session.
-            if (opening.length) {
-              bubbles = opening;
-              capturedBubbles = opening;
-              bubblesCaptured = true;
-              setTops(bubbles);
-            }
-          }
-
-          // Stacks are read BEFORE the highlight is applied: which
-          // stories a spider has displaced decides which of the five may
-          // be flagged on the vector source at all.
-          const found = map.getZoom() < SPIDERFY_ZOOM ? [] : stacksFrom(features);
-          if (!sameStacks(found, stacks)) {
-            stacks = found;
-            displaced = displacedUrls(found);
+            showBubbles(
+              marked
+                .map((key) => bubbled.get(key))
+                .filter((bubble): bubble is TopStory => Boolean(bubble))
+                .map((bubble) => {
+                  const leaf = displaced.has(bubble.story.url) ? leaves?.get(bubble.story.url) : null;
+                  return leaf ? { ...bubble, lngLat: leaf } : bubble;
+                }),
+            );
           }
 
           applyTop();
@@ -794,29 +894,25 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
         // pan translates both together, so only a zoom needs a rebuild.
         map.on("zoom", drawSpider);
 
-        // The "world" button: fly home and put the opening bubbles back.
-        // dismissBubbles is off'd immediately so the flyTo's own movestart
-        // doesn't dismiss the bubbles this is about to restore. Restoring
-        // them waits for moveend rather than firing alongside flyTo: a
-        // bubble is positioned by projecting its coordinate through the
-        // CURRENT camera (StoryBubbles' pointFor), and setting it mid-flight
-        // would project against wherever the animation happened to be,
-        // often off-screen, which placeBubbles then drops. Once settled,
-        // dismissBubbles goes back on so a move the reader makes afterward
-        // still dismisses them once.
+        // The checkbox's own effect (below `headlinesOnRef`) calls this on
+        // every flip. Off takes the bubbles down immediately, the same way a
+        // camera move does. On calls `refresh()` directly rather than waiting
+        // for an idle: the camera is stationary, so nothing would fire one on
+        // its own, and `refresh` is idempotent — it already runs on every
+        // idle, so calling it once more here is safe.
+        toggleHeadlines.current = (on: boolean) => {
+          if (on) refresh();
+          else dismissBubbles();
+        };
+
+        // The "world" button: fly home, and the bubbles follow from where the
+        // camera lands. The flight's own movestart dismisses them and the idle
+        // after it ranks the world view afresh — the same path a reader takes
+        // by scrolling back out, so the button is a shortcut for a gesture
+        // rather than a second way to produce the headlines.
         const resetToHome = () => {
-          map.off("movestart", dismissBubbles);
           setStory(null);
           clearRegion();
-          map.once("moveend", () => {
-            bubbles = capturedBubbles;
-            setTops(bubbles);
-            map.setFilter(
-              LABELS_LAYER_ID,
-              bubbleLabelFilter(bubbles.map((bubble) => bubble.story.url)),
-            );
-            map.on("movestart", dismissBubbles);
-          });
           map.flyTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM });
         };
         resetHome.current = resetToHome;
@@ -1001,9 +1097,10 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
     return () => {
       cancelled = true;
       setReady(null);
-      // Both handlers close over a map that is about to be removed.
+      // All three close over a map that is about to be removed.
       redrawSpider.current = null;
       resetHome.current = null;
+      toggleHeadlines.current = null;
       map.remove();
       removeProtocol("pmtiles");
     };
@@ -1068,21 +1165,27 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
       {/*
         Bottom-right, left of MapLibre's own zoom control — see
         docs/DESIGN.md#regions for why the corner is otherwise free.
-        Resets the camera to the opening view and brings the orange
-        headline bubbles back.
       */}
+      <HeadlineToggle
+        checked={headlinesOn}
+        onCheckedChange={setHeadlines}
+        position={cornerCtrlPos}
+      />
 
-      
       {/*
+        The globe, docked directly above the zoom control. Resets the camera
+        to the opening view, which brings the orange headline bubbles back.
+      */}
       <button
         type="button"
-        className="reset-view-btn"
-        style={worldBtnPos ?? undefined}
+        className="globe-btn"
+        style={globePos ?? undefined}
         onClick={() => resetHome.current?.()}
+        title="Zoom to global view"
+        aria-label="Zoom to global view"
       >
-        World
+        <img src="/assets/earth.png" alt="" width={GLOBE_ICON_SIZE} height={GLOBE_ICON_SIZE} />
       </button>
-      */}
 
       {/*
         The top five headlines, in bubbles pointing at their own pins.

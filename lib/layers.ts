@@ -62,7 +62,7 @@ const WHITE = "#ffffff";
 export const MARK = "#C05AC4";
 
 // The white ring, as a share of footprint radius (not a fixed px width —
-// the footprint spans 3-13px, so a constant ring would be half the area of
+// the footprint spans 6-16px, so a constant ring would be half the area of
 // a small circle and a hairline on a large one).
 const RING_RATIO = 0.32;
 
@@ -111,9 +111,9 @@ const byZoom = (
   ["linear"],
   ["zoom"],
   1,
-  perZoom(3, 4, 5.5, 7),
+  perZoom(6, 7, 8.5, 10),
   8,
-  perZoom(5, 7, 10, 13),
+  perZoom(8, 10, 13, 16),
 ];
 
 // Containers are not drawn on the map — every layer that draws a story
@@ -166,6 +166,36 @@ const ringWidth = (
   isTop,
   ["*", radiusBySalience(single, few, many, huge), RING_RATIO],
   0,
+];
+
+// Both feed the headline's em offset below, so the two cannot drift apart.
+export const LABEL_TEXT_SIZE = 11;
+
+// Clear pixels between the disc's edge and the top of the headline —
+// chosen to match today's effective gap for a median pin in the label's
+// zoom range (8.2px at z4, 7.7px at z6).
+export const LABEL_GAP = 8;
+
+// Mirrors radiusBySalience's four stops, but emits a text-offset (in em,
+// since that's what MapLibre's symbol layout wants) that keeps the gap
+// between disc edge and headline constant as the disc grows.
+const labelOffset = (
+  single: number,
+  few: number,
+  many: number,
+  huge: number,
+): ExpressionSpecification => [
+  "interpolate",
+  ["linear"],
+  ["get", "salience"],
+  0.6931,
+  ["literal", [0, (single + LABEL_GAP) / LABEL_TEXT_SIZE]],
+  1.0986,
+  ["literal", [0, (few + LABEL_GAP) / LABEL_TEXT_SIZE]],
+  2.3026,
+  ["literal", [0, (many + LABEL_GAP) / LABEL_TEXT_SIZE]],
+  4.3567,
+  ["literal", [0, (huge + LABEL_GAP) / LABEL_TEXT_SIZE]],
 ];
 
 const circlePaint = {
@@ -232,9 +262,15 @@ export function storyLayers(): [
         // The headline, and nothing else — never article text.
         "text-field": ["get", "title"],
         "text-font": LABEL_FONT,
-        "text-size": 11,
+        "text-size": LABEL_TEXT_SIZE,
         "text-max-width": 9,
-        "text-offset": [0, 1.1],
+        // Measured from the disc's EDGE (radius + LABEL_GAP), not its
+        // center, via byZoom/labelOffset — otherwise a growing disc eats
+        // its own label gap. Symbol layout bakes this at tile-layout zoom
+        // rather than re-evaluating every frame like a paint property, so
+        // within a single zoom level the gap drifts by under 1px (0.29px
+        // at the low stop, 0.86px at the high one) — not perceptible.
+        "text-offset": byZoom(labelOffset),
         "text-anchor": "top",
         // Overlap off keeps the map readable; the sort key decides which
         // label survives a collision (negated: MapLibre places lower sort

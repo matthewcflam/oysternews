@@ -8,18 +8,20 @@ import type { PanelStory } from "@/lib/story";
 /**
  * Browse mode's speech bubbles: the headline of each top-5 story, next to its pin.
  *
- * **An opening card, not live chrome.** The five arrive once, on the first
- * `idle` after load — the default world view, so they are the top five stories
- * in the world — and `MapView` takes them down on the reader's first camera
- * move, for good. They are the map's first sentence; a headline that followed
- * the reader around would be competing with whatever they navigated to. The
- * white ring keeps re-ranking to the viewport, which is where "what is big
- * here" continues to be answered.
+ * **The top five where the reader is looking.** `MapView` takes the bubbles
+ * down on any camera move and puts them back on the `idle` that follows,
+ * re-ranked to the viewport the camera landed in — the same ranking, from the
+ * same query, that the white ring marks. Pan to the far side of the world and
+ * the headlines are that side's headlines. They rank and draw at every zoom;
+ * from zoom 4 the basemap would otherwise caption every pin with its own 11px
+ * headline too, so `bubbleLabelFilter` suppresses that caption for exactly
+ * the stories carrying a bubble. A corner checkbox is the reader's own
+ * control for turning bubbles off, not a zoom ceiling.
  *
- * That one-shot life is what makes the rest of this component small. The camera
- * cannot move while a bubble is on screen, so the layout runs when the list
- * changes and the anchors are positioned once per layout — no `idle`
- * subscription re-ranking under a pan, no per-frame projection.
+ * That life is what makes the rest of this component small. The camera cannot
+ * move while a bubble is on screen — down at `movestart`, up at `idle` — so the
+ * layout runs when the list changes and the anchors are positioned once per
+ * layout. No `idle` subscription of its own, no per-frame projection.
  *
  * **Where the layout rule lives is the point.** Which side a bubble opens on and
  * which bubbles survive a crowded view are in `lib/bubble.ts`, pure and tested;
@@ -120,10 +122,10 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
   }, [map, stories, selectedUrl]);
 
   /**
-   * Twice in a session, and a third time per story opened: when the five arrive,
-   * when `MapView` clears them on the first camera move, and when a selection
-   * withholds one of them. Opening a story has to take its bubble down now, not
-   * when the reader next moves.
+   * Once per settled camera, plus once per story opened: when a new five
+   * arrive, when `MapView` clears them on a camera move, and when a selection
+   * withholds one of them. Opening a story has to take its bubble down now,
+   * not when the reader next moves.
    */
   useEffect(() => {
     relayout();
