@@ -447,7 +447,7 @@ export default function MapView() {
 
     // Dev-only test seam. Next inlines NODE_ENV, so this is stripped from production builds.
     if (process.env.NODE_ENV !== "production") {
-      (window as unknown as { __sonderMap?: unknown }).__sonderMap = map;
+      (window as unknown as { __oysterMap?: unknown }).__oysterMap = map;
     }
 
     // Awaiting both promises is correct in either finish order.

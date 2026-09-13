@@ -25,7 +25,7 @@ this project already made:
 | MapTiler SDK JS | **map sessions** — one page load, unlimited pan/zoom inside it | 5,000 / month |
 | **Third-party clients (this project)** | **API requests** — each tile is one | **100,000 / month** |
 
-Sonder imports `maplibre-gl` directly (`components/MapView.tsx`), which is a
+Oyster imports `maplibre-gl` directly (`components/MapView.tsx`), which is a
 third-party client. So the per-request meter is the one that applies, and
 MapTiler is explicit that this is not a setting: *"If you built your map app
 using MapTiler API combined with 3rd party clients and libraries, then the

@@ -83,5 +83,5 @@ News metadata from [GDELT](https://www.gdeltproject.org/). Boundaries from
 [Natural Earth](https://www.naturalearthdata.com/) (public domain). Basemap from
 [MapTiler](https://www.maptiler.com/) / OpenStreetMap.
 
-English-language sources only. Sonder links out to articles and never reproduces
+English-language sources only. Oyster links out to articles and never reproduces
 article text.

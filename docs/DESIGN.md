@@ -423,7 +423,7 @@ tiles collapse from thousands of stories to exactly one each; the archive
 shrank from 46 MB to 8.4 MB. The fix was reverted within 40 minutes,
 pending diagnosis.
 
-**Root cause — an upstream tippecanoe bug, not a Sonder bug.** tippecanoe
+**Root cause — an upstream tippecanoe bug, not an Oyster bug.** tippecanoe
 2.49.0 (the version `apt-get install tippecanoe` installs on Ubuntu 24.04,
 present on both the dev machine and CI) has a missing `else` in
 `tile.cpp`'s minzoom-drop path: `if (sf.tippecanoe_minzoom == -1) { ... }`
@@ -937,7 +937,7 @@ entirely and the bubbles remain the only headlines there are. A corner
 checkbox (`components/HeadlineToggle.tsx`, bottom-right, left of MapLibre's
 zoom control) is what silences bubbles now — `MapView` mirrors the choice into
 a ref the map effect's closures can read, persists it to `localStorage` under
-`sonder.headlines`, and re-runs the ranking immediately on a mid-session
+`oyster.headlines`, and re-runs the ranking immediately on a mid-session
 flip since the stationary camera would otherwise never fire the `idle` that
 normally does that work.
 
@@ -1023,7 +1023,7 @@ basemap as "MapTiler hosted style, 100k loads/mo free." `spikes/basemap/CASE-STU
 found that wrong by roughly a factor of 200: MapTiler meters *sessions*
 (one page load, unlimited pan/zoom inside it — 5,000/month free) only for
 its own SDK; a **third-party client importing `maplibre-gl` directly**, which
-is what Sonder does, is metered by **request** instead (each tile is one
+is what Oyster does, is metered by **request** instead (each tile is one
 request), with a 100,000-request/month free allowance — and MapTiler is
 explicit that switching from request-metering to session-metering is "not
 technically possible" for a third-party client. A standalone measurement
