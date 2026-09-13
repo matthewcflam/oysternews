@@ -6,20 +6,14 @@ export const MAX_BUNDLES = 12;
 const USER_AGENT = "oyster/0.1 (portfolio project; contact matthewcflam@gmail.com)";
 
 export type Bundle = {
-  /** YYYYMMDDHHMMSS, the bundle's own stamp. */
   stamp: string;
   csv: string;
   bytes: number;
 };
 
-// Minimal single-entry ZIP reader: a GKG bundle is one deflated CSV, so
-// this just finds the end-of-central-directory record, follows it to the
-// local file header, and inflates what follows — no dependency needed for
-// a layout unchanged since 1989.
 export function unzipSingleEntry(archive: Buffer): Buffer {
   const EOCD = 0x06054b50;
   let eocd = -1;
-  // The EOCD sits at the end, followed only by an optional comment (<= 64 KB).
   for (let i = archive.length - 22; i >= 0 && i >= archive.length - 22 - 0xffff; i--) {
     if (archive.readUInt32LE(i) === EOCD) {
       eocd = i;
@@ -62,7 +56,6 @@ export async function newestStamp(): Promise<string> {
   return stamp;
 }
 
-// Returns NaN on malformed stamps so callers can distinguish them from 1970.
 export function stampToMs(stamp: string): number {
   if (!/^\d{14}$/.test(stamp)) return Number.NaN;
   return Date.UTC(

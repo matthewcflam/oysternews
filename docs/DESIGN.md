@@ -537,7 +537,8 @@ robust ranking signal despite that syndication source.
 Real grouping (`worker/group.ts`) uses: ≥2 shared `V2EnhancedThemes`,
 excluding themes above `THEME_CEILING = 0.15` document frequency (a theme
 on 15%+ of the feed cannot tell you which two articles are the same
-story), a title-token Jaccard floor (`JACCARD_FLOOR = 0.25` — flagged in
+story; `CRISISLEX_CRISISLEXREC` alone is on 39.4% of articles and would
+join 39% of the corpus into one story), a title-token Jaccard floor (`JACCARD_FLOOR = 0.25` — flagged in
 the code itself as "the one constant here without a measurement behind
 it," tuned by eye rather than fitted, worth revisiting once real
 placements can be judged against it), and a 0.5° location cell. Title
@@ -1219,6 +1220,12 @@ before any real work happens, deliberately kept to one call per run since
 `ListObjectsV2` is a billed R2 Class A operation. It cannot catch a
 read-only R2 token, though: `list` succeeds on read-only access, and a run
 using one dies later, inside `appendShards`.
+`assertPublicHostReachable()` is the matching check for the host the browser
+reads: on 2026-08-24 a run published a manifest built from a custom domain
+whose zone was not yet delegated, every write succeeded, and the map was
+blank for two and a half hours. An undelegated host fails as a transport
+error rather than an HTTP status, so the probe fails only on DNS, TLS or
+connection errors, never on a 404 from a fresh bucket.
 
 ### Two shard families
 
@@ -1237,6 +1244,13 @@ only the tier-1-touched subset. Groups appear in both families during
 their first 24 hours, so `state.ts` dedupes the assembled pool by
 `(domain, url)` on read — without that, a carried-over group would
 double-count its own domain set and inflate its own salience.
+
+Because a shard lives 24–48 hours, for a full window after a field is added
+to `PlacedArticle` part of the pool was written without it, and
+`JSON.parse(...) as PlacedArticle` is a cast, not a check. `image` was once
+missed in `state.ts`'s defaults: the `undefined` survived into the tile
+feature, `JSON.stringify` dropped the key, and every panel showed a blank
+thumbnail with nothing failing. Every new field gets a default there.
 
 ### The manifest and `REGIONS_VERSION`
 

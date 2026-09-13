@@ -27,8 +27,8 @@ export type ListPage = {
   nextToken?: string;
 };
 
-// Must match <Key> only (not top-level <Prefix>), verify <ListBucketResult>,
-// and loop on NextContinuationToken. See docs/DESIGN.md#r2-traps.
+// Match <Key> only (not the top-level <Prefix>), verify <ListBucketResult>, and loop on
+// NextContinuationToken, or listings silently truncate.
 export function parseListPage(xml: string): ListPage {
   if (!xml.includes("<ListBucketResult")) {
     throw new Error(

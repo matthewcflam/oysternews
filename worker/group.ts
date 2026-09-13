@@ -77,7 +77,6 @@ export function jaccard(a: Set<string>, b: Set<string>): number {
   return shared / (a.size + b.size - shared);
 }
 
-/** Exact-syndication key: the same headline, punctuation and spacing aside. */
 export function normalizeTitle(title: string): string {
   return title
     .toLowerCase()
@@ -89,8 +88,6 @@ export function cellOf(lat: number, lon: number): string {
   return `${Math.floor(lat / CELL_DEGREES)}:${Math.floor(lon / CELL_DEGREES)}`;
 }
 
-// How many articles carry each theme, distinct per article (nine mentions
-// in one document count as one).
 function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const article of articles) {
@@ -101,7 +98,6 @@ function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
   return counts;
 }
 
-/** Themes appearing on more than `ceiling` of articles carry no grouping signal. */
 export function overCommonThemes(articles: PlacedArticle[], ceiling = THEME_CEILING): Set<string> {
   const counts = documentFrequency(articles);
 
@@ -138,18 +134,9 @@ class DisjointSet {
 export type GroupOptions = {
   themeCeiling?: number;
   jaccardFloor?: number;
-  /** Injected so the 48-hour tier-1 test is not a test that has to wait. */
   now?: number;
 };
 
-/**
- * Group placed articles into stories.
- *
- * Comparison is scoped to a cell and driven by an inverted theme index, so the
- * pairwise cost is paid only between articles that already share a significant
- * theme and a location. A naive all-pairs pass over a 24-hour window (~40,700
- * articles) would be 830M comparisons.
- */
 export function groupArticles(articles: PlacedArticle[], options: GroupOptions = {}): StoryGroup[] {
   const now = options.now ?? Date.now();
   const jaccardFloor = options.jaccardFloor ?? JACCARD_FLOOR;
@@ -161,18 +148,14 @@ export function groupArticles(articles: PlacedArticle[], options: GroupOptions =
     (article) => new Set(article.themes.filter((theme) => !common.has(theme)))
   );
 
-  /** cell -> theme -> article indices. */
   const index = new Map<string, Map<string, number[]>>();
-  /** cell -> normalized title -> first article index with it. */
   const syndication = new Map<string, Map<string, number>>();
 
   articles.forEach((article, i) => {
     const cell = cellOf(article.lat, article.lon);
 
-    // Exact-title syndication, collapsed first and unconditionally: the same
-    // headline in the same cell is the same story whatever its themes say.
-    // Scoped to the cell on purpose — "Weather warning issued" is a real
-    // headline in a dozen unrelated places on any given day.
+    // Same headline in the same cell is one story whatever its themes say. Scoped to the
+    // cell: "Weather warning issued" is a real headline in many unrelated places at once.
     let titles = syndication.get(cell);
     if (!titles) {
       titles = new Map();
@@ -189,9 +172,6 @@ export function groupArticles(articles: PlacedArticle[], options: GroupOptions =
       index.set(cell, themes);
     }
 
-    // Candidates: articles in this cell sharing at least one significant theme.
-    // Two shared themes are required, so a single shared theme only makes a pair
-    // worth testing.
     const candidates = new Set<number>();
     for (const theme of significant[i]) {
       for (const other of themes.get(theme) ?? []) candidates.add(other);
@@ -231,10 +211,6 @@ export function groupArticles(articles: PlacedArticle[], options: GroupOptions =
   return [...members.values()].map((group) => buildGroup(group, now));
 }
 
-// The representative article shown in the popup and a container's label.
-// A tier-1 article wins when the group has one (newest first) — the group
-// is on the map because of that coverage, so a syndicated rewrite would be
-// an odd thing to show instead. Otherwise the newest article wins.
 function representative(members: PlacedArticle[]): PlacedArticle {
   let best = members[0];
   for (const member of members) {
@@ -251,9 +227,8 @@ function buildGroup(members: PlacedArticle[], now: number): StoryGroup {
   const face = representative(members);
   const stats = summarise(members, now);
 
-  // Identity seeded from the OLDEST member's url, so a group keeps its id across
-  // runs while that article stays in the window — a hash over all members would
-  // change every time one more outlet picked the story up.
+  // Seeded from the OLDEST member's url so the id is stable across runs; hashing all
+  // members would change it every time another outlet picks the story up.
   const oldest = members.reduce((a, b) => (a.date <= b.date ? a : b));
   const id = createHash("sha1").update(oldest.url).digest("hex").slice(0, 16);
 

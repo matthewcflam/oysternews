@@ -17,7 +17,6 @@ export const REGIONS_VERSION = 2;
 
 const CITY_UPLOAD_CONCURRENCY = 8;
 
-// Manifest unstable, archives immutable.
 export const MANIFEST_MAX_AGE = 60;
 export const ARCHIVE_MAX_AGE = 31_536_000;
 
@@ -25,9 +24,8 @@ export const KEEP_ARCHIVES = 3;
 
 const HISTORY_LIMIT = 24;
 
-// Count band uses absolute counts, not ratios (ratios can wedge: "fail-closed
-// becomes fail-forever" when history cannot advance). Measured bounds; re-derive
-// against fresh volume if either GDELT scale or grouping key changes.
+// Absolute bounds, not ratios: a ratio band can fail closed forever once history stops
+// advancing. Re-derive from fresh volume if GDELT scale or the grouping key changes.
 export const COUNT_BAND_MIN = 2_000;
 export const COUNT_BAND_MAX = 60_000;
 export const MIN_COUNTRIES = 15;
@@ -48,18 +46,8 @@ export type PublishStats = {
 export type HistoryEntry = {
   stamp: string;
   archive: string;
-  /**
-   * The region index published with that archive. Optional: entries written
-   * before the index existed have none, and retention must read those as "this
-   * run referenced no index" rather than crashing or pruning a live key.
-   */
+  // Absent on entries older than the region index; retention must read that as "no index".
   regions?: string;
-  /**
-   * The city-shard directory published with that archive (e.g.
-   * `archives/cities-a1b2c3d4/`), or absent for a run with no city groups.
-   * A directory, not 121 keys — `archivesToPrune` keeps every key that
-   * starts with a live entry's prefix.
-   */
   cities?: string;
   groups: number;
 };
@@ -73,16 +61,11 @@ export function statsOf(groups: StoryGroup[]): PublishStats {
   };
 }
 
-export function checkInvariants(
-  stats: PublishStats,
-  /** Milliseconds since the last successful publish. Past BAND_RELAX_AFTER_MS the band stands down. */
-  staleFor = 0
-): string[] {
+export function checkInvariants(stats: PublishStats, staleFor = 0): string[] {
   const violations: string[] = [];
 
   if (stats.groups < MIN_GROUPS) {
     violations.push(`no groups to publish (${stats.groups})`);
-    // Everything below divides by or reasons about a non-empty run.
     return violations;
   }
 
@@ -106,8 +89,6 @@ export function checkInvariants(
   return violations;
 }
 
-// 8 hex chars (32 bits) is enough: collision within retention window
-// (3 deep) is negligible, and short keys keep logs readable.
 export function contentHash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 8);
 }
@@ -125,13 +106,9 @@ export function archivesToPrune(
   const liveDirs: string[] = [];
   for (const entry of history.slice(-keep)) {
     live.add(entry.archive);
-    // An archive and its region index are one publication, retained as one.
     if (entry.regions) live.add(entry.regions);
-    // City shards publish as a directory of ~121 keys under one
-    // content-hashed prefix, not a single key — every key beneath
-    // entry.cities is live, or a run's own shards would look unreferenced
-    // the moment they finish uploading and get pruned before a browser
-    // ever fetches one.
+    // City shards are a directory under one content-hashed prefix: every key beneath
+    // entry.cities is live, or a run's own shards get pruned right after uploading.
     if (entry.cities) liveDirs.push(entry.cities);
   }
   return stored.filter(
@@ -152,16 +129,11 @@ export type { ArchiveStore };
 
 export type PublishInput = {
   store: ArchiveStore;
-  /** Path to the archive tiles.ts produced. */
   archivePath: string;
   groups: StoryGroup[];
-  /** The region panel index, published beside the archive. docs/DESIGN.md#regions */
   regions: RegionIndex;
-  /** Per-country city shards. Absent or empty publishes no city artefact and leaves `manifest.citiesBase` unset. */
   cities?: Record<string, CityShard>;
-  /** Newest GKG bundle included, YYYYMMDDHHMMSS. */
   watermark: string;
-  /** Injected so a test can pin it; the run passes `new Date()`. */
   now?: Date;
 };
 
@@ -200,11 +172,10 @@ export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
   }
 }
 
-// S3 endpoint answering ≠ CDN_BASE reachable. This probe must not fail
-// on HTTP 404 (empty on first run); only on DNS/TLS/connection errors.
+// The S3 endpoint answering says nothing about CDN_BASE. Fail only on DNS/TLS/connection
+// errors, never on HTTP 404 (a fresh bucket is empty).
 export async function assertPublicHostReachable(
   base: string = CDN_BASE,
-  // Injected so the test can drive it without a network.
   doFetch: typeof globalThis.fetch = globalThis.fetch
 ): Promise<void> {
   try {
@@ -228,15 +199,11 @@ export async function readHistory(store: ArchiveStore): Promise<HistoryEntry[]> 
     const parsed = JSON.parse(await store.get(HISTORY_KEY)) as unknown;
     return Array.isArray(parsed) ? (parsed as HistoryEntry[]) : [];
   } catch {
-    // Absent on the first run, and a corrupt history must not block publication
-    // — it only widens the band it would otherwise have narrowed.
+    // A missing or corrupt history must not block publication; it only widens the band.
     return [];
   }
 }
 
-// Run worker(item) over items with at most `limit` in flight. A plain pool
-// is enough for a shard upload (one round trip, nothing else); a rejection
-// propagates through Promise.all, failing the run before the manifest flip.
 async function pooled<T>(
   items: T[],
   limit: number,

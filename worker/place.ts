@@ -10,19 +10,14 @@ export const COUNTRY_DOMINANCE = 3;
 
 export const MIN_CITY_MENTIONS = 2;
 
-/**
- * The demonym trap: GDELT writes country demonyms bare (`Americans`) but
- * state demonyms with a suffix (`Texans, United States`). Matching the
- * whole FullName silently misses every US state — match the FIRST COMMA
- * SEGMENT instead.
- */
+// GDELT writes country demonyms bare ("Americans") but state demonyms with a suffix
+// ("Texans, United States"): match the first comma segment, or every US state is missed.
 export function isDemonym(name: string, data: RefData): boolean {
   return data.demonyms.has(name.split(",")[0].trim().toLowerCase());
 }
 
-// Most-mentioned location of a level, ties broken by earliest mention.
-// Counting is by NAME, not featureId: GDELT can emit different feature ids
-// for the same place across mentions, which would split its own count.
+// Counted by NAME, not featureId: GDELT emits different feature ids for the same place,
+// which would split its count. Ties go to the earliest mention.
 function mostMentioned(
   candidates: GdeltLocation[],
   mentions: Map<string, number>
@@ -36,10 +31,6 @@ function mostMentioned(
   });
 }
 
-// The id of the region a container represents. ADM1 codes already embed
-// their country (USOR = Oregon) so they're globally unique as-is; country
-// containers use the FIPS code. The two namespaces can't collide (FIPS = 2
-// chars, ADM1 = 4).
 export function regionIdFor(location: GdeltLocation): string {
   if (ADM1.has(location.type)) return location.adm1Code || location.countryCode;
   return location.countryCode;
@@ -56,50 +47,29 @@ export type PlacementReason =
   | "adm1-only"
   | "country-only";
 
-/** The winner at one level, and what it beat. */
 export type LevelCandidate = {
   name: string;
-  /** GDELT type code. Type 3/4 is only ~71% cities — the rest are natural features, counties and landmarks, which is how an ocean gets pinned. */
   type: number;
   mentions: number;
-  /** How many distinct names at this level tied at `mentions`. >1 means the winner was chosen by earliest offset, not by evidence. */
   tiedAtTop: number;
-  /** Best name at this level *strictly below* the top count. Null when the level has only one distinct name, or all of them tie. */
   runnerUp: { name: string; mentions: number } | null;
 };
 
-/**
- * Why a story landed where it did. Deliberately not in `lib/types.ts` —
- * that file mirrors persisted/passed-on records, and this is one
- * function's account of its own decision, never persisted. `sourceCountry`
- * is deliberately not a field here: it's a real bias source (an outlet
- * mentioning its own country enough to fire `country-dominates`), but the
- * domain->country map belongs to `refdata` and joins downstream instead of
- * widening this rule's inputs.
- */
 export type PlacementTrace = {
   placement: Placement;
   reason: PlacementReason;
   city: LevelCandidate | null;
   adm1: LevelCandidate | null;
   country: LevelCandidate | null;
-  /** Mentions of the chosen location. 0 on a DROP (weak-city's cause is still readable off `city.mentions`). Cannot be 1 on a PIN — that's exactly what weak-city removed. */
   winnerMentions: number;
-  /** The chosen location tied at the top of its level and won on offset alone. */
   tieBroken: boolean;
-  /** adm1 mentions / city mentions. Compare against ADM1_DOMINANCE to see how near a miss it was. Null when either level is absent. */
   adm1Ratio: number | null;
-  /** country mentions / city mentions, against COUNTRY_DOMINANCE. */
   countryRatio: number | null;
-  /** Distinct surviving location names. */
   distinctLocations: number;
-  /** Surviving mentions in total. */
   totalMentions: number;
-  /** Locations removed by the demonym filter. */
   demonymsDropped: number;
 };
 
-/** Winner at a level plus the shape of the contest it won. */
 function summarize(
   candidates: GdeltLocation[],
   mentions: Map<string, number>
@@ -172,7 +142,6 @@ export function explainPlacement(article: Article, data: RefData): PlacementTrac
     demonymsDropped,
   };
 
-  /** The chosen level's winner, and whether it only won on offset. */
   const won = (level: LevelCandidate) => ({
     winnerMentions: level.mentions,
     tieBroken: level.tiedAtTop > 1,
@@ -197,9 +166,7 @@ export function explainPlacement(article: Article, data: RefData): PlacementTrac
         reason: "country-dominates",
       };
     }
-    // Last, so that a dominated weak city is still a container rather than a
-    // drop: both margins above were judged and cleared, and this rule may only
-    // take away pins it has evidence about.
+    // Last, so a dominated weak city still becomes a container rather than a drop.
     if (city.mentions < MIN_CITY_MENTIONS) {
       return {
         ...context,

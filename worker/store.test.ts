@@ -50,7 +50,6 @@ describe("r2Store", () => {
     expect(keys).toEqual(["archives/a.pmtiles", "archives/b.pmtiles"]);
     expect(calls).toHaveLength(2);
     expect(calls[1]).toContain("continuation-token=tok1");
-    // Not URLs: no scheme/host leaked into a key.
     for (const key of keys) expect(key.startsWith("http")).toBe(false);
   });
 

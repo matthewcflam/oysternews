@@ -3,14 +3,6 @@ import type { Article, GdeltLocation } from "../src/lib/types.ts";
 import { explainPlacement, isDemonym, placeStory, regionIdFor } from "./place.ts";
 import type { RefData } from "./refdata.ts";
 
-/**
- * Placement is the highest-risk pure module in the project: it is the rule that
- * failed a pre-registered abort criterion in its first form (§5.2), and the
- * replacement's two margins are fitted constants. These tests encode the
- * specific real-world cases from the audit, so a future "simplification" back to
- * specificity-first fails here rather than in the map.
- */
-
 const refdata = {
   countries: new Map(),
   nonCountries: new Set<string>(),
@@ -47,7 +39,6 @@ function article(locations: GdeltLocation[]): Article {
   };
 }
 
-/** `n` mentions of the same place, as GDELT emits them: one entry per mention. */
 function repeat(count: number, type: number, name: string, extra: Partial<GdeltLocation> = {}) {
   return Array.from({ length: count }, () => loc(type, name, extra));
 }
@@ -58,8 +49,6 @@ describe("the demonym trap", () => {
   });
 
   it("matches a US state demonym, which carries a country suffix", () => {
-    // The whole-string match that everyone writes first returns false here, and
-    // silently loses every US state. FINDINGS §10.
     expect(isDemonym("Texans, United States", refdata)).toBe(true);
   });
 
@@ -80,8 +69,6 @@ describe("Rule H — specificity unless dominated", () => {
   });
 
   it("sends Chicago x1 vs Minnesota x4 to the state container", () => {
-    // The audit case that killed the original rule: a Minnesota Twins story
-    // pinned to Chicago because Chicago was the more *specific* mention.
     const placement = placeStory(
       article([
         loc(3, "Chicago, Illinois, United States"),
@@ -103,8 +90,6 @@ describe("Rule H — specificity unless dominated", () => {
   });
 
   it("keeps the city when the country leads but does not reach 3x", () => {
-    // The overcorrection guard: a domestic article names its own country
-    // constantly, and pure dominance would send ~75% of stories to countries.
     const placement = placeStory(
       article([...repeat(3, 4, "Perth"), ...repeat(8, 1, "Australia")]),
       refdata
@@ -137,8 +122,6 @@ describe("Rule H — specificity unless dominated", () => {
   });
 
   it("breaks a tie on the earliest mention in the article", () => {
-    // Two mentions each, not one: at x1 the weak-city rule drops this before the
-    // tie-break is reachable, and the tie-break still has to work above it.
     const placement = placeStory(
       article([
         ...repeat(2, 4, "Later", { offset: 900 }),
@@ -158,7 +141,6 @@ describe("Rule H — specificity unless dominated", () => {
   });
 
   it("ignores demonyms when counting mentions", () => {
-    // "British" x5 must not dominate London x2 — it is an adjective, not a place.
     const placement = placeStory(
       article([...repeat(2, 4, "London, United Kingdom"), ...repeat(5, 1, "British")]),
       refdata
@@ -168,28 +150,18 @@ describe("Rule H — specificity unless dominated", () => {
   });
 });
 
-/**
- * Added 2026-08-14, from the independent judging draw (§5.2 decision 4). This is
- * the first rule in the project that DROPs a placement it was capable of making,
- * so the tests are mostly about where it must NOT fire — a drop rule that creeps
- * outward loses volume silently, and nothing downstream would report it.
- */
 describe("the weak-city DROP", () => {
   it("drops a city mentioned once", () => {
     expect(placeStory(article([loc(4, "Vatva"), loc(4, "Rajkot")]), refdata).kind).toBe("DROP");
   });
 
   it("pins the same city at two mentions", () => {
-    // The threshold is "more than once" and nothing else. If this test and the
-    // one above ever disagree about where the line sits, the constant was tuned.
     const placement = placeStory(article([...repeat(2, 4, "Vatva"), loc(4, "Rajkot")]), refdata);
     expect(placement.kind).toBe("PIN");
     expect(placement.location?.name).toBe("Vatva");
   });
 
   it("still containers a weak city that a region dominates", () => {
-    // Fires after both margins, so a story with a real regional signal keeps it.
-    // Reversing the order would rewrite placements the audit judged and liked.
     const placement = placeStory(
       article([loc(4, "Springfield"), ...repeat(2, 5, "Region")]),
       refdata
@@ -205,16 +177,11 @@ describe("the weak-city DROP", () => {
   });
 
   it("does not touch containers, which the same shape does not harm", () => {
-    // A country mentioned once scored 85.7% on the draw — better than containers
-    // overall. `winnerMentions === 1` is a pin pathology, not a general one.
     expect(placeStory(article([loc(1, "Country")]), refdata).kind).toBe("CONTAINER");
     expect(placeStory(article([loc(5, "Region")]), refdata).kind).toBe("CONTAINER");
   });
 
   it("does not fall through to a country mentioned twice", () => {
-    // The rejected alternative, and the reason it was rejected: on the draw this
-    // shape produced Dublin -> United Kingdom x2 and Canberra -> Singapore x2.
-    // Fall-through would move the error into the container number, not remove it.
     const trace = explainPlacement(
       article([loc(4, "Dublin, Dublin, Ireland"), ...repeat(2, 1, "United Kingdom")]),
       refdata
@@ -225,8 +192,6 @@ describe("the weak-city DROP", () => {
   });
 
   it("separates a weak-city drop from the two upstream drops", () => {
-    // The three DROPs cost different things: only weak-city discards a placement
-    // the rule could have made, so only its share measures what the rule costs.
     const reason = (a: Article) => explainPlacement(a, refdata).reason;
     expect(reason(article([]))).toBe("no-locations");
     expect(reason(article([loc(1, "British")]))).toBe("all-demonyms");
@@ -235,11 +200,6 @@ describe("the weak-city DROP", () => {
 });
 
 describe("the why trace", () => {
-  /**
-   * The trace's whole value is that it cannot disagree with the rule, so the
-   * first test is the one that would catch a future "optimisation" that
-   * reintroduces a second implementation.
-   */
   it("agrees with placeStory on every case above, by construction", () => {
     const cases = [
       article([...repeat(3, 4, "Perth"), loc(1, "Australia")]),
@@ -275,26 +235,13 @@ describe("the why trace", () => {
   });
 
   it("distinguishes an empty extraction from a filter that ate everything", () => {
-    // Both are DROPs and the old return value could not tell them apart. One is
-    // GDELT finding nothing; the other is the demonym filter working, and
-    // "the filter is too aggressive" would hide inside the merged bucket.
     expect(explainPlacement(article([]), refdata).reason).toBe("no-locations");
     const allDemonyms = explainPlacement(article([loc(1, "British"), loc(1, "Danish")]), refdata);
     expect(allDemonyms.reason).toBe("all-demonyms");
     expect(allDemonyms.demonymsDropped).toBe(2);
   });
 
-  /**
-   * The audit's Windsor Machines pin: a corporate earnings story whose every
-   * location was mentioned exactly once, placed confidently at Vatva because it
-   * happened to appear first. `winnerMentions === 1` with `tieBroken` is the
-   * mechanical signature of a story that has no place at all — the largest
-   * addressable failure class, and invisible in `{kind, location}`.
-   */
   it("drops the Windsor Machines pin instead of placing it at Vatva", () => {
-    // Until 2026-08-14 this was a confident PIN at Vatva, and the trace's job was
-    // only to say so. The judged draw made it a DROP: pins whose city was
-    // mentioned once scored 36.4% against 77.8% for the rest.
     const trace = explainPlacement(
       article([
         loc(1, "Italy", { offset: 40 }),
@@ -307,8 +254,6 @@ describe("the why trace", () => {
     expect(trace.placement.kind).toBe("DROP");
     expect(trace.reason).toBe("weak-city");
 
-    // The evidence that caused the drop survives on the trace: winnerMentions is
-    // 0 because nothing was chosen, but the contest it lost is still readable.
     expect(trace.winnerMentions).toBe(0);
     expect(trace.city?.name).toBe("Vatva, Gujarat, India");
     expect(trace.city?.mentions).toBe(1);
@@ -323,12 +268,6 @@ describe("the why trace", () => {
     expect(trace.city?.runnerUp).toEqual({ name: "Darwin", mentions: 1 });
   });
 
-  /**
-   * The BTCC case: the article previews Knockhill while recapping Thruxton, so
-   * the subject is mentioned half as often as the background. The rule cannot
-   * see aboutness, but the trace shows the contest was close — which is what
-   * separates this class from a decisive win.
-   */
   it("reports the runner-up it beat", () => {
     const trace = explainPlacement(
       article([...repeat(4, 4, "Thruxton"), ...repeat(2, 4, "Knockhill")]),
@@ -338,12 +277,6 @@ describe("the why trace", () => {
     expect(trace.city?.runnerUp).toEqual({ name: "Knockhill", mentions: 2 });
   });
 
-  /**
-   * The Davis Cup case: an Indian outlet mentions India 12 times against
-   * Seoul's 2, so country-dominates fires on a match played in Seoul. The ratio
-   * says how far past the margin it went, which is what distinguishes a genuine
-   * national story from source-country bias.
-   */
   it("reports how far each margin was cleared or missed", () => {
     const fired = explainPlacement(
       article([...repeat(2, 4, "Seoul"), ...repeat(12, 1, "India")]),
@@ -352,7 +285,6 @@ describe("the why trace", () => {
     expect(fired.reason).toBe("country-dominates");
     expect(fired.countryRatio).toBe(6);
 
-    // The near miss the margin exists to allow through as a pin.
     const missed = explainPlacement(
       article([...repeat(3, 4, "Perth"), ...repeat(8, 1, "Australia")]),
       refdata

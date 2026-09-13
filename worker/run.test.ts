@@ -4,8 +4,6 @@ import { LOCATION_COUNTRY, LOCATION_WORLD_CITY } from "../src/lib/types.ts";
 import { loadRefData, type RefData } from "./refdata.ts";
 import { formatSummary, type RunSummary, stampOfDate, toPlaced } from "./run.ts";
 
-// Against the REAL reference data, for the reason refdata.test.ts gives: the
-// thing that breaks is a data file, and a mock cannot break the same way.
 let data: RefData;
 beforeAll(async () => {
   data = await loadRefData();
@@ -44,8 +42,6 @@ describe("stampOfDate", () => {
   });
 
   it("uses UTC rather than the runner's local time", () => {
-    // A runner in any timezone must produce the same stamp for the same instant,
-    // because the stamp is compared against GDELT's UTC bundle names.
     expect(stampOfDate(new Date("2026-01-01T00:30:00.000Z"))).toBe("20260101003000");
   });
 });
@@ -81,7 +77,6 @@ describe("toPlaced", () => {
     expect(
       toPlaced(article({ domain: tier1 }), { kind: "PIN", location: location() }, data)?.tier1
     ).toBe(true);
-    // §2.5 is a membership test, not a substring test. `notbbc.co.uk` is not the BBC.
     expect(
       toPlaced(article({ domain: `not${tier1}` }), { kind: "PIN", location: location() }, data)
         ?.tier1
@@ -98,8 +93,6 @@ describe("toPlaced", () => {
   });
 
   it("keeps the article's own date, not the run's", () => {
-    // Freshness (§2.3) and the 48-hour tier-1 clock both read this field; using
-    // the run time would make every story permanently fresh.
     expect(
       toPlaced(article({ date: "20260810000000" }), { kind: "PIN", location: location() }, data)
         ?.date
@@ -157,13 +150,10 @@ describe("formatSummary", () => {
   });
 
   it("warns when tier-1 goes to zero — §8's silent degradation", () => {
-    // Nothing else fails when this happens, which is the entire reason it is
-    // called out rather than left to be inferred from the counts.
     expect(formatSummary(summary({ tier1Groups: 0 }))).toContain("degraded to plain salience");
   });
 
   it("does not warn about tier-1 on a run with no groups at all", () => {
-    // That run has a much louder problem and the invariants already said so.
     expect(
       formatSummary(
         summary({
@@ -196,9 +186,6 @@ describe("formatSummary", () => {
   });
 
   it("never lets a relaxed count band read as an ordinary success", () => {
-    // The band standing down is the escape from a fail-forever wedge, but the run
-    // still published output its own history calls implausible. §8's whole
-    // premise is that the summary is the only interface to these failures.
     const text = formatSummary(summary({ bandRelaxed: true }));
     expect(text).toContain("WARN");
     expect(text).toContain("count band stood down");

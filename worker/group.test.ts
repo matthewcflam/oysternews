@@ -30,8 +30,6 @@ function article(patch: Partial<PlacedArticle> = {}): PlacedArticle {
 
 describe("the theme ceiling", () => {
   it("excludes themes that appear on more than the ceiling of articles", () => {
-    // CRISISLEX_CRISISLEXREC is on 39.4% of all GDELT articles. Without the
-    // ceiling it alone joins 39% of the corpus into one story. FINDINGS §8.
     const articles = [
       ...Array.from({ length: 9 }, () => article({ themes: ["CRISISLEX", "RARE_A"] })),
       article({ themes: ["RARE_B"] }),
@@ -143,8 +141,6 @@ describe("grouping", () => {
   });
 
   it("collapses exact syndication regardless of themes", () => {
-    // 22% of titles are duplicates, syndication 1.59x (§4). The same headline in
-    // the same cell is the same story even when GDELT tags it differently.
     const groups = groupArticles(
       [
         article({ title: "Markets close higher on jobs data", themes: ["A"] }),
@@ -157,9 +153,6 @@ describe("grouping", () => {
   });
 
   it("does NOT let title dedup alone invert the salience signal", () => {
-    // §2.5's whole argument for real grouping: three outlets writing their own
-    // headlines about one event must become a 3-domain story, not three
-    // 1-domain stories that rank below a syndicated wire copy.
     const groups = groupArticles(
       [
         article({
@@ -185,9 +178,6 @@ describe("grouping", () => {
   });
 
   it("path 5: a group assembled from duplicated members counts each domain once", () => {
-    // §7 path 5 / §3.5: a group present in BOTH shard families must not count
-    // its domains twice. state.ts dedupes by (domain, url); this asserts the
-    // salience that results is identical either way.
     const members = [
       article({
         domain: "a.com",
@@ -234,8 +224,6 @@ describe("grouping", () => {
   });
 
   it("keeps a stable id while the oldest member stays in the window", () => {
-    // A hash over all members would change every time one more outlet picked
-    // the story up, and the id is what makes selection reproducible run to run.
     const oldest = article({
       date: "20260811000000",
       url: "https://first.com/1",

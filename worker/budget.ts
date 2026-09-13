@@ -41,15 +41,11 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
 
   for (let zoom = 0; zoom <= maxZoom; zoom++) {
     const used = new Map<string, number>();
-    // Coordinate cap: below SPIDERFY_ZOOM one story per coord (GDELT centroid collision).
-    // invisible, wasting a budget slot. Lifts at SPIDERFY_ZOOM, where the
-    // client can spread the stack into legs and leaves. See lib/spiderfy.ts.
     const occupied = new Set<string>();
     const capped = zoom < SPIDERFY_ZOOM;
 
-    // Pass 1: an already-assigned group still occupies its tile here. This is
-    // what makes minzoom monotonic — deeper zooms inherit their ancestors'
-    // occupants and cannot evict them.
+    // Pass 1: an assigned group keeps occupying its tile at deeper zooms, which is what
+    // keeps minzoom monotonic. Removing this pass lets deeper zooms evict it.
     for (const group of ranked) {
       const assigned = minzoom.get(group.id);
       if (assigned === undefined) continue;
@@ -59,12 +55,9 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
       if (capped) occupied.add(coordKey(group.lon, group.lat));
     }
 
-    // Pass 2: fill what is left, best first.
     for (const group of ranked) {
       if (minzoom.has(group.id)) continue;
       const coordinate = coordKey(group.lon, group.lat);
-      // Deferred, not dropped: it becomes eligible again at SPIDERFY_ZOOM, and
-      // because assignment is permanent the deferral cannot break monotonicity.
       if (capped && occupied.has(coordinate)) continue;
       const { x, y } = tileOf(group.lat, group.lon, zoom);
       const key = tileKey(x, y);
@@ -87,12 +80,6 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
   return { groups: assigned, overflow };
 }
 
-// The country-top floor: top 1 per country, EXEMPT from the tile budget,
-// minzoom 0. At z0 the whole planet is one tile, so the budget alone would
-// put only 12-20 stories on the entire world map; this keeps every country
-// with news represented regardless of salience. Ranks on the same
-// comparator, so a country's lowest-salience-but-only tier-1 story is still
-// its representative — intended, not a side effect.
 export function countryTopGroups(groups: StoryGroup[]): StoryGroup[] {
   const best = new Map<string, StoryGroup>();
 

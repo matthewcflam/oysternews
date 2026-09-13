@@ -101,13 +101,8 @@ export async function loadRefData(): Promise<RefData> {
   return refdata;
 }
 
-/**
- * The build-time coverage check §3.2 requires, plus the §3.4 trap assertion.
- *
- * The trap check has to live here rather than in scripts/build-crosswalk.ts,
- * because Natural Earth has no FIPS_10 for Israel at all — the generator cannot
- * assert what only the override file supplies. Here the merged view exists.
- */
+// The FIPS/ISO trap check lives here, not in build-crosswalk.ts: Natural Earth has no
+// FIPS_10 for Israel, so only the merged view with overrides can be asserted.
 export function assertUsable(data: RefData): void {
   const problems: string[] = [];
 
@@ -128,10 +123,8 @@ export function assertUsable(data: RefData): void {
     problems.push(`blocklist is empty`);
   }
 
-  // §3.4. Four FIPS codes mean an entirely different country under ISO, and a
-  // naive join produces correct-looking output with Russian news in the Balkans.
-  // UK is unassigned in ISO and fails loudly rather than silently, which is why
-  // it is checked too.
+  // These FIPS codes mean a different country under ISO, and a naive join produces
+  // correct-looking output (Russian news in the Balkans). UK is unassigned in ISO.
   const traps: Record<string, string> = { RS: "RU", CH: "CN", IS: "IL", AS: "AU", UK: "GB" };
   for (const [fips, iso] of Object.entries(traps)) {
     const got = data.countries.get(fips)?.iso;
@@ -140,9 +133,6 @@ export function assertUsable(data: RefData): void {
     }
   }
 
-  // §5's ordering guarantee is about *when* the lists are consulted, but an
-  // overlap would make the ordering load-bearing in a way nobody would notice.
-  // There is none today; this makes a future edit that introduces one visible.
   const overlap = [...data.tier1].filter((domain) => data.blocklist.has(domain));
   if (overlap.length > 0) {
     problems.push(`domains in both tier-1 and blocklist: ${overlap.join(", ")}`);
@@ -153,14 +143,8 @@ export function assertUsable(data: RefData): void {
   }
 }
 
-/**
- * Publisher country from a domain: explicit override, then ccTLD, then unknown.
- *
- * Returns "" for unknown, and callers must EXCLUDE that from the distinct-country
- * count rather than treat it as a country. See data/source-countries.json — the
- * unresolved tail is mostly US local broadcast stations, and bucketing them
- * together would invent a shared nationality for unrelated publishers.
- */
+// Returns "" when unknown. Callers must exclude "" from distinct-country counts: the
+// unresolved tail is mostly US local stations, not one shared nationality.
 export function sourceCountry(domain: string, data: RefData): string {
   const clean = domain.trim().toLowerCase();
   if (!clean) return "";
@@ -170,8 +154,6 @@ export function sourceCountry(domain: string, data: RefData): string {
 
   const parts = clean.split(".");
   const tld = parts[parts.length - 1];
-  // Two-letter TLDs are ccTLDs; everything else (.com, .net, .info) carries no
-  // country information at all.
   if (tld.length !== 2) return "";
 
   const exception = data.sourceCountries.cctldExceptions.get(tld);

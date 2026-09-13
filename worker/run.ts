@@ -93,14 +93,11 @@ export type RunSummary = {
   tier1Groups: number;
   countryTop: number;
   overflow: number;
-  /** The region panel index: regions covered and total rows. */
   regions: number;
   regionRows: number;
-  /** Per-country city shards: countries with at least one clustered city, and clusters total. */
   cityShards: number;
   cityRecords: number;
   published: boolean;
-  /** The count band stood down because publication had been blocked past 2× cadence. */
   bandRelaxed: boolean;
   violations: string[];
   archive: string;
@@ -112,7 +109,6 @@ export type RunSummary = {
 export type RunOptions = {
   store: ArchiveStore;
   now?: Date;
-  /** Cap on bundles fetched. Lowered by hand for a smoke run against real GDELT. */
   cap?: number;
   healthcheckUrl?: string;
 };
@@ -134,7 +130,6 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   const data = await loadRefData();
   assertUsable(data);
 
-  // --- fetch ---------------------------------------------------------------
   const watermark = await lastWatermark(store);
   const newest = await newestStamp();
   const stamps = stampsToFetch(watermark, newest, options.cap ?? MAX_BUNDLES);
@@ -159,7 +154,6 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     noTitle += parsed.noTitle;
   }
 
-  // --- filter, place -------------------------------------------------------
   const filtered = filterArticles(articles, data);
   const placed: PlacedArticle[] = [];
   let dropped = 0;
@@ -173,7 +167,6 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   await appendShards(store, runStamp, placed);
   const pool = await readPool(store, now.getTime());
 
-  // --- group, rank, budget -------------------------------------------------
   const grouped = groupArticles(pool.articles, { now: now.getTime() });
   const ranked = rankGroups(grouped);
   const { groups: budgeted, overflow } = assignMinzoom(ranked);
@@ -187,10 +180,8 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   const cities = buildCityIndex(budgeted);
   const cityStats = cityIndexStats(cities);
 
-  // --- tiles ---------------------------------------------------------------
   await buildTiles(budgeted, countryTop, WORK_DIR, ARCHIVE_PATH);
 
-  // --- publish -------------------------------------------------------------
   const result = await publish({
     store,
     archivePath: ARCHIVE_PATH,
@@ -299,11 +290,7 @@ async function main(): Promise<void> {
   }
   const store = r2Store({ accountId, accessKeyId, secretAccessKey });
 
-  // Here rather than inside run(): the credential enters the process at this
-  // line and nowhere else, and run() takes an injected store precisely so a
-  // caller can hand it a fake. A reachability probe belongs to the real one.
   await assertStoreReachable(store);
-  // The S3 endpoint answering says nothing about the host the browser reads.
   await assertPublicHostReachable();
 
   const summary = await run({

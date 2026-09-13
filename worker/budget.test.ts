@@ -29,21 +29,12 @@ function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   };
 }
 
-/** `count` groups at the SAME coordinate, descending in salience — one city. */
 function crowd(count: number, lat = 40, lon = -74): StoryGroup[] {
   return Array.from({ length: count }, (_, i) =>
     group({ id: `g${String(i).padStart(3, "0")}`, lat, lon, salience: count - i })
   );
 }
 
-/**
- * `count` groups at DISTINCT coordinates close enough to share a tile.
- *
- * The distinction matters since the 2026-08-14 coordinate cap: below
- * `SPIDERFY_ZOOM` a coordinate holds one story, so `crowd` now exercises that
- * rule and `spread` is what exercises the per-tile budget on its own. 0.001° is
- * ~80m and a z12 tile is ~0.088° wide, so these stay in one tile everywhere.
- */
 function spread(count: number, lat = 40, lon = -74): StoryGroup[] {
   return Array.from({ length: count }, (_, i) =>
     group({
@@ -67,7 +58,6 @@ describe("tileOf", () => {
   });
 
   it("clamps the poles and the antimeridian instead of running off the grid", () => {
-    // y grows southward in Web Mercator, so the north pole is y=0.
     expect(tileOf(90, 180, 2)).toEqual({ x: 3, y: 0 });
     expect(tileOf(-90, -180, 2)).toEqual({ x: 0, y: 3 });
   });
@@ -82,8 +72,8 @@ describe("the per-tile budget", () => {
   it("defers the weakest in a crowded tile", () => {
     const { groups } = assignMinzoom(crowd(20), { k: 5 });
     const byId = new Map(groups.map((g) => [g.id, g.minzoom]));
-    expect(byId.get("g000")).toBe(0); // strongest
-    expect(byId.get("g019")).toBeGreaterThan(0); // weakest
+    expect(byId.get("g000")).toBe(0);
+    expect(byId.get("g019")).toBeGreaterThan(0);
   });
 
   it("selects strictly by the comparator, so tier-1 wins a scarce slot", () => {
@@ -99,9 +89,6 @@ describe("the per-tile budget", () => {
   });
 
   it("keeps minzoom monotonic — a group selected at z is never missing at z+1", () => {
-    // §5's trap: "a feature can win its z5 tile and lose its z6 tile". Assigned
-    // groups keep occupying their tile at deeper zooms, so nothing can evict
-    // them. Asserted by replaying the selection at every zoom.
     const { groups } = assignMinzoom(crowd(40), { k: 3, maxZoom: 6 });
     for (let zoom = 0; zoom <= 6; zoom++) {
       const visible = groups.filter((g) => g.minzoom <= zoom).map((g) => g.id);
@@ -128,10 +115,6 @@ describe("the per-tile budget", () => {
   });
 
   it("lets local competition stay local — a US crowd cannot bury a lone story elsewhere", () => {
-    // §2.4: "the Strait of Hormuz is never buried by an American election."
-    // Asserted from z1, because at z0 the planet is ONE tile and competition
-    // really is global there — which is exactly the hole the §2.4 country-top
-    // floor layer exists to fill, not something the budget is meant to fix.
     const { groups } = assignMinzoom(
       [...spread(50, 40, -74), group({ id: "hormuz", lat: 26.6, lon: 56.3, salience: 0.01 })],
       { k: 5 }
@@ -140,29 +123,19 @@ describe("the per-tile budget", () => {
   });
 
   it("admits ONE story per coordinate below the spiderfy zoom", () => {
-    // §6 decision 1's coordinate cap. GDELT gives city centroids, so a second
-    // story at the same coordinate is drawn exactly underneath the first — it
-    // was invisible and it was holding a budget slot. Measured on the live
-    // archive, two thirds of every visible story was in such a stack.
     const { groups } = assignMinzoom(crowd(12), { k: 15 });
     const shallow = groups.filter((g) => g.minzoom < SPIDERFY_ZOOM);
-    expect(shallow.map((g) => g.id)).toEqual(["g000"]); // the most salient
+    expect(shallow.map((g) => g.id)).toEqual(["g000"]);
     expect(groups.filter((g) => g.minzoom === SPIDERFY_ZOOM)).toHaveLength(11);
   });
 
   it("lifts the cap exactly where the client can spread the stack", () => {
-    // The deferral is not a drop: at SPIDERFY_ZOOM the whole stack is in the
-    // tiles, which is the moment lib/spiderfy.ts spreads it into legs and
-    // leaves. One number, imported by both halves.
     const { groups, overflow } = assignMinzoom(crowd(12), { k: 15 });
     expect(overflow).toBe(0);
     expect(groups.every((g) => g.minzoom <= SPIDERFY_ZOOM)).toBe(true);
   });
 
   it("frees the slots a stack used to hold, so other places get in", () => {
-    // The point of the cap, stated as a measurement: 50 co-located New York
-    // stories used to consume five of z0's five slots and show one dot. Now
-    // they consume one, and the rest of the world fits at z0.
     const { groups } = assignMinzoom(
       [...crowd(50, 40, -74), group({ id: "hormuz", lat: 26.6, lon: 56.3, salience: 0.01 })],
       { k: 5 }
@@ -171,8 +144,6 @@ describe("the per-tile budget", () => {
   });
 
   it("keeps minzoom monotonic across the cap boundary", () => {
-    // The cap defers rather than drops, and assignment stays permanent, so the
-    // §5 trap ("wins its z5 tile, loses its z6 tile") cannot reappear at z9.
     const { groups } = assignMinzoom([...crowd(20), ...crowd(20, 51.5, -0.12)], {
       k: 4,
       maxZoom: 11,
@@ -185,13 +156,7 @@ describe("the per-tile budget", () => {
   });
 
   it("reports the overflow rather than dumping it at the deepest zoom", () => {
-    // Co-located stories (GDELT city centroids, §6 decision 1) collide at every
-    // zoom, so the remainder cannot be deferred into visibility. Showing it
-    // anyway would break §9's density target; it is counted instead.
     const { groups, overflow } = assignMinzoom(crowd(100), { k: 1, maxZoom: 3 });
-    // ONE gets in, not one per zoom: 100 stories on the identical coordinate
-    // share a tile at every zoom level, so the deeper zooms free no slots at
-    // all. This is the sharpest statement of the co-location cost in the suite.
     expect(overflow).toBe(99);
     expect(groups.filter((g) => g.minzoom > 3).length).toBe(99);
   });
@@ -210,7 +175,6 @@ describe("the country-top floor layer", () => {
   });
 
   it("represents a country by its tier-1 story even when that story is small", () => {
-    // §2.4: intended effect, not a side effect.
     const groups = countryTopGroups([
       group({ id: "big", countryCode: "GB", salience: 40 }),
       group({ id: "small-tier1", countryCode: "GB", salience: 0.5, tier1Fresh: true }),

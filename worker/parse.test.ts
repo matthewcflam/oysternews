@@ -10,7 +10,6 @@ import {
   unescapeEntities,
 } from "./parse.ts";
 
-/** Build a GKG row with the fields this project reads placed at their real indices. */
 function row(
   fields: Partial<{
     date: string;
@@ -31,10 +30,7 @@ function row(
   cells[10] = fields.locations ?? "";
   cells[18] = fields.image ?? "";
   cells[26] = fields.extras ?? "<PAGE_TITLE>A title</PAGE_TITLE>";
-  // V2GCAM is 69.4% of a real bundle's bytes and must never be materialized.
   cells[17] = "wc:100,c1.1:5,c12.1:9";
-  // Truncate AFTER filling: assigning cells[26] on a shorter array would grow it
-  // back to 27 and quietly make every short-row test pass for the wrong reason.
   return cells.slice(0, columnCount).join("\t");
 }
 
@@ -44,8 +40,6 @@ describe("the schema canary", () => {
   });
 
   it("accepts MORE than 27 — GDELT appending a column must not take the map down", () => {
-    // A strict `!== 27` fails closed on a benign additive change, and raw GKG is
-    // the only access path with no fallback (§4). This is why the canary is >=.
     expect(columns(row({}, 31))).not.toBeNull();
   });
 
@@ -54,7 +48,7 @@ describe("the schema canary", () => {
   });
 
   it("counts a trailing empty column rather than dropping it", () => {
-    const short = "a\t".repeat(26); // 27 fields, the last one empty
+    const short = "a\t".repeat(26);
     expect(columns(short)).not.toBeNull();
   });
 });
@@ -78,7 +72,7 @@ describe("titles", () => {
   it("treats a record with no title as unusable", () => {
     const { article, short } = parseRow(row({ extras: "<OTHER>x</OTHER>" }));
     expect(article).toBeNull();
-    expect(short).toBe(false); // not a schema failure — a content one
+    expect(short).toBe(false);
   });
 
   it("lowercases the domain, because SourceCommonName is not normalized", () => {
@@ -95,7 +89,6 @@ describe("locations", () => {
     expect(location).toMatchObject({
       type: 4,
       name: "Perth, Western Australia, Australia",
-      // FIPS, not ISO: AS is Australia here, and ISO AS is American Samoa (§3.4).
       countryCode: "AS",
       adm1Code: "AS08",
       lat: -31.9333,
@@ -124,18 +117,12 @@ describe("locations", () => {
 });
 
 describe("the sharing image", () => {
-  // V2.1SHARINGIMAGE (column 18) is the publisher's own og:image, and it ends up
-  // in an <img src> in the browser. This is the ONLY place it is validated, so
-  // these cases are the whole of the trust boundary between GDELT and the DOM.
-
   it("reads the publisher's image off column 18", () => {
     const { article } = parseRow(row({ image: "https://cdn.example.com/a.jpg" }));
     expect(article?.image).toBe("https://cdn.example.com/a.jpg");
   });
 
   it("refuses every scheme but http and https", () => {
-    // `javascript:` is the reason this is an allowlist. `data:` would let one
-    // row carry an arbitrarily large payload into a tile.
     for (const hostile of [
       "javascript:alert(1)",
       "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
@@ -147,8 +134,6 @@ describe("the sharing image", () => {
   });
 
   it("returns empty for junk rather than passing it through", () => {
-    // 12.2% of real records have no image at all, so "" is the ordinary answer
-    // and every failure path has to produce the same one.
     expect(parseSharingImage("")).toBe("");
     expect(parseSharingImage("   ")).toBe("");
     expect(parseSharingImage("not a url")).toBe("");
@@ -156,12 +141,9 @@ describe("the sharing image", () => {
   });
 
   it("takes the first usable value when the field is multi-valued", () => {
-    // Documented as multi-valued; 6 of 1,085 sampled rows carried a ';'. The
-    // publisher's order is the preference order.
     expect(parseSharingImage("https://a.test/1.jpg;https://b.test/2.jpg")).toBe(
       "https://a.test/1.jpg"
     );
-    // A hostile value first must not poison the usable one behind it.
     expect(parseSharingImage("javascript:alert(1);https://b.test/2.jpg")).toBe(
       "https://b.test/2.jpg"
     );
@@ -189,7 +171,7 @@ describe("parseBundle", () => {
     ].join("\n");
 
     const result = parseBundle(csv);
-    expect(result.rows).toBe(4); // the blank line is not a row
+    expect(result.rows).toBe(4);
     expect(result.shortRows).toBe(1);
     expect(result.noTitle).toBe(1);
     expect(result.articles.length).toBe(2);

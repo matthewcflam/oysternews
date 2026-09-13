@@ -2,15 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { PlacedArticle, StoryGroup } from "../src/lib/types.ts";
 import { compareGroups, parseGkgDate, rankGroups, salienceOf, summarise } from "./rank.ts";
 
-/**
- * HANDOFF.md §7 names five tier-1 paths as required coverage. They are numbered
- * in the test titles below so the mapping stays checkable.
- */
-
 const HOUR = 3600 * 1000;
 const NOW = Date.UTC(2026, 7, 12, 12, 0, 0);
 
-/** GKG date `hoursAgo` before NOW. */
 function gkg(hoursAgo: number): string {
   const d = new Date(NOW - hoursAgo * HOUR);
   const pad = (n: number, w = 2) => String(n).padStart(w, "0");
@@ -77,8 +71,6 @@ describe("salience", () => {
   });
 
   it("excludes unresolved publisher countries rather than bucketing them", () => {
-    // Bucketing "" as a country would give every unresolved publisher a shared
-    // nationality and inflate the border-crossing term for purely local stories.
     const stats = summarise(
       [
         article({ domain: "a.com", sourceCountry: "" }),
@@ -104,8 +96,6 @@ describe("tier-1 freshness (§6 decision 10 — newest, not oldest)", () => {
   });
 
   it("renews from the NEWEST tier-1 article — a follow-up piece extends the window", () => {
-    // Against the OLDEST, a story a tier-1 outlet is still actively covering
-    // would expire mid-coverage.
     const stats = summarise(
       [
         article({ tier1: true, date: gkg(70), domain: "old.com" }),
@@ -142,7 +132,6 @@ describe("the §2.5 comparator", () => {
   });
 
   it("path 4: with no tier-1 anywhere, ranking is exactly salience order", () => {
-    // The fallback path IS the original path — not a special case.
     const groups = [
       group({ id: "a", salience: 3 }),
       group({ id: "b", salience: 7 }),

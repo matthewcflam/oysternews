@@ -6,26 +6,20 @@ import type { StoryGroup } from "../src/lib/types.ts";
 export const STORIES_LAYER = "stories";
 export const COUNTRY_LAYER = "country-top";
 
-// Forward-slash literal, never `path.join`: this is an argument to `bash`,
-// not a path for this process, and `path.join` returns backslashes on
-// Windows, which bash misreads as an escape (`scriptsrun-tippecanoe.sh: No
-// such file or directory`).
+// Forward slashes, never path.join: this is an argument to bash, and path.join's
+// backslashes on Windows are read by bash as escapes.
 const SCRIPT = "scripts/run-tippecanoe.sh";
 
-// Same hazard as SCRIPT: path.join emits backslashes on Windows, which don't
-// survive the argv boundary into bash. run-tippecanoe.sh expects forward
-// slashes ("Node on Windows hands over C:/Users/x"); a no-op on Linux.
+// Same hazard as SCRIPT: backslashes don't survive the argv boundary into bash.
 const posix = (value: string): string => value.replaceAll("\\", "/");
 
-// tippecanoe object MUST sibling geometry/properties, not nested — nesting
-// silently ignores minzoom. Requires tippecanoe >= 2.52.0 (earlier versions
-// have a bug that drops features with minzoom). See docs/DESIGN.md#the-tippecanoe-2-49-0-post-mortem.
+// The tippecanoe object must be a sibling of geometry/properties: nested, minzoom is
+// silently ignored. Needs tippecanoe >= 2.52.0 (older versions drop such features).
 function featureOf(group: StoryGroup): unknown {
   return {
     type: "Feature",
     geometry: { type: "Point", coordinates: [group.lon, group.lat] },
-    // Feature level, beside geometry/properties — see note above before
-    // moving it. Must stay a number: {"minzoom": "0"} is silently discarded.
+    // Must stay a number: {"minzoom": "0"} is silently discarded.
     tippecanoe: { minzoom: group.minzoom },
     properties: {
       title: group.title,
@@ -74,9 +68,7 @@ export async function buildTiles(
   await runTippecanoe([
     "--force",
     "--name=sonder-stories",
-    // -q suppresses tippecanoe's per-tile progress line, which is tens of
-    // thousands of characters long and buries the run summary/stack trace
-    // after it in any captured log.
+    // -q: the per-tile progress line buries the run summary and stack trace in CI logs.
     "-q",
     "-Z0",
     "-z12",
