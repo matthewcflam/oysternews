@@ -1,25 +1,22 @@
 # Oyster — Design
 
-This is the single authoritative design document for Oyster. It replaces
-`HANDOFF.md` (archived at `docs/archive/HANDOFF-2026-08.md`), `docs/modes-2-3-handoff.md`
-and `docs/ui-refresh-2026-08.md` (both archived at `docs/archive/`) as the place
-rationale lives. Two documents remain primary evidence rather than being
-absorbed here — `spikes/gdelt/FINDINGS.md` and `spikes/basemap/CASE-STUDY.md` —
+This is the single authoritative design document for Oyster. It replaces the
+earlier project handoff notes as the place rationale lives. Two documents
+remain primary evidence rather than being absorbed here —
+`docs/research/gdelt-findings.md` and `docs/research/basemap-case-study.md` —
 because they are measurement logs, not design narrative, and this doc cites
 them rather than restating every number.
 
 Headings in this file are **stable slugs**: `docs/DESIGN.md#tiles-budget` will
 keep pointing at the tile-budget chapter even if chapters are reordered.
 Code comments should reference this file by slug, not by a section number —
-the numbering schemes in the archived documents (`HANDOFF.md`'s `§N.M`, an
-informal `§4` inside newer work) are exactly the drift this file exists to
-end.
+the section-numbering schemes of the earlier handoff notes are exactly the
+drift this file exists to end.
 
 Every chapter below ends with **Rejected Alternatives**: what was tried,
 what it measured, and why it lost. Nothing in this document is invented —
 every number, threshold, and named constant is transcribed from a source
-file or from `HANDOFF.md`, `FINDINGS.md`, `CASE-STUDY.md`, or the two
-ui-refresh handoffs.
+file, the earlier handoff notes, or the two research documents above.
 
 ---
 
@@ -60,7 +57,7 @@ Two consequences that recur throughout this document:
 
 ## Data Reality
 
-Everything here rests on `spikes/gdelt/FINDINGS.md`, a real measurement pass
+Everything here rests on `docs/research/gdelt-findings.md`, a real measurement pass
 against live GDELT data (four bundles on 2026-08-07, then twelve bundles
 across three separate hours of the clock on 2026-08-08/09) run before any
 production code was written.
@@ -189,8 +186,8 @@ meaningful without a live store.
 ### The `.ts`-extension import rule
 
 `worker/` imports use relative paths with an explicit `.ts` extension
-(`"./budget.ts"`, `"../lib/types.ts"`), never the `@/` alias `app/` and
-`components/` use. `@/` is a TypeScript path mapping that Next.js and
+(`"./budget.ts"`, `"../src/lib/types.ts"`), never the `@/` alias `src/`
+uses. `@/` is a TypeScript path mapping that Next.js and
 Vitest resolve, but plain Node does not — and `worker/run.ts` runs under
 plain Node in GitHub Actions. An `@/` import inside `worker/` would fail at
 runtime while passing `tsc`, `vitest`, and `next build` cleanly, because
@@ -203,7 +200,7 @@ imports a *value* from it.
 
 ### Rejected Alternatives
 
-- **Using the `@/` alias inside `worker/` for consistency with `app/`.**
+- **Using the `@/` alias inside `worker/` for consistency with `src/`.**
   Would build and typecheck cleanly, then fail at 2am in GitHub Actions
   with no local reproduction — rejected in favor of the explicit,
   ugly-but-correct relative-with-extension form.
@@ -247,7 +244,7 @@ at both levels would send every domestic story to a country pin.
 
 ### The abort criterion, and that it fired
 
-Before any accuracy audit ran, `HANDOFF.md §5.1` fixed a kill criterion in
+Before any accuracy audit ran, the project handoff fixed a kill criterion in
 writing: 50 random post-filter, post-placement records, hand-judged
 CORRECT/WRONG/UNJUDGEABLE, scored separately for PIN and CONTAINER with 95%
 Wilson confidence intervals. Thresholds: PIN ≥70% proceed, 50–70%
@@ -651,7 +648,7 @@ shaped this:
    labels across `country_label`/`state_label`/`city_label`/`continent_label`
    source-layers; OpenFreeMap uses a single `place` layer discriminated by a
    `class` property. MapTiler has already changed its own schema once.
-   `lib/labels.ts` discriminates by provider.
+   `src/lib/labels.ts` discriminates by provider.
 2. Label zoom ranges differ by provider (country z2–12 on MapTiler, z0–9 on
    OpenFreeMap; state z2–11 vs z5–8) — the default camera zoom was
    originally 1.5, at which no country labels render on either provider, so
@@ -675,7 +672,7 @@ anywhere in this path. City and continent labels need a different
 mechanism entirely — see `#cities-continents`.
 
 **Where a name is allowed to become an id.** The search box ("Where to
-next?", `components/SearchBar.tsx`) necessarily matches on typed names —
+next?", `src/components/SearchBar.tsx`) necessarily matches on typed names —
 that is what search means — which looks like exactly the trap the rule
 above exists to avoid. The resolution is where the join happens, not
 whether it happens: `scripts/build-boundaries.ts` already derives every
@@ -683,7 +680,7 @@ region id from Natural Earth for the archive and `region-bbox.json`, off
 the same `outline()` calls. Carrying a `name` (and `alt` aliases) alongside
 that id and emitting `public/place-index.json` is the *first* join, not a
 second one — a name only ever rides along with an id the build has already
-decided. The browser (`lib/place-search.ts`) matches a typed string against
+decided. The browser (`src/lib/place-search.ts`) matches a typed string against
 that committed table and reads off its id; it never derives an id from a
 string itself. An id search cannot resolve to is, by construction, absent
 from the table, which `scripts/place-index.test.ts`'s committed-artifact
@@ -722,7 +719,7 @@ Indonesia/Timor-Leste) — logged loudly at load time rather than "fixed"
 without evidence from both sides of a genuinely disputed or ambiguous
 boundary.
 
-`lib/flag.ts` independently guards against a related slicing bug: a
+`src/lib/flag.ts` independently guards against a related slicing bug: a
 `CONT:EU` continent id being mis-sliced as if it were a two-letter country
 code and read as `"CO"` → Colombia in the region-panel breadcrumb. Caught
 and fixed with an explicit `FIPS_SHAPE` regex rather than assumed safe by
@@ -775,7 +772,7 @@ sequentially would add 12–36 seconds to every run; pooled concurrency plus
 one content-hashed directory prefix means retention only has to track one
 string, not one per country.
 
-**Browser side** (`lib/cities.ts`): a country's city shard is fetched
+**Browser side** (`src/lib/cities.ts`): a country's city shard is fetched
 lazily on first city-label click in that country and memoized. **A 404 is
 explicitly normal**, not an error — a country with no clustered cities
 simply has no shard published at all (`worker/cities.ts` skips writing
@@ -793,7 +790,7 @@ silent misattribution rather than an honest "no data here."
 
 ### Continents
 
-`lib/continents.ts` resolves a `continent_label` click through a **closed,
+`src/lib/continents.ts` resolves a `continent_label` click through a **closed,
 seven-entry table** (`CONT:AF`, `CONT:AN`, `CONT:AS`, `CONT:EU`, `CONT:NA`,
 `CONT:OC`, `CONT:SA`), not a geometry hit-test — there is no continent
 boundary layer in `boundaries.pmtiles` to hit-test against. The join trap
@@ -805,7 +802,7 @@ mapped into the single `CONT:OC` id inside `NAME_TO_ID`, found by checking
 the actual label text against the actual reference data rather than
 assuming the two would agree.
 
-`worker/publish.ts` bumped `REGIONS_VERSION` (`lib/types.ts` `Manifest`)
+`worker/publish.ts` bumped `REGIONS_VERSION` (`src/lib/types.ts` `Manifest`)
 from 1 to 2 specifically for the arrival of `CONT:*` keys in the region
 index. A manifest at version 1 (or with the field absent) must be read by
 the browser as "this index has not been extended to continents yet" —
@@ -904,13 +901,13 @@ naming it first 404s the glyph ranges on the keyless fallback.
 
 ### The selection triangle and the opening-card bubbles
 
-The selection wedge (`lib/pin.ts`) is rasterized in TypeScript rather than
+The selection wedge (`src/lib/pin.ts`) is rasterized in TypeScript rather than
 shipped as an image asset — this repo has no binary image assets by
 policy, so a colour used in two places (the map's paint palette and a
 sprite file) cannot drift, because there is only one file. `MARK` is
-imported from `lib/layers.ts` into `lib/pin.ts` for exactly this reason.
+imported from `src/lib/layers.ts` into `src/lib/pin.ts` for exactly this reason.
 
-The bubbles (`components/StoryBubbles.tsx`, `lib/bubble.ts`) caption **the top
+The bubbles (`src/components/StoryBubbles.tsx`, `src/lib/bubble.ts`) caption **the top
 five stories in the current viewport** — the same ranking, from the same
 `queryRenderedFeatures` call, that the white ring marks. A reader who pans to
 the far side of the world reads that side's headlines. They are taken down on
@@ -934,14 +931,14 @@ basemap captions every pin with its own 11px headline, and the filter
 suppresses exactly that caption for the stories currently carrying a bubble,
 so no story is ever captioned twice. Below zoom 4 the headline layer is off
 entirely and the bubbles remain the only headlines there are. A corner
-checkbox (`components/HeadlineToggle.tsx`, bottom-right, left of MapLibre's
+checkbox (`src/components/HeadlineToggle.tsx`, bottom-right, left of MapLibre's
 zoom control) is what silences bubbles now — `MapView` mirrors the choice into
 a ref the map effect's closures can read, persists it to `localStorage` under
 `oyster.headlines`, and re-runs the ranking immediately on a mid-session
 flip since the stationary camera would otherwise never fire the `idle` that
 normally does that work.
 
-A story displaced onto a spider leaf (`lib/spiderfy.ts`, zoom 9 and up) is
+A story displaced onto a spider leaf (`src/lib/spiderfy.ts`, zoom 9 and up) is
 drawn at its leaf, not its stack's anchor — the anchor copy is covered by the
 stack's best member. Its bubble's tail follows it there too, using
 `leafPositions`, the same anchor/offset/unproject sequence `spiderData` draws
@@ -951,7 +948,7 @@ different story.
 A bubble whose pin has left the canvas needs no handling of its own:
 `placeBubbles` drops any candidate whose reserved box fails `boxFits`, so a
 crowded or edge-heavy view shows the subset that fits and the rest keep their
-rings. `lib/bubble.ts`'s placement rule is pure and deliberately tested against a **constant** box
+rings. `src/lib/bubble.ts`'s placement rule is pure and deliberately tested against a **constant** box
 size (135×131) rather than a real measured DOM height, because a bubble
 that renders shorter than its reservation only ever has more clearance
 than it was promised — measuring `offsetHeight` would put a DOM dependency
@@ -959,7 +956,7 @@ inside the one rule worth unit-testing, to buy clearance nobody asked for.
 
 ### `PanelStory`, the §2.6 allowlist
 
-`lib/story.ts`'s `PanelStory` type is the entire content model the UI is
+`src/lib/story.ts`'s `PanelStory` type is the entire content model the UI is
 allowed to show, enforced as a literal allowlist — exactly **eight**
 fields: `title`, `source`, `url`, `place`, `kind`, `date`, `image`,
 `more`. `story.test.ts` pins that exact list and asserts that `salience`,
@@ -972,13 +969,12 @@ is very visible in the ranking. "Widening this list to make a test pass
 is the failure mode" is written directly into the source as the thing not
 to do.
 
-**`topic` is on the list by decision, not by omission.** `worker/topics.ts`
-exists and computes a topic per story, but the card shows no topic label —
+**`topic` is on the list by decision, not by omission.** A per-story topic
+classifier was prototyped, but the card shows no topic label —
 chips that would filter a region's rows are a region-panel feature, not a
 story-card one — and `story.test.ts` asserts the field is dropped, so if
 the card ever grows a topic display, the assertion fails and the decision
-has to be taken again explicitly rather than drifting in silently. See
-`#open-items` for `worker/topics.ts`'s own unshipped status.
+has to be taken again explicitly rather than drifting in silently.
 
 ### Rejected Alternatives
 
@@ -1008,7 +1004,7 @@ has to be taken again explicitly rather than drifting in silently. See
 
 ## Basemap
 
-`lib/basemap.ts` returns a custom MapTiler style (style ID
+`src/lib/basemap.ts` returns a custom MapTiler style (style ID
 `019fef1b-6271-7b5d-bc0d-bc743ed95216`, not a stock one) when
 `NEXT_PUBLIC_MAPTILER_KEY` is set, and falls back to a
 keyless OpenFreeMap positron style with no account and no key at all when
@@ -1018,8 +1014,8 @@ the more natural-looking 1.5, specifically because MapTiler's
 `country_label` layer does not render below z2 — at 1.5 the `#regions`
 click gesture would land on a world view with nothing labeled to click.
 
-**The billing correction.** `HANDOFF.md §3.1` originally recorded the
-basemap as "MapTiler hosted style, 100k loads/mo free." `spikes/basemap/CASE-STUDY.md`
+**The billing correction.** The project handoff originally recorded the
+basemap as "MapTiler hosted style, 100k loads/mo free." `docs/research/basemap-case-study.md`
 found that wrong by roughly a factor of 200: MapTiler meters *sessions*
 (one page load, unlimited pan/zoom inside it — 5,000/month free) only for
 its own SDK; a **third-party client importing `maplibre-gl` directly**, which
@@ -1038,8 +1034,8 @@ requests than the entire initial page load. Vector tile count also proved
 DPR-independent (149 tiles at 2× vs. 152 at 1×), which is the strongest
 argument against a raster alternative on a retina phone.
 
-**Decided 2026-08-10 (`HANDOFF.md §6` decision 11): stay on MapLibre GL JS
-+ MapTiler, billed per request.** See `spikes/basemap/CASE-STUDY.md` for
+**Decided 2026-08-10: stay on MapLibre GL JS
++ MapTiler, billed per request.** See `docs/research/basemap-case-study.md` for
 the full option comparison and sourcing; the load-bearing reasons,
 restated:
 
@@ -1052,7 +1048,7 @@ restated:
   key ships to the browser), a heavier attribution requirement (a visible
   logo image plus full data attributions, real screen budget on a phone
   already carrying other UI), an async stateful token flow replacing
-  `lib/basemap.ts`'s pure synchronous zero-I/O function, and it breaks the
+  `src/lib/basemap.ts`'s pure synchronous zero-I/O function, and it breaks the
   one-line style-URL escape hatch this design deliberately bought.
 - **Not the MapTiler SDK JS** (session-metered, 5,000/month, roughly
   10–15× the request-metered headroom on paper). Rejected because the
@@ -1064,7 +1060,7 @@ restated:
   hatch, and because deferring the switch is nearly free — the SDK wraps
   MapLibre GL JS closely enough that switching later stays a small change,
   so there is no lock-in penalty for waiting. Revisit trigger: sustained
-  traffic above ~200 visits/month. Vercel Analytics (`app/layout.tsx`)
+  traffic above ~200 visits/month. Vercel Analytics (`src/app/layout.tsx`)
   exists to make that trigger observable: before it, nothing measured
   visits, so the decision could only be revisited by accident.
 - **The OpenFreeMap escape hatch** is not merely a fallback — it is what
@@ -1203,7 +1199,7 @@ specifically). The third — stale CDN reads — is not merely gone, it is
    relies on, for no security benefit. The subtler half: a *missing*
    object's 404 needs `Access-Control-Allow-Origin` too, or the browser
    fetch rejects with a CORS `TypeError` before the response status is ever
-   read — `lib/cities.ts:23-25` treats 404 as "this country publishes no
+   read — `src/lib/cities.ts:23-25` treats 404 as "this country publishes no
    shard", and that branch never runs if the error response lacks the
    header. The status code is the easy half of getting a 404 right; the
    header on it is the half that actually breaks silently.
@@ -1262,7 +1258,7 @@ thumbnail with nothing failing. Every new field gets a default there.
 
 ### The manifest and `REGIONS_VERSION`
 
-`Manifest` (`lib/types.ts`): `archive` (content-hashed key), `url`,
+`Manifest` (`src/lib/types.ts`): `archive` (content-hashed key), `url`,
 `regionsUrl?` (optional — a manifest published before the region index
 existed must stay valid), `regionsVersion?` (bumped to `2` when the index
 gained `CONT:*` continent keys — see `#cities-continents` — so an old
@@ -1277,7 +1273,7 @@ front: the manifest already is the indirection a route would provide, since
 the archive URL changes every run and lives inside it. Proxying the archive
 itself through a route stays rejected, because PMTiles makes many small
 range requests and each would become a billed Function invocation. The
-manifest URL is built from `CDN_BASE` (`lib/cdn.ts`, shared with the
+manifest URL is built from `CDN_BASE` (`src/lib/cdn.ts`, shared with the
 worker) rather than a `NEXT_PUBLIC_*` variable, because those are inlined
 at build time and a changed dashboard value does nothing until the next
 uncached build.
@@ -1345,8 +1341,7 @@ failed. Four WARN tripwires are built into it:
   constants against a fresh `#data-reality` volume measurement. The
   comment says plainly not to nudge them blind.
 
-The full monitoring table this pipeline is built against (`HANDOFF.md
-§8`): a run that throws is caught by GitHub's own failure email; a run
+The full monitoring table this pipeline is built against: a run that throws is caught by GitHub's own failure email; a run
 that never happens at all is caught by the dead-man switch; a run that
 succeeds but publishes garbage is caught by the output invariants at the
 publish gate (`#operations`); stale data is caught by the freshness stamp
@@ -1423,51 +1418,26 @@ point."
 
 ## Open Items
 
-- **MapTiler Free-plan logo is not rendered.** `components/MapView.tsx`
-  currently carries an **uncommitted** local change at its
-  `<MapTilerLogo />` render site: `git diff components/MapView.tsx` shows
-  the single line changed from `<MapTilerLogo />` to
-  `{/*<MapTilerLogo />*/}`, disabling it. The comment directly above that
-  line in the file explicitly warns against disabling it "without saying
-  where the mark went" — this diff does exactly that, with no note
-  attached. Attribution is currently unmet in the working tree as checked
-  out right now. This is flagged as open, not fixed, and should be
-  resolved (either restored with a stated reason, or committed with one)
-  before this state ships.
-- **`globals.css` — a malformed comment breaks the brand mark.** Confirmed
-  present, `app/globals.css` lines 301–311. The selector list
-  `.search__mark, .brand__dot, /*.panel__sphere { border-radius: 50%;
-  background: radial-gradient(...); transform: matrix(...); }*/` has its
-  entire declaration block — the `{ ... }` meant to be shared by all three
-  selectors — swallowed inside a comment that was only meant to disable
-  `.panel__sphere`. The practical effect is worse than cosmetic drift:
-  `.search__mark` and `.brand__dot` now get **no border-radius and no
-  gradient at all** from any rule (their own individual rules, at lines
-  413 and 321 respectively, set only size and position) — a live rendering
-  bug in the search sphere and the wordmark's bead, not merely a missing
-  highlight. `.panel__sphere` itself (line 957) is a separate, intact,
-  working rule.
+- **MapTiler Free-plan logo is not rendered.** `src/components/MapView.tsx`
+  no longer renders or imports `<MapTilerLogo />` (the render was dropped in
+  `1fb5304`), while `src/components/MapTilerLogo.tsx` still exists. MapTiler's
+  Free plan requires a visible logo, so attribution is currently unmet. Either
+  restore the render or record where the mark went, before this ships.
+- **`globals.css` — the brand mark has no shape.** In `src/app/globals.css`
+  the selector list `.search__mark, .brand__dot, .brand__dot` shares only a
+  size-and-position block. Its original shared declaration block
+  (`border-radius: 50%`, the radial gradient and the transform) was swallowed
+  by a comment meant to disable only `.panel__sphere`, and that commented-out
+  block has since been deleted. `.search__mark` and `.brand__dot` therefore
+  get **no border-radius and no gradient** from any rule — a live rendering
+  bug in the search sphere and the wordmark's bead. `.panel__sphere` is a
+  separate, intact rule.
 - **Phone profile never run on real hardware.** `worker/budget.ts`'s
   `DEFAULT_K = 15` is a desktop-tuned guess ("K ~ 12–20, tuned on real
   data. A phone shows 2-4 tiles, so roughly 30-60 pins") — it is the only
   lever on the ~57% overflow rate (`#tiles-budget`), and no measurement
   against actual phone hardware has been taken. Deferred by explicit
   decision on 2026-08-14, still open.
-- **`worker/topics.ts` is written but unshipped.** Confirmed: `worker/run.ts`
-  never calls it; `StoryGroup` (`lib/types.ts`) has no `topic` field;
-  `worker/tiles.ts`'s `featureOf` emits nothing topic-related; no
-  `worker/topics.test.ts` exists. Its only real importer is
-  `scripts/theme-audit.ts` (a separate mention inside `lib/story.ts` is a
-  comment referencing it by name, not an import). Version 1 of the
-  classifier (vote-counting, ties broken by declaration order) put 44.2%
-  of the feed in a Disaster bucket, because 75.3% of classified articles
-  matched more than one topic — for three-quarters of the feed,
-  declaration order alone was the classifier. Version 2 (current — scores
-  each article by its rarest matched theme, using the pool's own live
-  document frequency) is implemented and typechecks, but **its own
-  distribution has never been measured** — the code comment says so
-  directly, and `docs/archive/modes-2-3-handoff.md` corroborates this was
-  still true as of its own last edit.
 - **`run()`'s stage ordering is untested.** Confirmed: `worker/run.test.ts`
   only imports and tests three standalone exported helpers —
   `stampOfDate`, `toPlaced`, and `formatSummary`. No test imports or
@@ -1476,16 +1446,16 @@ point."
   → publish → prune → ping) is enforced only by the source code's own
   structure, not by any assertion.
 - **No component tests exist.** Confirmed: `vitest.config.ts`'s `include`
-  is `["worker/**/*.test.ts", "lib/**/*.test.ts", "scripts/**/*.test.ts"]`
-  — `components/` is excluded entirely, with a comment explaining
-  `scripts/` is included only for the tippecanoe version guard. Everything
+  is `["src/**/*.test.ts", "worker/**/*.test.ts", "scripts/**/*.test.ts"]`
+  — only `.test.ts` files run, so nothing under `src/components/` is
+  tested, and `scripts/` is included only for the tippecanoe version guard. Everything
   under `#frontend` is verified live, by eye and DOM query, not by suite.
 - **No test asserts `worker/tiles.ts`'s layer names match
-  `lib/layers.ts`'s `source-layer` values.** Correction to an earlier
-  assumption: `lib/layers.test.ts` *does* assert source-layer values
+  `src/lib/layers.ts`'s `source-layer` values.** Correction to an earlier
+  assumption: `src/lib/layers.test.ts` *does* assert source-layer values
   against constants — but those constants (`STORIES_SOURCE_LAYER`,
   `COUNTRY_SOURCE_LAYER`, etc.) are defined independently inside
-  `lib/layers.ts` itself. `worker/tiles.ts` defines its own separate
+  `src/lib/layers.ts` itself. `worker/tiles.ts` defines its own separate
   string literals (`STORIES_LAYER = "stories"`, `COUNTRY_LAYER =
   "country-top"`), with a comment on the `layers.ts` side saying "Must
   match `worker/tiles.ts`'s exports exactly" — but nothing imports or
@@ -1496,24 +1466,8 @@ point."
   own comment: "0.25 is a starting point tuned by eye on real bundles
   rather than fitted — it is the one constant here without a measurement
   behind it, and it is worth revisiting once real placements can be judged."
-- **`scripts/tippecanoe-min-version.test.ts` status.** A fresh `npx vitest
-  run` in this session passed **432 tests across 29 files with zero
-  failures**, including this test file (7/7 passing on its own). Prior
-  project notes (`docs/archive/ui-refresh-2026-08.md`,
-  `docs/archive/modes-2-3-handoff.md`) recorded it failing 6/7 "on this
-  machine" because its bash script could not be spawned from a Windows
-  path — that specific failure is **not reproducing right now**, in this
-  environment/session. Current reality is green; note the discrepancy
-  rather than assume either the old or the new observation is permanently
-  correct — it may be environment-dependent.
-- **`scripts/build-real-geojson.ts`** currently exists: a standalone
-  Phase-2.5 script that fetches one GKG bundle, parses it, applies the
-  demonym filter, places city pins only, and writes `build/stories.geojson`
-  for `npm run tiles:real` — deliberately not the real Phase 3 worker (no
-  state, shards, grouping, ranking, budget, or publish gate). It is
-  planned for deletion in a later phase, not this one. If the offline
-  single-bundle rebuild capability is wanted back afterward, it should be
-  rebuilt as a thin script that imports `worker/fetch.ts`,
-  `worker/parse.ts`, and `worker/place.ts` directly, rather than forking
-  their logic a second time the way this script currently does.
-</content>
+- **`scripts/tippecanoe-min-version.test.ts` on Windows.** From PowerShell,
+  `bash` resolves to WSL, which cannot read `C:\` paths, so the test used
+  to fail 6/7 there while passing from Git Bash and on Linux. On `win32` it
+  now runs the script with Git Bash (found through `git --exec-path`) and
+  skips with a stated reason if Git Bash is missing.
