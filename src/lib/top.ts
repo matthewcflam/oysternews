@@ -19,7 +19,6 @@ export type RankedFeature = {
   properties?: Record<string, unknown> | null;
 };
 
-const asNumber = (value: unknown): number => (typeof value === "number" ? value : 0);
 const asString = (value: unknown): string => (typeof value === "string" ? value : "");
 
 /**

@@ -132,6 +132,7 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
   }, [relayout]);
 
   // Before paint, so a bubble is never briefly drawn at the top-left corner.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `placed` is the trigger; the anchor nodes it renders must be positioned after each layout
   useLayoutEffect(position, [position, placed]);
 
   if (!placed.length) return null;

@@ -77,7 +77,6 @@ export async function buildTiles(
     // -q suppresses tippecanoe's per-tile progress line, which is tens of
     // thousands of characters long and buries the run summary/stack trace
     // after it in any captured log.
-    // biome-ignore lint/style/useConsistentArrayType: suppress per-tile progress spam in logs
     "-q",
     "-Z0",
     "-z12",

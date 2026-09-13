@@ -18,6 +18,7 @@ type Props = {
 
 export default function HeadlineToggle({ checked, onCheckedChange, position }: Props) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders a <button>, a labelable element
     <label className="headline-toggle" style={position ?? undefined}>
       <Checkbox.Root
         className="headline-toggle__box"

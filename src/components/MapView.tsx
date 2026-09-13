@@ -18,7 +18,7 @@ import { basemap, DEFAULT_CENTER, DEFAULT_ZOOM } from "@/lib/basemap";
 import { CITY_SNAP_KM, loadCityShard, nearestCity } from "@/lib/cities";
 import { CONTINENT_BBOX, continentIdFor } from "@/lib/continents";
 import { countryName, fipsForIso } from "@/lib/flag";
-import { firstLabel, type LabelLevel, labelAnchor, labelName } from "@/lib/labels";
+import { firstLabel, labelAnchor, labelName } from "@/lib/labels";
 import {
   BOUNDARIES_ARCHIVE,
   BOUNDARIES_SOURCE_ID,
@@ -77,7 +77,6 @@ import { type PanelStory, panelStory } from "@/lib/story";
 import { sameKeys, topKeys } from "@/lib/top";
 import type { CityShard, RegionIndex } from "@/lib/types";
 import HeadlineToggle from "./HeadlineToggle";
-import MapTilerLogo from "./MapTilerLogo";
 import RegionPanel from "./RegionPanel";
 import SearchBar from "./SearchBar";
 import StoryBubbles, { type TopStory } from "./StoryBubbles";
@@ -552,6 +551,7 @@ export default function MapView() {
   // mouse. Bound only while something is open, so the map doesn't carry a
   // global keydown listener to do nothing with. `story` wins over
   // `selection` in the same order the render does.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: clearStory/clearRegion are recreated each render; story/selection are what matter
   useEffect(() => {
     if (!story && !selection) return;
 
@@ -563,9 +563,9 @@ export default function MapView() {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: clearStory/clearRegion recreated each render; selection is what matters
   }, [story, selection]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-once map; captured callbacks only touch refs and state setters, and adding deps would rebuild the map
   useEffect(() => {
     if (!container.current) return;
 

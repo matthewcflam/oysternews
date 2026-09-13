@@ -51,6 +51,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
 
   const suggestions = places ? searchPlaces(places, debouncedQuery) : [];
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `debouncedQuery` is the trigger; a new query resets the highlight
   useEffect(() => {
     setHighlighted(0);
   }, [debouncedQuery]);
@@ -125,6 +126,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
       {/* Positions the list — `.search__box` is the containing block, so the
           list's left edge tracks the field's regardless of the mark's width. */}
       <div className="search__box">
+        {/* biome-ignore lint/a11y/useSemanticElements: <search> would change the element the search__field styles target */}
         <form className="search__field" role="search" onSubmit={handleSubmit}>
           <input
             className="search__input"
@@ -152,6 +154,7 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
             stroke="currentColor"
             strokeWidth="1.5"
             strokeLinecap="round"
+            aria-hidden="true"
           >
             <circle cx="8" cy="8" r="5" />
             <path d="M11.8 11.8 L16.4 16.4" />
@@ -159,12 +162,16 @@ export default function SearchBar({ onSelect }: SearchBarProps) {
         </form>
 
         {showDropdown ? (
+          // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox listbox; focus stays on the input
           <ul className="search__list" id={listId} role="listbox">
             {suggestions.length > 0 ? (
               suggestions.map((place, index) => (
+                // biome-ignore lint/a11y/useFocusableInteractive: combobox option, reached via aria-activedescendant
+                // biome-ignore lint/a11y/useKeyWithClickEvents: the input's onKeyDown handles arrow keys and Enter
                 <li
                   key={place.id}
                   id={`${listId}-${place.id}`}
+                  // biome-ignore lint/a11y/noNoninteractiveElementToInteractiveRole: ARIA combobox option
                   role="option"
                   aria-selected={index === highlighted}
                   className="search__option"

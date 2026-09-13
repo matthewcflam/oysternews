@@ -26,7 +26,8 @@ export function buildRegionIndex(
 
   const add = (key: string, group: StoryGroup) => {
     if (!key) return;
-    const entry = (index[key] ??= { stories: [], total: 0, sources: 0 });
+    index[key] ??= { stories: [], total: 0, sources: 0 };
+    const entry = index[key];
     entry.total += 1;
     if (group.domain) {
       (domains.get(key) ?? domains.set(key, new Set()).get(key)!).add(group.domain);

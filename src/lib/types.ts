@@ -55,9 +55,6 @@ export type Article = {
   locations: GdeltLocation[];
 };
 
-/** Where worker/place.ts's placeStory() puts a story. */
-type PlacementKind = "PIN" | "CONTAINER" | "DROP";
-
 export type Placement =
   | { kind: "PIN"; location: GdeltLocation }
   | { kind: "CONTAINER"; location: GdeltLocation; regionId: string }
