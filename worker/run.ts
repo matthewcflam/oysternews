@@ -1,15 +1,3 @@
-/**
- * Orchestration only. Every decision lives in one of the modules this
- * calls; what's here is the ORDER (fetch -> parse -> filter -> place ->
- * state -> group -> rank -> budget -> tiles -> publish -> prune -> ping).
- * See docs/DESIGN.md#pipeline for why each step sits where it does. The
- * watermark comes from the published manifest, not local state, so a run
- * that fails its invariants does not advance it. A run that publishes
- * nothing exits non-zero (fails the Action) and skips the healthcheck ping
- * (fires the dead-man switch) — two independent alarms on one event. See
- * docs/DESIGN.md#failure.
- */
-
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type { Article, Placement, PlacedArticle } from "../src/lib/types.ts";
@@ -40,7 +28,6 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const WORK_DIR = path.join(REPO_ROOT, "build", "run");
 const ARCHIVE_PATH = path.join(REPO_ROOT, "build", "stories.pmtiles");
 
-/** A Date as GKG's YYYYMMDDHHMMSS, UTC. */
 export function stampOfDate(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return (
@@ -49,11 +36,6 @@ export function stampOfDate(date: Date): string {
   );
 }
 
-// Article + Placement -> the record that gets stored and grouped. Pure,
-// exported: the one place source country, tier-1 membership, and FIPS
-// validity are applied to a story — getting tier-1 wrong here would
-// silently disable it downstream (the comparator still runs, just never on
-// a tier-1 group).
 export function toPlaced(
   article: Article,
   placement: Placement,
@@ -73,8 +55,6 @@ export function toPlaced(
     kind: placement.kind,
     countryCode: location.countryCode,
     regionId: placement.kind === "CONTAINER" ? placement.regionId : "",
-    // Every placement, not just containers — see PlacedArticle.adm1. A country
-    // location carries no adm1Code at all, which is correctly "".
     adm1: location.adm1Code,
     placeName: location.name,
     sourceCountry: sourceCountry(article.domain, data),
@@ -82,9 +62,6 @@ export function toPlaced(
   };
 }
 
-// A FIPS code the crosswalk doesn't know and hasn't marked as a known
-// non-country. Logged loudly and counted — the degraded behavior (a plain
-// pin) looks completely normal on the map otherwise.
 function unknownFips(placed: PlacedArticle[], data: RefData): Map<string, number> {
   const unknown = new Map<string, number>();
   for (const article of placed) {
@@ -140,14 +117,11 @@ export type RunOptions = {
   healthcheckUrl?: string;
 };
 
-/** The watermark of the last successful publish, or "" on a first run. */
 async function lastWatermark(store: ArchiveStore): Promise<string> {
   try {
     const manifest = JSON.parse(await store.get(MANIFEST_KEY)) as { watermark?: string };
     return typeof manifest.watermark === "string" ? manifest.watermark : "";
   } catch {
-    // No manifest yet, or an unreadable one. Both mean "take the newest bundles
-    // and start from there", which stampsToFetch already does with "".
     return "";
   }
 }
@@ -174,7 +148,6 @@ export async function run(options: RunOptions): Promise<RunSummary> {
 
   for (const stamp of stamps) {
     const bundle = await fetchBundle(stamp);
-    // GDELT skips slots. A miss is counted, never fatal.
     if (!bundle) continue;
     fetched++;
     newestFetched = stamp > newestFetched ? stamp : newestFetched;
@@ -196,9 +169,7 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     else dropped++;
   }
 
-  // --- state ---------------------------------------------------------------
-  // Append before reading: the pool is then one deduped union rather than this
-  // run's articles concatenated onto a pool that also contains them.
+  // Append before reading: pool is union not concatenation.
   await appendShards(store, runStamp, placed);
   const pool = await readPool(store, now.getTime());
 
@@ -208,14 +179,9 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   const { groups: budgeted, overflow } = assignMinzoom(ranked);
   const countryTop = countryTopGroups(budgeted);
 
-  // Continent id from a group's own country FIPS, via the crosswalk's
-  // `continent` column. "" for anything the crosswalk cannot place —
-  // `buildRegionIndex` files nothing under an empty key.
   const continentOf = (fips: string): string =>
     continentIdFor(data.countries.get(fips)?.continent) ?? "";
 
-  // Built from the budgeted groups, which is every group in the window — the
-  // panel deliberately reaches stories the z12 ceiling drops (see docs/DESIGN.md#tiles-budget).
   const regions = buildRegionIndex(budgeted, undefined, continentOf);
   const regionStats = indexStats(regions);
   const cities = buildCityIndex(budgeted);
@@ -238,8 +204,6 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   let prunedShards = 0;
   let pinged = false;
   if (result.published) {
-    // Only now. A run that published nothing must leave the state it read
-    // intact, or a transient failure permanently shrinks its own window.
     prunedShards = await pruneShards(store, now.getTime());
     pinged = await pingHealthcheck(options.healthcheckUrl);
   }
@@ -265,8 +229,6 @@ export async function run(options: RunOptions): Promise<RunSummary> {
     tier1Groups: budgeted.filter((group) => group.tier1Fresh).length,
     countryTop: countryTop.length,
     overflow,
-    // Named, not spread: indexStats returns `rows`, and this object already has
-    // a `rows` meaning parsed GKG rows. Spreading silently overwrote it.
     regions: regionStats.regions,
     regionRows: regionStats.rows,
     cityShards: cityStats.shards,
@@ -281,11 +243,6 @@ export async function run(options: RunOptions): Promise<RunSummary> {
   };
 }
 
-/**
- * The run summary — the only interface docs/DESIGN.md#failure's monitoring
- * has to most failure modes, so it prints unconditionally, including on
- * the failure path.
- */
 export function formatSummary(summary: RunSummary): string {
   const lines = [
     `watermark    ${summary.watermark || "(none)"} -> ${summary.bundlesFetched} of ${summary.bundlesRequested} bundles (${summary.bundlesMissing} missing)`,
@@ -298,12 +255,9 @@ export function formatSummary(summary: RunSummary): string {
     `cities       ${summary.cityShards} country shards, ${summary.cityRecords} clustered cities`,
   ];
 
-  // A schema change shows up here first, as a nonzero short-row count.
   if (summary.shortRows > 0) {
     lines.push(`WARN         ${summary.shortRows} rows failed the schema canary — GDELT may have changed`);
   }
-  // Tier-1 count going to zero is the silent-degradation case — nothing
-  // else fails when it happens, which is why it's called out here.
   if (summary.groups > 0 && summary.tier1Groups === 0) {
     lines.push("WARN         no tier-1 groups — ranking has degraded to plain salience");
   }
@@ -311,14 +265,6 @@ export function formatSummary(summary: RunSummary): string {
     lines.push(`WARN         unknown FIPS code ${code} on ${count} stories — needs a data/fips-overrides entry`);
   }
 
-  // Publishing past the band is the deliberate escape from a wedge, but it is
-  // still a run that published output the guard called implausible. It must never
-  // look like an ordinary success in the log.
-  //
-  // Since 2026-08-14 the band is two absolute constants, so this line has a
-  // second job: it is the ONLY signal that those constants have gone stale.
-  // Nothing self-corrects any more — if real volume outgrows COUNT_BAND_MAX,
-  // every run is refused until a human re-derives it. Hence the instruction.
   if (summary.bandRelaxed) {
     lines.push(
       "WARN         count band stood down — blocked past 2× cadence.",
@@ -363,9 +309,6 @@ async function main(): Promise<void> {
   });
 
   console.log(formatSummary(summary));
-  // Fail the Action on a fail-closed publish. The map is still serving the
-  // previous archive, but a run that decided its own output was garbage is not
-  // a success and must not be reported as one.
   if (!summary.published) process.exitCode = 1;
 }
 
