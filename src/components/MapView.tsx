@@ -129,9 +129,7 @@ const CORNER_CTRL_GAP = 6;
 const GLOBE_ICON_SIZE = 28;
 const GLOBE_INK_INSET = (7 / 128) * GLOBE_ICON_SIZE;
 
-// The reader's own key for whether headlines draw at all — see `headlinesOn`
-// below. Persisted so the choice survives a reload.
-const HEADLINES_STORAGE_KEY = "sonder.headlines";
+const HEADLINES_STORAGE_KEY = "oyster.headlines";
 
 // The city record a selection resolves to, or null (still loading, the
 // shard has nothing this country, or nothing is within CITY_SNAP_KM).

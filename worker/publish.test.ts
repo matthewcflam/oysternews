@@ -140,7 +140,7 @@ function history(counts: number[]): HistoryEntry[] {
 let archivePath = "";
 
 beforeAll(async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "sonder-publish-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "oyster-publish-"));
   archivePath = path.join(dir, "stories.pmtiles");
   await writeFile(archivePath, "PMTiles bytes");
 });

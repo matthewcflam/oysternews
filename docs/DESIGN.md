@@ -1,6 +1,6 @@
-# Sonder — Design
+# Oyster — Design
 
-This is the single authoritative design document for Sonder. It replaces
+This is the single authoritative design document for Oyster. It replaces
 `HANDOFF.md` (archived at `docs/archive/HANDOFF-2026-08.md`), `docs/modes-2-3-handoff.md`
 and `docs/ui-refresh-2026-08.md` (both archived at `docs/archive/`) as the place
 rationale lives. Two documents remain primary evidence rather than being

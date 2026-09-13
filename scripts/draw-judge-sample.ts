@@ -183,7 +183,7 @@ function sheetHtml(records: SampleRecord[], meta: Record<string, unknown>): stri
 <script>
 (function () {
   var DATA = JSON.parse(document.getElementById("data").textContent);
-  var KEY = "sonder-judge-" + DATA.meta.drawId;
+  var KEY = "oyster-judge-" + DATA.meta.drawId;
   var answers = {};
   try { answers = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) {}
 

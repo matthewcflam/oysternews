@@ -49,7 +49,7 @@ function runGuard(): { code: number; stderr: string } {
 
 describe("the tippecanoe version guard", () => {
   beforeEach(() => {
-    binDir = mkdtempSync(path.join(tmpdir(), "sonder-tippecanoe-"));
+    binDir = mkdtempSync(path.join(tmpdir(), "oyster-tippecanoe-"));
   });
 
   afterEach(() => {

@@ -1,4 +1,4 @@
-# Sonder
+# Oyster
 
 A 2D web map of current world news. Stories are plotted where they happen, ranked
 by how many independent news organizations covered them — with wire services and

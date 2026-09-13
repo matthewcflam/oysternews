@@ -3,7 +3,7 @@ import { inflateRawSync } from "node:zlib";
 
 export const BASE = "http://data.gdeltproject.org/gdeltv2";
 export const MAX_BUNDLES = 12;
-const USER_AGENT = "sonder/0.1 (portfolio project; contact matthewcflam@gmail.com)";
+const USER_AGENT = "oyster/0.1 (portfolio project; contact matthewcflam@gmail.com)";
 
 export type Bundle = {
   /** YYYYMMDDHHMMSS, the bundle's own stamp. */
