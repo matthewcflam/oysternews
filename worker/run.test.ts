@@ -149,7 +149,7 @@ describe("formatSummary", () => {
     expect(formatSummary(summary({ shortRows: 17 }))).toContain("schema canary");
   });
 
-  it("warns when tier-1 goes to zero — §8's silent degradation", () => {
+  it("warns when tier-1 goes to zero (silent degradation)", () => {
     expect(formatSummary(summary({ tier1Groups: 0 }))).toContain("degraded to plain salience");
   });
 

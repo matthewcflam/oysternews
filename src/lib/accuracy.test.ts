@@ -52,7 +52,7 @@ describe("scoreLevel", () => {
     expect(result.point).toBe(50);
   });
 
-  it("scores the levels separately, because they fail differently (§5.1)", () => {
+  it("scores the levels separately, because they fail differently", () => {
     const judged: Judgement[] = [
       { id: "a", verdict: "WRONG", reason: "no-place" },
       { id: "d", verdict: "CORRECT", reason: "" },
@@ -89,11 +89,11 @@ describe("the published accuracy still matches the judge's verdicts", () => {
     expect(result.interval[1]).toBeCloseTo(PUBLISHED_ACCURACY.container.interval[1], 1);
   });
 
-  it("keeps the pin lower bound above §5.1's 50% kill line", () => {
+  it("keeps the pin lower bound above the 50% kill line", () => {
     expect(PUBLISHED_ACCURACY.pin.interval[0]).toBeGreaterThan(50);
   });
 
-  it("keeps the container lower bound above §5.1's 60% kill-containers line", () => {
+  it("keeps the container lower bound above the 60% kill-containers line", () => {
     expect(PUBLISHED_ACCURACY.container.interval[0]).toBeGreaterThan(60);
   });
 

@@ -50,7 +50,7 @@ describe("buildRegionIndex", () => {
     expect(index).toEqual({});
   });
 
-  it("orders by the §2.5 comparator, not by input order", () => {
+  it("orders by the ranking comparator, not by input order", () => {
     const index = buildRegionIndex([
       group({ id: "low", title: "low", salience: 0.5 }),
       group({ id: "top", title: "top", salience: 4 }),
@@ -76,7 +76,7 @@ describe("buildRegionIndex", () => {
     expect(index.FR.stories).toHaveLength(1);
   });
 
-  it("carries only title, source, url, date and place — §2.6 link-out only", () => {
+  it("carries only title, source, url, date and place (link-out only)", () => {
     const [story] = buildRegionIndex([group()]).US.stories;
     expect(Object.keys(story).sort()).toEqual(["date", "place", "source", "title", "url"]);
   });
@@ -87,7 +87,7 @@ describe("buildRegionIndex", () => {
   });
 });
 
-describe("buildRegionIndex — continents (§4)", () => {
+describe("buildRegionIndex — continents", () => {
   it("files under a continent key when a resolver is supplied", () => {
     const index = buildRegionIndex(
       [group({ countryCode: "US", adm1: "USCA" })],

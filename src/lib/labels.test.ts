@@ -131,7 +131,7 @@ describe("labelAnchor", () => {
 });
 
 describe("labelName", () => {
-  it("prefers the English name where the provider has one (§2.6)", () => {
+  it("prefers the English name where the provider has one", () => {
     expect(labelName({ properties: { name: "Deutschland", "name:en": "Germany" } })).toBe(
       "Germany"
     );

@@ -62,7 +62,7 @@ describe("the tippecanoe directive", () => {
 });
 
 describe("the feature payload", () => {
-  it("carries exactly the §2.6 properties and no article text", () => {
+  it("carries exactly the allowed properties and no article text", () => {
     const [feature] = featuresOf([group()]);
     expect(Object.keys(feature.properties).sort()).toEqual(
       [

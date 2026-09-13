@@ -69,7 +69,7 @@ describe("storyLayers", () => {
     expect(stories["source-layer"]).toBe(STORIES_SOURCE_LAYER);
   });
 
-  it("labels only ever render the headline (§2.6, link-out only)", () => {
+  it("labels only ever render the headline (link-out only)", () => {
     expect(labels.layout?.["text-field"]).toEqual(["get", "title"]);
     expect(propertiesRead(labels.layout?.["text-field"])).toEqual(["title"]);
   });
@@ -167,7 +167,7 @@ describe("storyLayers", () => {
     expect(propertiesRead(layers)).not.toContain("tier1");
   });
 
-  it("sizes pins by salience, the §2.5 comparator's own term", () => {
+  it("sizes pins by salience, the ranking comparator's own term", () => {
     expect(propertiesRead(stories.paint?.["circle-radius"])).toContain("salience");
   });
 
@@ -277,7 +277,7 @@ describe("firstPlaceLabelLayerId", () => {
 describe("boundaryLayers", () => {
   const [countryOutline, regionOutline] = boundaryLayers();
 
-  it("draws outlines as lines, never as fills (§2.2)", () => {
+  it("draws outlines as lines, never as fills", () => {
     for (const layer of [countryOutline, regionOutline]) {
       expect(layer.type).toBe("line");
     }
@@ -298,7 +298,7 @@ describe("boundaryLayers", () => {
 describe("hitLayers", () => {
   const [countryHit, regionHit] = hitLayers();
 
-  it("paints nothing — §2.2's amendment is the whole of what makes it legal", () => {
+  it("paints nothing, so it is a hit target and never a visible fill", () => {
     for (const layer of [countryHit, regionHit]) {
       expect(layer.type).toBe("fill");
       expect(layer.paint?.["fill-opacity"]).toBe(0);
@@ -324,7 +324,7 @@ describe("hitLayers", () => {
     expect(OUTLINE_LAYER_FOR.state).toBe(REGION_OUTLINE_ID);
   });
 
-  it("has no hit or outline layer for city or continent (§4)", () => {
+  it("has no hit or outline layer for city or continent", () => {
     expect(HIT_LAYER_FOR.city).toBeUndefined();
     expect(HIT_LAYER_FOR.continent).toBeUndefined();
     expect(OUTLINE_LAYER_FOR.city).toBeUndefined();

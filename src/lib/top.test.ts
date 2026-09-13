@@ -33,7 +33,7 @@ describe("topKeys", () => {
     expect(topKeys(features)).toEqual(["a", "c", "b"]);
   });
 
-  it("never reads tier1 — §2.3 keeps the preference invisible", () => {
+  it("never reads tier1, so the preference stays invisible", () => {
     const features = [
       feature("plain", 1.0, "2026-08-14", { tier1: 0 }),
       feature("tier1", 1.0, "2026-08-14", { tier1: 1 }),

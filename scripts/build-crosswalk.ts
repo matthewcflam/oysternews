@@ -98,7 +98,7 @@ async function main(): Promise<void> {
   // Reported, not asserted: the assertion needs data/fips-overrides.json applied, so it lives
   // in worker/refdata.ts.
   const traps: Record<string, string> = { RS: "RU", CH: "CN", IS: "IL", AS: "AU", UK: "GB" };
-  console.log("  §3.4 collision codes, before overrides:");
+  console.log("  FIPS/ISO collision codes, before overrides:");
   for (const [code, iso] of Object.entries(traps)) {
     const got = fips[code]?.iso ?? "";
     const mark = got === iso ? "ok" : got === "" ? "MISSING -> needs an override" : "MISMATCH";

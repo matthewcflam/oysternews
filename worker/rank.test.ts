@@ -84,7 +84,7 @@ describe("salience", () => {
   });
 });
 
-describe("tier-1 freshness (§6 decision 10 — newest, not oldest)", () => {
+describe("tier-1 freshness (newest, not oldest)", () => {
   it("is fresh inside 48 hours", () => {
     const stats = summarise([article({ tier1: true, date: gkg(47) })], NOW);
     expect(stats.tier1Fresh).toBe(true);
@@ -112,7 +112,7 @@ describe("tier-1 freshness (§6 decision 10 — newest, not oldest)", () => {
   });
 });
 
-describe("the §2.5 comparator", () => {
+describe("the ranking comparator", () => {
   it("path 1: a LOW-salience tier-1 story beats a HIGH-salience ordinary one", () => {
     const tier1 = group({ id: "t", tier1Fresh: true, salience: salienceOf(2, 0) });
     const ordinary = group({ id: "o", tier1Fresh: false, salience: salienceOf(50, 12) });

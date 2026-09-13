@@ -25,10 +25,10 @@ const THRESHOLDS = {
     { min: 0, verdict: "KILL THE PROJECT — reconsider the data source before more pipeline code" },
   ],
   CONTAINER: [
-    { min: 60, verdict: "Containers ship as specified (§2.2)" },
+    { min: 60, verdict: "Containers ship as specified" },
     {
       min: 0,
-      verdict: "KILL CONTAINERS — drop country-and-ADM1-only records (FINDINGS §6 path 1)",
+      verdict: "KILL CONTAINERS — drop country-and-ADM1-only records",
     },
   ],
 };
@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   if (unknown) console.log(`\n  WARN  ${unknown} verdicts had no matching sample record`);
 
   console.log(`\n  ${judged.length} judged of ${sample.size} drawn\n`);
-  console.log("  level        judgeable  correct   accuracy   95% Wilson        §5.1 says");
+  console.log("  level        judgeable  correct   accuracy   95% Wilson        threshold");
 
   for (const kind of ["PIN", "CONTAINER"] as const) {
     const all = rows.filter((r) => r.record.kind === kind);
@@ -119,12 +119,12 @@ async function main(): Promise<void> {
     const unjudgeable = all.length - judgeable.length;
     if (unjudgeable) {
       console.log(
-        `  ${"".padEnd(12)} ${unjudgeable} UNJUDGEABLE, excluded from the denominator and reported (§5.1)`
+        `  ${"".padEnd(12)} ${unjudgeable} UNJUDGEABLE, excluded from the denominator and reported`
       );
     }
   }
 
-  console.log("\n  The decision follows the LOWER bound, not the point estimate (§5.1).");
+  console.log("\n  The decision follows the LOWER bound, not the point estimate.");
 
   const wrong = rows.filter((r) => r.verdict === "WRONG");
   if (wrong.length) {

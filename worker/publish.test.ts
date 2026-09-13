@@ -235,7 +235,7 @@ describe("archivesToPrune", () => {
     expect(archivesToPrune(["state/run-1.jsonl", MANIFEST_KEY], [])).toEqual([]);
   });
 
-  it("keeps every key under a live city-shard directory (§4)", () => {
+  it("keeps every key under a live city-shard directory", () => {
     const dir = `${ARCHIVE_DIR}cities-abcd1234/`;
     const stored = [`${dir}US.json`, `${dir}IN.json`, `${dir}FR.json`];
     const history: HistoryEntry[] = [

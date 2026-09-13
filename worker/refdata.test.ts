@@ -58,7 +58,7 @@ describe("data/ loads and is usable", () => {
   });
 });
 
-describe("the FIPS trap (§3.4)", () => {
+describe("the FIPS trap", () => {
   it.each([
     ["RS", "RU", "Russia, not Serbia"],
     ["CH", "CN", "China, not Switzerland"],

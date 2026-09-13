@@ -60,7 +60,7 @@ describe("buildCityIndex", () => {
     expect(index.US[0].sources).toBe(CITY_TOP_N + 5);
   });
 
-  it("orders rows by the §2.5 comparator, not input order", () => {
+  it("orders rows by the ranking comparator, not input order", () => {
     const index = buildCityIndex([
       group({ id: "low", title: "low", salience: 0.5 }),
       group({ id: "top", title: "top", salience: 4 }),
