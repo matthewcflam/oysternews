@@ -1,16 +1,3 @@
-/**
- * One loader and one schema check for everything in data/ (HANDOFF.md §3.3).
- *
- * Every other module takes reference data as an argument rather than reading a
- * file, which is what keeps the six pure modules pure and testable without a
- * filesystem. This is the only place that knows data/ exists.
- *
- * The checks below are not defensive padding. A silently truncated demonym list
- * or a crosswalk missing Israel produces a map that looks completely normal and
- * is wrong — the exact failure mode §0 rule 3 says to surface loudly rather than
- * paper over.
- */
-
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,28 +7,17 @@ const DATA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 export type Country = { iso: string; name: string; continent?: string };
 
 export type RefData = {
-  /** FIPS 10-4 -> ISO + name, crosswalk with overrides applied. */
   countries: Map<string, Country>;
-  /** Known non-countries (oceans). Not gaps — they render as plain pins. */
   nonCountries: Set<string>;
-  /** Lowercased demonym tokens, matched against the first comma segment. */
   demonyms: Set<string>;
-  /** Tier-1 outlet domains (§2.5). Load-bearing. */
   tier1: Set<string>;
-  /** Domains dropped before placement (§5 — before the tier-1 check). */
   blocklist: Set<string>;
-  /** Publisher-country inference. */
   sourceCountries: {
     domains: Map<string, string>;
     cctldExceptions: Map<string, string>;
   };
 };
 
-/**
- * Minimum sizes. These are floors, not exact counts, so adding a demonym or an
- * override does not break the build — but a file that fails to load, gets
- * truncated, or loses its content entirely does.
- */
 const MINIMUMS = {
   countries: 200,
   demonyms: 150,
@@ -49,7 +25,6 @@ const MINIMUMS = {
   blocklist: 1,
 };
 
-/** Line-oriented reference files: strip `#` comments and blank lines. */
 function lines(text: string): string[] {
   return text
     .split("\n")

@@ -1,34 +1,14 @@
-/**
- * Story grouping. PURE. Must be real grouping, not title dedup — title
- * dedup alone inverts the ranking signal (wire copy merges into one
- * high-domain story; independent journalism from NYT/BBC/Guardian on the
- * same event splits into three 1-domain stories). Key, all three parts
- * required together: >= 2 shared V2EnhancedThemes excluding themes above
- * THEME_CEILING document frequency, AND a title-token Jaccard floor, AND
- * the same 0.5° cell. Exact-title dedup runs on top to collapse
- * syndication. The theme ceiling is not optional — one measured hour found
- * a single theme (`CRISISLEX_CRISISLEXREC`) on 39.4% of all articles,
- * which without a ceiling would join over a third of the feed to itself.
- * See docs/DESIGN.md#ranking.
- */
-
 import { createHash } from "node:crypto";
 import type { PlacedArticle, StoryGroup } from "../src/lib/types.ts";
 import { summarise } from "./rank.ts";
 
-/** 9 measured themes exceed 20% document frequency; 15% excludes a few more at no real cost. */
 export const THEME_CEILING = 0.15;
 
-/** Title-token Jaccard floor — the one constant here without a measurement behind it, tuned by eye on real bundles. Worth revisiting once real placements can be judged. See docs/DESIGN.md#ranking. */
 export const JACCARD_FLOOR = 0.25;
 
-/** The location half of the key. Roughly 55 km at the equator. */
 export const CELL_DEGREES = 0.5;
 
-/**
- * Tokens carrying no distinguishing information. Deliberately short: a real stop
- * list would start deleting the words that separate two stories.
- */
+// Deliberately short: real stopword list would delete separating words.
 const STOPWORDS = new Set([
   "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "for", "with",
   "from", "by", "as", "is", "are", "was", "were", "be", "been", "it", "its", "this",

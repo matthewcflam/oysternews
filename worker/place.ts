@@ -1,34 +1,3 @@
-/**
- * placeStory() — the single placement rule ("Rule H": specificity wins
- * unless it is dominated). PURE.
- *
- *   drop every location whose name is a demonym
- *   city, adm1, country := most-mentioned location of each level
- *   if a city exists:
- *       adm1    >= 2x the city  ->  CONTAINER at the adm1      (regional story)
- *       country >= 3x the city  ->  CONTAINER at the country   (national story)
- *       city mentioned once     ->  DROP                       (no real place)
- *       otherwise               ->  PIN at the city
- *   else adm1 -> CONTAINER, else country -> CONTAINER, else DROP
- *
- * Do not replace this with plain specificity-first or pure dominance — both
- * were tried and measured worse (54.1%/37.5% and ~75% country-collapse
- * respectively) against Rule H's 69.7% pins / 80.8% containers
- * out-of-sample. The weak-city DROP (a city mentioned exactly once) is a
- * separate, later-measured rule: those pins scored 36.4% vs 77.8% for
- * everything else, Fisher p=0.023, and it applies only to cities, only
- * after both dominance margins, and DROPs rather than falling through to a
- * container (verified: fall-through would have laundered the same noise
- * into the container number instead of removing it). Full abort-criterion
- * history, all measured tables, and the accepted volume cost:
- * docs/DESIGN.md#placement.
- *
- * `explainPlacement()` is the implementation; `placeStory()` just reads its
- * `.placement` field — kept as one function rather than a rule plus a
- * separate explainer so the trace can never silently drift from the
- * decision it explains.
- */
-
 import type { Article, GdeltLocation, Placement } from "../src/lib/types.ts";
 import { ADM1_TYPES, CITY_TYPES, LOCATION_COUNTRY } from "../src/lib/types.ts";
 import type { RefData } from "./refdata.ts";
@@ -36,11 +5,9 @@ import type { RefData } from "./refdata.ts";
 const CITY = new Set<number>(CITY_TYPES);
 const ADM1 = new Set<number>(ADM1_TYPES);
 
-/** Countries are structurally over-mentioned; states are not — see docs/DESIGN.md#rule-h-the-shipped-rule. */
 export const ADM1_DOMINANCE = 2;
 export const COUNTRY_DOMINANCE = 3;
 
-/** 2 = "more than once" — the exact split the judged draw measured (36.4% vs 77.8%), not a tuned threshold. See docs/DESIGN.md#the-weak-city-drop-added-2026-08-14. */
 export const MIN_CITY_MENTIONS = 2;
 
 /**
@@ -78,14 +45,6 @@ export function regionIdFor(location: GdeltLocation): string {
   return location.countryCode;
 }
 
-/**
- * Which of the rule's branches produced the placement. `no-locations` and
- * `all-demonyms` are both DROPs but opposite findings — the first is GDELT
- * extracting nothing, the second is the demonym filter working — kept
- * separate so "the filter is too aggressive" can't hide inside a merged
- * count. `weak-city` is the only DROP that discards a placement the rule
- * could have made; see docs/DESIGN.md#the-weak-city-drop-added-2026-08-14.
- */
 export type PlacementReason =
   | "no-locations"
   | "all-demonyms"
