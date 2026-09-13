@@ -4,6 +4,7 @@ out/
 
 # Natural Earth data cache from build-boundaries and build-crosswalk scripts
 .cache/
+build/
 .vercel/
 .env
 .env.local

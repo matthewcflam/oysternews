@@ -4,7 +4,7 @@
 # build exists and through WSL on Windows (HANDOFF.md §6 decision 8).
 #
 # This is the single place that knows about the Windows -> WSL path translation.
-# worker/tiles.ts and scripts/build-tiles.sh both go through it, so CI (Linux,
+# worker/tiles.ts goes through it, so CI (Linux,
 # native tippecanoe) and this machine (Windows, WSL) take the same code path.
 #
 # Usage:  bash scripts/run-tippecanoe.sh -o out.pmtiles -L layer:in.geojson ...

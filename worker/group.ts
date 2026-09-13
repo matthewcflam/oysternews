@@ -90,10 +90,8 @@ export function cellOf(lat: number, lon: number): string {
 }
 
 // How many articles carry each theme, distinct per article (nine mentions
-// in one document count as one). Exported because worker/topics.ts's
-// classifier needs the same per-theme rarity measurement grouping already
-// makes, rather than a second, possibly-divergent pass.
-export function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
+// in one document count as one).
+function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const article of articles) {
     for (const theme of new Set(article.themes)) {
