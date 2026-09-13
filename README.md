@@ -55,8 +55,8 @@ tile budget, the region/city/continent panels, the basemap and operations
 tradeoffs, and the failure philosophy — with every claim traced to a measurement
 and a chapter of rejected alternatives.
 
-**[`spikes/gdelt/FINDINGS.md`](spikes/gdelt/FINDINGS.md)** and
-**[`spikes/basemap/CASE-STUDY.md`](spikes/basemap/CASE-STUDY.md)** are the primary
+**[`docs/research/gdelt-findings.md`](docs/research/gdelt-findings.md)** and
+**[`docs/research/basemap-case-study.md`](docs/research/basemap-case-study.md)** are the primary
 measurement evidence `DESIGN.md` cites rather than restates.
 
 Superseded documents live unedited in `docs/archive/` for history: the original
