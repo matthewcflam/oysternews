@@ -1,43 +1,9 @@
-/**
- * Score a returned judging sheet against §5.1's pre-registered thresholds.
- *
- *   judged-<draw>.jsonl + audit_sample_judge.jsonl -> accuracy, intervals, classes
- *
- * **§5.1's thresholds are hardcoded here and must not be edited to fit a
- * result.** They were fixed on 2026-08-08, before the first audit ran, precisely
- * so the outcome could not be rationalised afterwards — and the criterion has
- * already fired once and been honoured (§0 rule 8), which is most of what makes
- * this project's evidence worth anything. If a number below is wrong, the fix is
- * a conversation, not a diff.
- *
- * **The tie-break is the LOWER bound, not the point estimate**, and it is chosen
- * in the conservative direction. At these sample sizes it decides: the rule-H
- * pins scored 69.7% on 33 records, and one single record judged the other way
- * would have put the lower bound at 49.6% and killed the project.
- *
- * `band()` therefore reads the thresholds off the lower bound alone, which looks
- * stricter than §5.1's tables — they are stated on the point estimate — but is
- * exactly equivalent to them. The lower bound is never above the point estimate,
- * so the only case where the two land in different bands is the case §5.1 calls
- * a straddle, and there it already mandates the lower bound. Branching on
- * "does it straddle" would be the same answer with somewhere to hide a bug.
- *
- * The second half joins the verdicts back to `explainPlacement()`'s trace. That
- * is what the judge's extra click buys — the failure taxonomy at usable n rather
- * than the 15 records classified by hand. **Accuracy per shape is the number to
- * read**, not the shape's frequency: `place-audit.ts` already gives frequency,
- * and frequency is not accuracy (§5.2 decision 3, where mention count looked
- * strong on six records and went flat on 110).
- *
- * Run:  node scripts/audit/score-audit.ts judged-<draw>.jsonl [--sample path]
- */
+// The thresholds are pre-registered: never edit them to fit a result. band() reads the LOWER
+// bound, which is the conservative tie-break.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-// Wilson lives in lib/ so `lib/accuracy.test.ts` can re-derive the published
-// figures with the SAME arithmetic this script prints. Two copies would let the
-// About page agree with a bug instead of with the judge.
 import { wilson } from "../../src/lib/audit-score.ts";
 import type { PlacementTrace } from "../../worker/place.ts";
 import { drawFingerprint, fingerprintOf } from "./judge-draw-id.ts";
@@ -51,7 +17,7 @@ const DEFAULT_SAMPLE = path.join(
   "audit_sample_judge.jsonl"
 );
 
-/** §5.1, fixed 2026-08-08. Do not edit to fit a result. */
+// Pre-registered before the first audit. Do not edit to fit a result.
 const THRESHOLDS = {
   PIN: [
     { min: 70, verdict: "PROCEED as planned" },
@@ -105,13 +71,7 @@ async function main(): Promise<void> {
   const sample = new Map(drawn.map((r) => [r.id, r]));
   const judged = readJsonl<Judgement>(await readFile(judgedPath, "utf8")).filter((j) => j.verdict);
 
-  // --- is this sheet even about this sample? --------------------------------
-  //
-  // Ids alone cannot answer that: they used to be `<seed36>-<index>`, and two
-  // draws with the same seed over different GDELT bundles produce identical
-  // ids over different articles. That happened, and scoring the real verdicts
-  // against the stale sample returned KILL CONTAINERS on a feature measured at
-  // 83.3%. `judge-draw-id.ts` has the full account.
+  // Ids alone can't prove this sheet belongs to this sample; the draw fingerprint can.
   const claimed = judged.length ? fingerprintOf(judged[0].id) : null;
   const actual = drawFingerprint(drawn.map((r) => r.url));
   if (claimed && claimed !== actual) {
@@ -166,7 +126,6 @@ async function main(): Promise<void> {
 
   console.log("\n  The decision follows the LOWER bound, not the point estimate (§5.1).");
 
-  // --- why the wrong ones were wrong ---------------------------------------
   const wrong = rows.filter((r) => r.verdict === "WRONG");
   if (wrong.length) {
     console.log(`\n  why ${wrong.length} were wrong`);
@@ -180,11 +139,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // --- do the trace shapes predict wrongness? ------------------------------
-  // `lone-mention` is kept although `place.ts` now DROPs it at city level: on a
-  // draw taken after 2026-08-14 it can only match containers, where it scored
-  // 85.7% and is not a defect. A *pin* matching it means the draw predates the
-  // weak-city rule — or that the rule was bypassed. Both are worth seeing.
+  // A PIN matching lone-mention means the draw predates the weak-city rule, or the rule was bypassed.
   const shapes: { name: string; test: (t: PlacementTrace) => boolean }[] = [
     { name: "lone-mention", test: (t) => t.winnerMentions === 1 },
     { name: "tie-broken", test: (t) => t.tieBroken },

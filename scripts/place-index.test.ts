@@ -4,15 +4,6 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { countryOutlines, placeIndexFrom, regionOutlines } from "./build-boundaries.ts";
 
-/**
- * The searchable name -> id table behind "Where to next?".
- *
- * These exist because a bad join here is silent in the same way a bad bbox
- * is: nothing throws, a suggestion just resolves to an id the outline archive
- * cannot draw or the panel cannot answer. Mirrors region-bbox.test.ts's use
- * of small synthetic features over the real 54 MB Natural Earth files.
- */
-
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const countryFeature = (properties: Record<string, string>) => ({
@@ -164,12 +155,6 @@ describe("placeIndexFrom", () => {
   });
 });
 
-/**
- * The mechanical guarantee: every id the committed place index offers as a
- * suggestion is an id the committed bbox table can fly the camera to. This is
- * what actually prevents a dead search result in production, since the unit
- * tests above exercise the *logic* but not the real, committed output.
- */
 describe("committed artifacts", () => {
   it("every place-index id exists in region-bbox.json", async () => {
     const [places, bboxes] = await Promise.all([

@@ -1,40 +1,5 @@
-/**
- * Draw a blind sample for the independent judge (HANDOFF.md §5.2 decision 4).
- *
- *   fetch bundles -> filter -> place -> random sample -> two files:
- *     docs/research/placement-audit/audit_sample_judge.jsonl   full records, traces included
- *     build/judge.html                                         the blind sheet the judge opens
- *
- * **The point of this is that the judge is not me.** The same party designed
- * rule H and scored it, which §5.2 calls the weakest link in the evidence. So
- * everything here is arranged to keep the judge's verdict uncontaminated:
- *
- * 1. **The sheet shows the headline, the source and the placement. Nothing
- *    else.** No trace, no branch, no mention counts, no expected answer, and
- *    above all not the 69.7% — an anchor is the failure mode a second judge
- *    exists to avoid, and it is free to prevent here.
- * 2. **No link to the article.** §5.1's method is "judged by reading the
- *    headline against the placement", and UNJUDGEABLE is a real verdict for
- *    headlines that do not say enough. A judge who can open the article never
- *    marks UNJUDGEABLE, which silently changes the denominator and makes this
- *    draw incomparable with the one it is checking. The URL is in the JSONL for
- *    traceability and is deliberately not on screen.
- * 3. **Disjoint from every previous draw**, by URL, so this is a fresh sample
- *    and not a re-scoring of records that already have a verdict.
- * 4. **Unstratified**, per §5.1 — the PIN number has to be an honest population
- *    estimate, so the draw is not balanced between pins and containers.
- *
- * The one addition to §5.1's method: a WRONG verdict also picks a **reason**.
- * That is what makes the draw do double duty — it populates the failure taxonomy
- * at usable n instead of the 15 records that were classified by hand. It cannot
- * bias the accuracy number, because the reason is only asked for *after* the
- * verdict is already WRONG.
- *
- * Run:  node scripts/audit/draw-judge-sample.ts [n] [--bundles N] [--seed N]
- *       n defaults to 90, which yields ~46 pins at the measured 51% pin share —
- *       enough to bring the lower bound from ~52.7% to ~56% if the point
- *       estimate holds. See §5.2 for why that margin matters.
- */
+// A blind sheet: headline, source and placement only. No trace, no counts and no article link
+// (a judge who can read the article never marks UNJUDGEABLE). Disjoint by URL, unstratified.
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -55,7 +20,6 @@ const SHEET_OUT = path.join(REPO_ROOT, "build", "judge.html");
 const DEFAULT_N = 90;
 const DEFAULT_BUNDLES = 8;
 
-/** What the judge picks from after marking WRONG. Judge-facing wording, not the internal taxonomy. */
 export const FAILURE_REASONS = [
   { code: "no-place", label: "The story isn't about any particular place" },
   { code: "wrong-place", label: "The headline points somewhere else entirely" },
@@ -97,21 +61,12 @@ async function alreadyDrawn(): Promise<Set<string>> {
       try {
         const url = JSON.parse(line).url;
         if (url) seen.add(url);
-      } catch {
-        // A malformed line in a hand-edited audit file is not worth failing on.
-      }
+      } catch {}
     }
   }
   return seen;
 }
 
-/**
- * How the placement is put to the judge — the same claim the map makes.
- *
- * Deliberately mirrors `lib/popup.ts`: a container says "somewhere in", because
- * it is a weaker claim than a pin and judging it as though it were an exact
- * location would score it against a claim the map never made (§2.2).
- */
 function claimFor(kind: string, placedAt: string): string {
   return kind === "CONTAINER" ? `Somewhere in ${placedAt}` : placedAt;
 }
@@ -317,9 +272,7 @@ async function main(): Promise<void> {
     stamp = shiftStamp(stamp, -15);
   }
 
-  // Dedupe by URL before sampling, or a syndicated story is over-represented in
-  // the draw exactly the way it is not in the published map (grouping collapses
-  // it, §2.5).
+  // Dedupe by URL before sampling, or syndicated stories are over-represented.
   const byUrl = new Map<string, Article>();
   for (const article of filterArticles(articles, data).kept) {
     if (!excluded.has(article.url)) byUrl.set(article.url, article);
@@ -328,7 +281,7 @@ async function main(): Promise<void> {
   const population: SampleRecord[] = [];
   for (const article of byUrl.values()) {
     const trace = explainPlacement(article, data);
-    if (trace.placement.kind === "DROP") continue; // never reaches the map, so never judged
+    if (trace.placement.kind === "DROP") continue;
     population.push({
       id: "",
       title: article.title,
@@ -340,10 +293,7 @@ async function main(): Promise<void> {
     });
   }
 
-  // Fisher-Yates on a seeded PRNG. The shuffle is reproducible from the seed;
-  // the POPULATION is not, because the bundles are whatever GDELT was serving
-  // that hour — which is why the id below carries a fingerprint of the result
-  // and not just the seed. See `judge-draw-id.ts`.
+  // The shuffle is reproducible from the seed; the population is not (see judge-draw-id.ts).
   const rand = mulberry32(seed);
   for (let i = population.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1));

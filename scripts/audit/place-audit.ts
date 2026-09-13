@@ -1,32 +1,5 @@
-/**
- * Placement failure taxonomy, measured over real GDELT (HANDOFF.md §5.2).
- *
- *   fetch N bundles -> parse -> filter -> explainPlacement() -> tabulate
- *
- * **Why this exists.** §5.2's 69.7% pin accuracy is a gate the project passes
- * once. What makes the map better is knowing *which* placements are wrong and
- * why, and that could not be read off `{kind, location}` — 15 wrong rule-H
- * placements had to be classified by hand, at which point they turned out to be
- * five mechanically distinct classes. `explainPlacement()` exposes the counts
- * the rule reasoned over; this script tabulates them at a scale no human can
- * judge.
- *
- * **This measures mechanism, not correctness.** Nothing here knows whether a
- * placement is right — only a human reading the headline does (§5.1). What it
- * gives you is the population frequency of each *suspicious shape*, so that a
- * class worth 3 records in a 60-record audit can be sized against the whole
- * feed before anyone writes a rule to fix it. The hand audit says which shapes
- * correlate with being wrong; this says how much of the feed has them.
- *
- * **Do not turn a signal here into a rule without a judged sample.** The
- * project has already been burned by exactly that: mention count looked like it
- * graded pin confidence on six records (p=0.053) and went flat on 110
- * (p=0.736). Frequency is not accuracy. See §5.2 decision 3.
- *
- * Run:  node scripts/audit/place-audit.ts [bundles] [--examples N]
- *       bundles defaults to 4 (one hour of GDELT), --examples prints the
- *       highest-suspicion placements for eyeballing.
- */
+// Measures mechanism, not correctness: frequency is not accuracy. Don't turn a signal here
+// into a rule without a judged sample.
 
 import type { Article } from "../../src/lib/types.ts";
 import { fetchBundle, newestStamp, shiftStamp } from "../../worker/fetch.ts";
@@ -37,23 +10,8 @@ import { loadRefData } from "../../worker/refdata.ts";
 
 const DEFAULT_BUNDLES = 4;
 
-/**
- * The suspicious shapes, each one a failure class from the hand audit.
- *
- * These are *predicates over the trace*, not verdicts. `lone-mention` is the
- * Windsor Machines shape (a corporate earnings story whose every location
- * appeared once, pinned confidently at whichever came first); `narrow-win` is
- * the BTCC shape (the article previews Knockhill and recaps Thruxton, so the
- * subject loses 4-2 to the background). A story can carry several.
- *
- * **`lone-mention` changed meaning on 2026-08-14 and is kept for that reason.**
- * It was 29.5% of pins; the judged draw found those pins 36.4% correct, and
- * `place.ts` now DROPs them, so its **pins column must read 0.0%**. Left in as a
- * standing regression check rather than deleted: a shape that reappears here is
- * the cheapest possible signal that the rule was bypassed or reordered. The
- * remaining hits are containers, where the same shape scored 85.7% and is fine.
- * Read `weak-city`'s share in the branch table above for what the DROP costs.
- */
+// lone-mention's pins column must read 0.0% now that place.ts DROPs those pins; a nonzero
+// value means the rule was bypassed or reordered.
 const SHAPES: { name: string; note: string; test: (t: PlacementTrace) => boolean }[] = [
   {
     name: "lone-mention",
@@ -100,9 +58,7 @@ async function main(): Promise<void> {
 
   const data = await loadRefData();
 
-  // Walk backwards from the newest completed bundle. Unlike the worker there is
-  // no watermark and no state: this is a read-only measurement and must never
-  // touch the published pool.
+  // Read-only measurement: no watermark, no state, never touches the published pool.
   let stamp = await newestStamp();
   const articles: Article[] = [];
   for (let i = 0; i < bundles; i++) {

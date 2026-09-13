@@ -2,7 +2,6 @@ node_modules/
 .next/
 out/
 
-# Natural Earth data cache from build-boundaries and build-crosswalk scripts
 .cache/
 build/
 .vercel/
@@ -11,26 +10,14 @@ build/
 *.tsbuildinfo
 next-env.d.ts
 
-# Story archive is published to R2 by the worker, not built at deploy time.
+# Story archives are published to R2 by the worker. boundaries.pmtiles is static and
+# committed: Vercel has no tippecanoe to rebuild it at deploy time.
 *.pmtiles
-
-# The one exception, and the reason the rule above is about staleness rather
-# than about file type: boundaries.pmtiles is STATIC (§3.1). It is built once
-# from Natural Earth by `npm run data:boundaries`, changes only when Natural Earth
-# does, and Vercel has no tippecanoe to rebuild it at deploy time. Committing it
-# is what makes the §2.2 red outline work in production.
 !public/boundaries.pmtiles
 
-# Copied out of node_modules by predev/prebuild so MapLibre's worker is a real
-# static asset (scripts/copy-maplibre-worker.mjs). Versioned with the package,
-# so committing them would just go stale.
+# Copied from node_modules by predev/prebuild (scripts/copy-maplibre-worker.mjs).
 public/maplibre-gl-worker.mjs
 public/maplibre-gl-shared.mjs
 .gstack/
 
-# The felt/tippecanoe source checkout, cloned here on 2026-08-14 to build 2.79.0
-# after apt's 2.49.0 turned out to eat every feature with an explicit minzoom
-# (§2.4). It is a build scratch directory, not a vendored dependency — the floor
-# this project depends on is enforced by scripts/tippecanoe-min-version.sh, and
-# CI builds its own copy from the pinned TIPPECANOE_VERSION.
 tippecanoe/

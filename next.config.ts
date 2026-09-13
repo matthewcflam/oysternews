@@ -5,9 +5,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // §2.2 boundary polygons — only PMTiles archive served from this app.
-        // Accept-Ranges: bytes is required for HTTP range requests to avoid
-        // fetching the full 9 MB archive for a single tile.
+        // Accept-Ranges: bytes, or a client may fetch the whole archive to read one tile.
         source: "/boundaries.pmtiles",
         headers: [
           { key: "Accept-Ranges", value: "bytes" },
