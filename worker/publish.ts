@@ -1,17 +1,3 @@
-/**
- * Publication: R2 write, manifest, retention. Order is: upload the
- * content-hashed archive (immutable — a re-run of the same data is a
- * no-op), upload the region index and city shards, then flip the manifest
- * last, since it's the only mutation of a stable key and the map keeps
- * serving the previous archive, stale but correct, until it lands. Output
- * invariants (below) gate all of it — a run that "succeeds" but produces
- * garbage (e.g. a GDELT schema drift emptying `locations`) publishes
- * NOTHING and leaves the previous manifest in place. Retention prunes only
- * after the flip. Store transport is `r2Store` in `store.ts`, over R2's
- * S3-compatible API — see that file's header for the traps that shaped it.
- * See docs/DESIGN.md#operations.
- */
-
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { CDN_BASE } from "../src/lib/cdn.ts";
@@ -21,69 +7,35 @@ import type { RegionIndex } from "./regions.ts";
 import type { ArchiveStore } from "./store.ts";
 
 export const MANIFEST_KEY = "manifest.json";
-/** Everything content-hashed and retained together. Retention sweeps this whole directory. */
 export const ARCHIVE_DIR = "archives/";
 export const ARCHIVE_PREFIX = `${ARCHIVE_DIR}stories-`;
 export const REGIONS_PREFIX = `${ARCHIVE_DIR}regions-`;
-/** One directory per run, one shard per country beneath it — see `publish`. */
 export const CITIES_PREFIX = `${ARCHIVE_DIR}cities-`;
 export const HISTORY_KEY = "state/publish-history.json";
 
-/** Regions-index format version. Bump when a new key namespace (e.g. `CONT:*`) is added, so an old manifest's index reads as `unavailable` rather than confidently empty. See docs/DESIGN.md#the-manifest-and-regions_version. */
 export const REGIONS_VERSION = 2;
 
-/** Shard uploads run concurrently in pools this size — 121 sequential PUTs would add 12-36s to a run. */
 const CITY_UPLOAD_CONCURRENCY = 8;
 
-/** The manifest is a stable key and must not be cached long; the archives are immutable. */
+// Manifest unstable, archives immutable.
 export const MANIFEST_MAX_AGE = 60;
 export const ARCHIVE_MAX_AGE = 31_536_000;
 
-/** Keep the last 3 archives, prune the rest after the manifest flips. */
 export const KEEP_ARCHIVES = 3;
 
-/** Enough history to survive a few missed runs without unbounded growth. */
 const HISTORY_LIMIT = 24;
 
-// --- Output invariants --------------------------------------------------------
-
-/**
- * The count band: absolute group counts, not a ratio against past runs (a
- * trailing-median band failed twice in one day — "fail-closed becomes
- * fail-forever" when a refused run can't move the history that refused
- * it). Calibration ladder, each rung measured or derived:
- *
- * ```
- *   1,467   a 1-bundle smoke run (2026-08-12, BUNDLE_CAP=1)
- *   2,000   FLOOR
- *  40,700   steady state: distinct city stories after dedup, per day
- *  60,000   CEILING              = 1.47× steady state
- *  75,000   grouping stops merging entirely: ~112,500 records/day
- *                                 × ~67% placed (measured: 1411 rows -> 949)
- * ```
- *
- * These are calibration constants with a shelf life — correct for GDELT's
- * measured volume and the current grouping key; re-derive rather than nudge
- * if either changes. See docs/DESIGN.md#the-count-band.
- */
+// Count band uses absolute counts, not ratios (ratios can wedge: "fail-closed
+// becomes fail-forever" when history cannot advance). Measured bounds; re-derive
+// against fresh volume if either GDELT scale or grouping key changes.
 export const COUNT_BAND_MIN = 2_000;
 export const COUNT_BAND_MAX = 60_000;
-/** A live window spans well over a hundred countries, so this floor only fires when placement has broken globally rather than drifted. */
 export const MIN_COUNTRIES = 15;
-/** Titles are present on ~99.7% of records normally. Below 95% something upstream is wrong. */
 export const MIN_TITLE_RATE = 0.95;
-/** A window that produced nothing is a failure even with no history to compare to. */
 export const MIN_GROUPS = 1;
 
-/**
- * How long the count band may block publication before it stands down (24h,
- * the 2x monitoring cadence). Guards against COUNT_BAND_MAX going stale as
- * real volume grows — without this valve a calibration constant falling
- * behind reality would refuse every run with no self-correction. Only the
- * count band relaxes; MIN_GROUPS, the country floor, and the title rate
- * stay armed unconditionally since they catch real garbage rather than a
- * volume swing. See docs/DESIGN.md#the-count-band.
- */
+// After 24h blocked, stand down count band so one stale constant cannot wedge
+// the publish. MIN_GROUPS/MIN_COUNTRIES/MIN_TITLE_RATE stay armed.
 export const BAND_RELAX_AFTER_MS = 24 * 60 * 60 * 1000;
 
 export type PublishStats = {
@@ -121,11 +73,6 @@ export function statsOf(groups: StoryGroup[]): PublishStats {
   };
 }
 
-// Every reason this run must not publish, as human-readable lines. Returns
-// all of them, not just the first, so a run failing both the count band and
-// the country floor gets a distinguishable diagnosis in the Action log.
-// Reads nothing but the run in front of it — no history argument, since the
-// band's bounds are constants now.
 export function checkInvariants(
   stats: PublishStats,
   /** Milliseconds since the last successful publish. Past BAND_RELAX_AFTER_MS the band stands down. */
@@ -161,16 +108,8 @@ export function checkInvariants(
   return violations;
 }
 
-// --- Content hashing and retention ------------------------------------------
-
-/**
- * The archive key, derived from the archive's bytes.
- *
- * Eight hex characters is 32 bits. The collision that matters is not birthday
- * across all archives ever, but two *different* archives colliding inside the
- * three-deep retention window, which 32 bits makes irrelevant. Short keys keep
- * the manifest readable in a log line.
- */
+// 8 hex chars (32 bits) is enough: collision within retention window
+// (3 deep) is negligible, and short keys keep logs readable.
 export function contentHash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 8);
 }
@@ -179,10 +118,6 @@ export function archiveKey(hash: string): string {
   return `${ARCHIVE_PREFIX}${hash}.pmtiles`;
 }
 
-// Which archive keys to delete, given everything stored and the history
-// *after* this run's entry was appended. Driven by history, not upload
-// timestamps: an archive uploaded but never published (invariants failed
-// after upload) should prune immediately, not age out.
 export function archivesToPrune(
   stored: string[],
   history: HistoryEntry[],
@@ -215,15 +150,7 @@ export function nextHistory(
   return [...history.filter((h) => h.archive !== entry.archive), entry].slice(-limit);
 }
 
-// --- The store ---------------------------------------------------------------
-
-// Re-exported so existing imports of ArchiveStore from publish.ts keep
-// working — the type itself, and its implementation (`r2Store`), now live
-// in store.ts, which is the natural home for anything shaped by the
-// store's transport.
 export type { ArchiveStore };
-
-// --- Publishing ---------------------------------------------------------------
 
 export type PublishInput = {
   store: ArchiveStore;
@@ -244,23 +171,12 @@ export type PublishResult =
   | { published: true; manifest: Manifest; stats: PublishStats; pruned: number; bandRelaxed: boolean }
   | { published: false; violations: string[]; stats: PublishStats };
 
-// How long since the last successful publish, using each entry's watermark
-// (not wall clock) so this stays readable from history alone. Returns
-// Infinity on an empty/unparseable history — callers must not hand that
-// straight to the relax valve; publish() gates on history.length > 0.
 export function staleness(history: HistoryEntry[], now: Date): number {
   const stamps = history.map((entry) => stampToMs(entry.stamp)).filter((ms) => !Number.isNaN(ms));
   if (stamps.length === 0) return Number.POSITIVE_INFINITY;
   return now.getTime() - Math.max(...stamps);
 }
 
-// Fail fast on credentials that cannot reach the store. Every read elsewhere
-// in this pipeline swallows its own errors (a first-run "not written yet" is
-// legitimate), which otherwise leaves a bad credential invisible until the
-// first write, several steps later, with a stack trace that names nothing
-// about the credential. One authenticated `list` at startup catches it in
-// one line; kept to a single call since `list` (ListObjectsV2) is a billed
-// R2 Class A operation.
 export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
   try {
     await store.list(ARCHIVE_PREFIX);
@@ -280,24 +196,8 @@ export async function assertStoreReachable(store: ArchiveStore): Promise<void> {
   }
 }
 
-/**
- * Fail fast when the public host cannot serve what we are about to publish.
- *
- * `assertStoreReachable` proves the *S3 endpoint* answers, which is a
- * different host from the one the browser reads. The manifest's `url`,
- * `regionsUrl` and `citiesBase` are all built from `CDN_BASE`, so a run can
- * write every object successfully, flip the manifest, exit 0 — and still
- * leave the map blank, because nothing ever checked that `CDN_BASE` resolves.
- * That is not hypothetical: on 2026-08-24 a scheduled run published a
- * manifest pointing at a custom domain whose zone had not been delegated yet,
- * and the failure was invisible for two and a half hours.
- *
- * A 404 is a **pass**. The bucket is empty on a first run, and any HTTP
- * response at all proves DNS, TLS and routing work — which is the whole
- * question. Only a transport-level throw (NXDOMAIN, TLS failure, refused
- * connection) fails, and that is exactly the shape a wrong or undelegated
- * `CDN_BASE` takes. One Class B operation against a 10M/month allowance.
- */
+// S3 endpoint answering ≠ CDN_BASE reachable. This probe must not fail
+// on HTTP 404 (empty on first run); only on DNS/TLS/connection errors.
 export async function assertPublicHostReachable(
   base: string = CDN_BASE,
   // Injected so the test can drive it without a network.
@@ -344,8 +244,6 @@ async function pooled<T>(items: T[], limit: number, worker: (item: T) => Promise
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
 }
 
-// Validate, upload, flip, prune, in that order. Invariants run against the
-// pre-upload groups, so a rejected run costs nothing and leaves no orphan.
 export async function publish(input: PublishInput): Promise<PublishResult> {
   const { store, archivePath, groups, watermark } = input;
   const now = input.now ?? new Date();
@@ -353,9 +251,6 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const stats = statsOf(groups);
   const history = await readHistory(store);
 
-  // history.length > 0 is load-bearing: staleness() returns Infinity on an
-  // empty history, so without this the very first run of a fresh store
-  // would relax the band and publish any count at all.
   const staleFor = staleness(history, now);
   const bandRelaxed = history.length > 0 && staleFor >= BAND_RELAX_AFTER_MS;
 
@@ -366,8 +261,6 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   const key = archiveKey(contentHash(bytes));
   const url = await store.putBinary(key, bytes, ARCHIVE_MAX_AGE);
 
-  // Uploaded before the manifest flip, like the archive: everything the
-  // flip will point at must already exist.
   const regionsBody = `${JSON.stringify(input.regions)}\n`;
   const regionsKey = `${REGIONS_PREFIX}${contentHash(Buffer.from(regionsBody))}.json`;
   const regionsUrl = await store.putText(
@@ -377,9 +270,6 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     ARCHIVE_MAX_AGE,
   );
 
-  // City shards, uploaded before the manifest for the same reason. One
-  // content-hashed directory covers all of them so retention tracks one
-  // prefix instead of ~121 keys.
   const cities = input.cities ?? {};
   const countryCodes = Object.keys(cities).sort();
   let citiesDir: string | undefined;
@@ -413,7 +303,6 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
     },
   };
 
-  // The flip. Everything before this point is invisible to the browser.
   await store.putText(
     MANIFEST_KEY,
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -430,10 +319,6 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   });
   await store.putText(HISTORY_KEY, `${JSON.stringify(updated)}\n`, "application/json", 0);
 
-  // Must list the whole ARCHIVE_DIR, not a narrower prefix — a filter can
-  // only delete what the listing returned, and a too-narrow listing here
-  // once left every regions-*.json un-pruned for months with no visible
-  // symptom. See docs/DESIGN.md#publication-order.
   const stored = await store.list(ARCHIVE_DIR);
   const stale = archivesToPrune(stored, updated);
   for (const old of stale) await store.remove(old);
@@ -441,10 +326,6 @@ export async function publish(input: PublishInput): Promise<PublishResult> {
   return { published: true, manifest, stats, pruned: stale.length, bandRelaxed };
 }
 
-// Ping the dead-man switch (healthchecks.io, 12h period + 12h grace = the 2x
-// cadence alert rule, docs/DESIGN.md#failure). Best-effort: the run has
-// already published by the time this is called, so a failed ping must not
-// turn a monitoring outage into a data outage.
 export async function pingHealthcheck(url: string | undefined): Promise<boolean> {
   if (!url) return false;
   try {
