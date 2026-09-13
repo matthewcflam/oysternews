@@ -1,8 +1,12 @@
 {
   "name": "sonder",
   "version": "0.1.0",
+  "description": "Map of global political and cultural news, built with Vercel and MapLibre",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "predev": "node scripts/copy-maplibre-worker.mjs",
     "dev": "next dev",
@@ -10,6 +14,10 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "npm run typecheck && npm run lint && npm test",
     "test": "vitest run",
     "crosswalk": "node scripts/build-crosswalk.ts",
     "gkg": "node scripts/build-real-geojson.ts",
@@ -32,6 +40,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

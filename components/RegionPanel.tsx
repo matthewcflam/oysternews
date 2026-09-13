@@ -127,9 +127,8 @@ export default function RegionPanel({
              * A plain <img>, not next/image, for the same reason the story panel's
              * thumbnail is: this is a third party's URL, and routing it through
              * Vercel's optimizer would proxy their bytes on every view.
-             *
-             * eslint-disable-next-line @next/next/no-img-element
              */
+            // biome-ignore lint/performance/noImgElement: third-party URL, avoid Vercel proxy
             <img
               className="panel__flag"
               src={flag}

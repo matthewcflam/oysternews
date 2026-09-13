@@ -31,7 +31,7 @@ export default function MapTilerLogo() {
       target="_blank"
       rel="noopener noreferrer"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {/* biome-ignore lint/performance/noImgElement: remote logo, unknown host */}
       <img src="https://api.maptiler.com/resources/logo.svg" alt="MapTiler" width={110} height={30} />
     </a>
   );

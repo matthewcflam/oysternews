@@ -125,9 +125,8 @@ export default function StoryPanel({ story, onClose }: StoryPanelProps) {
              * vanish, and a broken-image icon is worse than none. That matters
              * slightly more now: the URL was current when GDELT crawled the page,
              * not necessarily when the reader opens the panel.
-             *
-             * eslint-disable-next-line @next/next/no-img-element
              */
+            // biome-ignore lint/performance/noImgElement: publisher CDN URL, avoid Vercel proxy
             <img
               className="panel__image"
               src={image}

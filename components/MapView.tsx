@@ -560,10 +560,7 @@ const zoomToRegion = () => fitTo(zoomTargetFor(selection));
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // `clearStory` and `clearRegion` are re-created every render and close over
-    // nothing that outlives it; what decides whether the key is live is the
-    // selection, which is what this depends on.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // biome-ignore lint/correctness/useExhaustiveDependencies: clearStory/clearRegion recreated each render; selection is what matters
   }, [story, selection]);
 
   useEffect(() => {
