@@ -1,18 +1,5 @@
-/**
- * Generate data/crosswalk.json — the FIPS 10-4 -> ISO 3166 country crosswalk.
- *
- * HANDOFF.md §3.4: GDELT speaks FIPS, everything else speaks ISO, and four codes
- * collide with entirely different countries (RS is Russia, not Serbia; CH is
- * China, not Switzerland; IS is Israel, not Iceland; AS is Australia, not
- * American Samoa). A naive two-letter join is silently wrong and looks correct.
- *
- * Natural Earth carries the mapping in a `FIPS_10` column — note `FIPS_10`, not
- * `FIPS_10_`, which is the name that does not exist and cost this project time
- * once already.
- *
- * Run:  node scripts/build-crosswalk.ts
- * Output is committed. Re-run only to refresh against a newer Natural Earth.
- */
+// Output is committed; re-run only to refresh against a newer Natural Earth.
+// The column is FIPS_10 (not FIPS_10_).
 
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -36,16 +23,8 @@ type Feature = {
 };
 
 /** Natural Earth writes -99 rather than null for "no value". */
-const value = (raw: string | undefined): string =>
-  raw && raw !== "-99" ? raw.trim() : "";
+const value = (raw: string | undefined): string => (raw && raw !== "-99" ? raw.trim() : "");
 
-/**
- * Natural Earth's seven inhabited continents, read straight through —
- * `lib/continents.ts` owns the mapping onto `CONT:` ids. "Seven seas (open
- * ocean)" (9 island features with no inhabited continent) maps to "" and is
- * dropped rather than mapped, the same choice `value()` makes for -99: an
- * unknown continent is not Antarctica.
- */
 const CONTINENT_NAMES = new Set([
   "Africa",
   "Antarctica",
@@ -83,10 +62,7 @@ async function main(): Promise<void> {
     const code = value(feature.properties.FIPS_10);
     if (!code) continue;
 
-    // ISO_A2 is -99 for France, Kosovo and a few dependencies; ISO_A2_EH carries
-    // the de-facto code for those. Sovereignty edge cases (Spratly Islands) have
-    // neither, and are kept with an empty ISO rather than dropped — GDELT can
-    // still tag a story there, and a known name beats an unknown code.
+    // ISO_A2 is -99 for France, Kosovo and a few dependencies; ISO_A2_EH carries their code.
     const iso = value(feature.properties.ISO_A2) || value(feature.properties.ISO_A2_EH);
     const name = value(feature.properties.NAME);
     const continent = continentOf(feature.properties.CONTINENT);
@@ -95,7 +71,7 @@ async function main(): Promise<void> {
 
     if (fips[code]) {
       collisions.push(`${code}: ${fips[code].name} / ${name}`);
-      continue; // first wins; the report below makes the choice visible
+      continue;
     }
     fips[code] = { iso, name, continent };
   }
@@ -119,13 +95,10 @@ async function main(): Promise<void> {
 
   wrote ${path.relative(REPO_ROOT, OUTPUT)}`);
 
-  // §3.4's collisions, reported rather than asserted. The assertion lives in
-  // worker/refdata.ts, which sees the crosswalk with data/fips-overrides.json
-  // applied — and it has to, because **Natural Earth has no FIPS_10 for
-  // Israel**, which is exactly why the override file exists. Failing here would
-  // make the generator unable to produce the input its own fix depends on.
+  // Reported, not asserted: the assertion needs data/fips-overrides.json applied, so it lives
+  // in worker/refdata.ts.
   const traps: Record<string, string> = { RS: "RU", CH: "CN", IS: "IL", AS: "AU", UK: "GB" };
-  console.log("  §3.4 collision codes, before overrides:");
+  console.log("  FIPS/ISO collision codes, before overrides:");
   for (const [code, iso] of Object.entries(traps)) {
     const got = fips[code]?.iso ?? "";
     const mark = got === iso ? "ok" : got === "" ? "MISSING -> needs an override" : "MISMATCH";

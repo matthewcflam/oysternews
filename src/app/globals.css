@@ -1,0 +1,922 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* --mark has a TypeScript twin (MARK in lib/layers.ts) that MapLibre reads; change both together. */
+:root {
+  --panel-veil: rgba(55, 54, 102, 1);
+  --panel-wash: rgba(55, 54, 102, 0.35);
+  --accent: #d24f39;
+  --mark: #c05ac4;
+  --muted: #afafaf;
+  --pill: #4e4d8f;
+  --shadow: rgba(0, 0, 0, 0.15);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #0d0f12;
+  color: #f2f4f7;
+  font:
+    15px / 1.45 var(--font-newsreader),
+    Newsreader,
+    Georgia,
+    "Times New Roman",
+    serif;
+}
+
+main {
+  position: relative;
+  height: 100vh;
+  /* biome-ignore lint/suspicious/noDuplicateProperties: 100vh is the fallback for browsers without dvh */
+  height: 100dvh;
+  /* Clip: the collapsed panel and its tab stick out of the viewport and would add a scrollbar. */
+  overflow: hidden;
+}
+
+/* Scoped to main: maplibre-gl.css loads after this file, so a bare .map loses `position` */
+/* to .maplibregl-map, collapses to height 0 and never requests a tile. */
+main .map {
+  position: absolute;
+  inset: 0;
+}
+
+/* A sibling of .map, not a child: MapLibre owns and reorders its container's children. */
+main .bubbles {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.bubble-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+
+/* 52px and 12px must match TAIL_DROP and TAIL_INSET in lib/bubble.ts (kept in step by hand). */
+.bubble {
+  --bubble-bg: var(--accent);
+  position: absolute;
+  width: 135px;
+  margin: 0;
+  padding: 6px 1.5px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bubble-bg);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.bubble--left {
+  right: 8px;
+}
+
+.bubble--right {
+  left: 8px;
+  --flip-x: -1;
+}
+
+.bubble--up {
+  bottom: 52px;
+}
+
+.bubble--down {
+  top: 52px;
+  --flip-y: -1;
+}
+
+.bubble:hover {
+  filter: brightness(1.08);
+}
+
+.bubble:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.bubble__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 16px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  /* An unbroken long token would otherwise overflow the body instead of wrapping. */
+  overflow-wrap: anywhere;
+}
+
+.bubble__tail {
+  position: absolute;
+  right: -8px;
+  display: block;
+  overflow: visible;
+  transform: scale(var(--flip-x, 1), var(--flip-y, 1));
+}
+
+.bubble__tail path {
+  fill: var(--bubble-bg);
+}
+
+.bubble--right .bubble__tail {
+  right: auto;
+  left: -8px;
+}
+
+.bubble--up .bubble__tail {
+  bottom: -52px;
+}
+
+.bubble--down .bubble__tail {
+  top: -52px;
+}
+
+/* z-index 2, under the panels (3): below 520px the story panel's close button lands here. */
+.brand {
+  position: absolute;
+  top: 30px;
+  right: 24px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+  text-shadow: 0 1px 6px rgba(13, 15, 18, 0.9);
+  pointer-events: none;
+}
+
+.brand__word {
+  position: relative;
+  margin: 0;
+  color: #ffffff;
+  font-size: 50px;
+  line-height: 40px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.search__mark,
+.brand__dot,
+.brand__dot {
+  /* In em, so the bead tracks the wordmark's size. */
+  position: absolute;
+  left: 0.3em;
+  top: 0.2em;
+  width: 0.2em;
+  height: 0.2em;
+}
+
+.freshness {
+  margin: 0;
+  max-width: min(60vw, 260px);
+  color: #ffffff;
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  opacity: 1;
+}
+
+.freshness--stale {
+  color: #ff9ea1;
+  opacity: 1;
+}
+
+/* pointer-events none so drags pass through to the map; the field and list opt back in. */
+.search {
+  position: absolute;
+  top: 31px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.search__mark {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+
+.search__box {
+  position: relative;
+}
+
+.search__field {
+  display: flex;
+  align-items: center;
+  width: 250px;
+  height: 40px;
+  padding: 0 18px 0 17px;
+  border-radius: 20px;
+  background: var(--pill);
+  pointer-events: auto;
+}
+
+.search__input {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 16px;
+  line-height: 22px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+/* Sized on the input, not ::placeholder: a smaller placeholder sits low on the 16px baseline. */
+.search__input:placeholder-shown {
+  font-size: 14px;
+}
+
+.search__input::placeholder {
+  color: var(--muted);
+}
+
+/* Transparent rather than removed, so it still names the field for screen readers. */
+.search__input:focus::placeholder {
+  color: transparent;
+}
+
+.search__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+
+.search__list {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+  border-radius: 20px;
+  background: var(--pill);
+  pointer-events: auto;
+}
+
+.search__option {
+  padding: 8px 17px;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search__option[aria-selected="true"] {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.search__option-parent {
+  color: var(--muted);
+}
+
+.search__empty {
+  padding: 8px 17px;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: -0.02em;
+  color: var(--muted);
+  white-space: normal;
+  cursor: default;
+}
+
+.panel {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 3;
+  width: 324px;
+  height: fit-content;
+  min-height: 450px;
+  max-height: calc(100% - 180px);
+  color: #ffffff;
+  filter: drop-shadow(0px 6px 3px rgba(0, 0, 0, 0.25));
+}
+
+.panel--bounded {
+  height: 489px;
+}
+
+.panel__scroll {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 29px;
+  background: var(--panel-veil);
+}
+
+.panel__more,
+.panel__list {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+}
+
+/* Both scrollbar syntaxes are needed: neither engine family supports the other's. */
+.panel__more::-webkit-scrollbar,
+.panel__list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel__more::-webkit-scrollbar-track,
+.panel__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel__more::-webkit-scrollbar-thumb,
+.panel__list::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.panel__more::-webkit-scrollbar-thumb:hover,
+.panel__list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 520px) {
+  .panel {
+    top: 96px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100% - 200px);
+  }
+
+  .search {
+    top: 14px;
+    left: 12px;
+    transform: none;
+  }
+
+  .brand {
+    top: 10px;
+    right: 12px;
+  }
+
+  .brand__word {
+    display: none;
+  }
+
+  .freshness {
+    max-width: 150px;
+  }
+}
+
+.panel__hero {
+  position: relative;
+  flex: none;
+  height: 190px;
+  display: flex;
+  align-items: flex-end;
+  padding: 16px 18px;
+  overflow: hidden;
+}
+
+.panel__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(1) saturate(0.85);
+}
+
+.panel__hero--image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(var(--panel-wash), var(--panel-wash));
+}
+
+.panel__close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 1;
+  border: 0;
+  background: none;
+  color: #ffffff;
+  opacity: 0.85;
+  font-size: 26px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.panel__close:hover {
+  opacity: 1;
+}
+
+/* The 38px top padding keeps the flag clear of the close button (measured). */
+.panel__head {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 38px 18px 0;
+  letter-spacing: -0.02em;
+}
+
+.panel__ident {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel__crumbs {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.panel__crumb--here {
+  color: #ffffff;
+}
+
+.panel__crumb-sep {
+  padding: 0 6px;
+  color: var(--muted);
+}
+
+.panel__region {
+  margin: 2px 0 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.15;
+  /* min-width: 0 on .panel__ident is what lets a long name wrap. */
+  overflow-wrap: anywhere;
+}
+
+.panel__counts {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+/* object-fit: cover on a fixed box: flags differ in aspect ratio, and the header must not change shape. */
+.panel__flag {
+  flex: none;
+  width: 78px;
+  height: 50px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.panel__body {
+  flex: none;
+  padding: 6px 18px 0;
+  letter-spacing: -0.02em;
+}
+
+.panel__byline {
+  margin: 0;
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.3;
+}
+
+.panel__title {
+  margin: 8px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.panel__where {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.panel__sphere {
+  flex: none;
+  width: 11px;
+  height: 11px;
+}
+
+.panel__cta {
+  display: block;
+  margin: 14px 0 0;
+  padding: 11px 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+}
+
+.panel__cta:hover {
+  filter: brightness(1.08);
+}
+
+.panel__cta:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+/* min-height: 0, or the flex item won't shrink and the scroll container silently clips instead. */
+.panel__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 20px 18px 0;
+  padding: 18px 0 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.25);
+  letter-spacing: -0.02em;
+}
+
+.panel__list ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel__list li + li {
+  margin-top: 22px;
+}
+
+.panel__row-place {
+  margin: 0 0 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.2;
+}
+
+.panel__meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 5px 0 0;
+}
+
+.panel__source {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel__bullet {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.panel__stamp {
+  flex: none;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+.panel__list a {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #ffffff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.panel__list a:hover,
+.panel__list a:focus-visible {
+  text-decoration: underline;
+  text-decoration-color: #ffffff;
+  text-underline-offset: 3px;
+}
+
+.panel__note {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.panel__footer {
+  flex: none;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px 20px;
+}
+
+.panel__footer--about {
+  justify-content: right;
+}
+
+.panel__about {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: 0.9;
+}
+
+.panel__about:hover {
+  opacity: 1;
+}
+
+.panel__footer--zoom {
+  justify-content: flex-end;
+  padding: 16px 30px 16px;
+}
+
+.panel__zoom {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #ffffff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.panel__zoom:hover {
+  opacity: 1;
+  text-decoration: underline;
+  text-decoration-color: #ffffff;
+  text-underline-offset: 3px;
+}
+
+.panel__zoom:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.notice {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(92vw, 520px);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.notice--info {
+  background: rgba(13, 15, 18, 0.9);
+  border: 1px solid #2c3138;
+}
+
+.notice--error {
+  background: #2a1214;
+  border: 1px solid #e5484d;
+}
+
+.notice code {
+  font-size: 11px;
+}
+
+/* These are the pre-measure fallback; MapView sets right/bottom/width inline. */
+.globe-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 85px;
+  z-index: 2;
+  width: 29px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.globe-btn img {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+.globe-btn:hover img {
+  opacity: 0.85;
+}
+
+.globe-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 2px 2px #0096ff;
+}
+
+.headline-toggle {
+  position: absolute;
+  right: 45px;
+  bottom: 10px;
+  z-index: 2;
+  height: 29px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  font:
+    600 14px / 1 var(--font-inter),
+    Inter,
+    system-ui,
+    sans-serif;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.headline-toggle:hover {
+  background: #f2f2f2;
+}
+
+.headline-toggle__box {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 1px solid #999;
+  border-radius: 3px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.headline-toggle__box[data-state="checked"] {
+  background: var(--accent, #e5484d);
+  border-color: transparent;
+}
+
+.headline-toggle__box:focus-visible {
+  outline: none;
+  box-shadow: 0 0 2px 2px #0096ff;
+}
+
+.headline-toggle__indicator {
+  display: flex;
+  color: #fff;
+}
+
+/* Unset the map's 100vh here, or the About article is clipped at one screen with no scrollbar. */
+main.about {
+  height: auto;
+  min-height: 100%;
+  padding: 40px 20px 72px;
+}
+
+.about article {
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+.about p,
+.about li {
+  font-size: 15px;
+  line-height: 1.65;
+  opacity: 0.92;
+}
+
+.about h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+  letter-spacing: 0.01em;
+}
+
+.about h2 {
+  margin: 40px 0 10px;
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+
+.about__lede {
+  margin: 0 0 8px;
+  opacity: 0.75;
+}
+
+.about ul {
+  margin: 10px 0;
+  padding-left: 20px;
+}
+
+.about li + li {
+  margin-top: 6px;
+}
+
+.about a {
+  color: #7cc0ff;
+}
+
+.about__back {
+  font-size: 13px;
+  margin: 0 0 28px;
+}
+
+.about__back--foot {
+  margin: 44px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid #22262c;
+}
+
+.about__table {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  margin: 16px 0;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.about__table th,
+.about__table td {
+  padding: 8px 14px 8px 0;
+  text-align: left;
+  border-bottom: 1px solid #22262c;
+  white-space: nowrap;
+}
+
+.about__table th {
+  font-weight: 600;
+  opacity: 0.6;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+}
+
+.about__pending {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #2c3138;
+  border-left: 2px solid #7cc0ff;
+  border-radius: 0 6px 6px 0;
+  background: rgba(124, 192, 255, 0.05);
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

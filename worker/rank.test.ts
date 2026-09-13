@@ -1,16 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
+import type { PlacedArticle, StoryGroup } from "../src/lib/types.ts";
 import { compareGroups, parseGkgDate, rankGroups, salienceOf, summarise } from "./rank.ts";
-
-/**
- * HANDOFF.md §7 names five tier-1 paths as required coverage. They are numbered
- * in the test titles below so the mapping stays checkable.
- */
 
 const HOUR = 3600 * 1000;
 const NOW = Date.UTC(2026, 7, 12, 12, 0, 0);
 
-/** GKG date `hoursAgo` before NOW. */
 function gkg(hoursAgo: number): string {
   const d = new Date(NOW - hoursAgo * HOUR);
   const pad = (n: number, w = 2) => String(n).padStart(w, "0");
@@ -77,22 +71,20 @@ describe("salience", () => {
   });
 
   it("excludes unresolved publisher countries rather than bucketing them", () => {
-    // Bucketing "" as a country would give every unresolved publisher a shared
-    // nationality and inflate the border-crossing term for purely local stories.
     const stats = summarise(
       [
         article({ domain: "a.com", sourceCountry: "" }),
         article({ domain: "b.com", sourceCountry: "" }),
         article({ domain: "c.co.uk", sourceCountry: "GB" }),
       ],
-      NOW,
+      NOW
     );
     expect(stats.distinctSourceCountries).toBe(1);
     expect(stats.distinctDomains).toBe(3);
   });
 });
 
-describe("tier-1 freshness (§6 decision 10 — newest, not oldest)", () => {
+describe("tier-1 freshness (newest, not oldest)", () => {
   it("is fresh inside 48 hours", () => {
     const stats = summarise([article({ tier1: true, date: gkg(47) })], NOW);
     expect(stats.tier1Fresh).toBe(true);
@@ -104,14 +96,12 @@ describe("tier-1 freshness (§6 decision 10 — newest, not oldest)", () => {
   });
 
   it("renews from the NEWEST tier-1 article — a follow-up piece extends the window", () => {
-    // Against the OLDEST, a story a tier-1 outlet is still actively covering
-    // would expire mid-coverage.
     const stats = summarise(
       [
         article({ tier1: true, date: gkg(70), domain: "old.com" }),
         article({ tier1: true, date: gkg(2), domain: "new.com" }),
       ],
-      NOW,
+      NOW
     );
     expect(stats.tier1Fresh).toBe(true);
     expect(stats.newestTier1).toBe(gkg(2));
@@ -122,7 +112,7 @@ describe("tier-1 freshness (§6 decision 10 — newest, not oldest)", () => {
   });
 });
 
-describe("the §2.5 comparator", () => {
+describe("the ranking comparator", () => {
   it("path 1: a LOW-salience tier-1 story beats a HIGH-salience ordinary one", () => {
     const tier1 = group({ id: "t", tier1Fresh: true, salience: salienceOf(2, 0) });
     const ordinary = group({ id: "o", tier1Fresh: false, salience: salienceOf(50, 12) });
@@ -142,7 +132,6 @@ describe("the §2.5 comparator", () => {
   });
 
   it("path 4: with no tier-1 anywhere, ranking is exactly salience order", () => {
-    // The fallback path IS the original path — not a special case.
     const groups = [
       group({ id: "a", salience: 3 }),
       group({ id: "b", salience: 7 }),

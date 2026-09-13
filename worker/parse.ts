@@ -1,28 +1,10 @@
-/**
- * GKG 2.1 parsing. PURE — takes text, returns records, touches nothing;
- * worker/fetch.ts does the downloading and unzipping. Two load-bearing,
- * non-obvious choices: (1) V2GCAM, 69.4% of a bundle's bytes, is never
- * materialized — `columns()` index-scans and slices only the wanted
- * fields, rather than `row.split("\t")` building and discarding it ~1,200
- * times per bundle; (2) the schema canary is `>= MIN_COLS`, not `===` —
- * GDELT appending a benign column is far more likely than a real
- * regression, and this is the only access path with no fallback (see
- * docs/DESIGN.md#data-reality), so failing closed on a false positive
- * takes the whole map down.
- */
+import type { Article, GdeltLocation } from "../src/lib/types.ts";
 
-import type { Article, GdeltLocation } from "../lib/types.ts";
-
-/** GKG 2.1 column indices, 0-based. */
 const C_DATE = 1;
 const C_SOURCE = 3;
 const C_DOCID = 4;
 const C_THEMES = 8;
 const C_LOC = 10;
-// V2.1SHARINGIMAGE: the publisher's declared og:image, already read off the
-// page by GDELT. Replaced a server-side /api/og fetch-and-scrape endpoint
-// (an SSRF surface) that existed only to re-derive this field. Measured
-// 87.8% non-empty over 1,085 sampled rows.
 const C_IMAGE = 18;
 const C_EXTRAS = 26;
 
@@ -32,18 +14,11 @@ export const MIN_COLS = 27;
 
 export type ParseResult = {
   articles: Article[];
-  /** Every row seen, including the ones dropped below. */
   rows: number;
-  /** Rows failing the schema canary. A nonzero count here is a GDELT schema change. */
   shortRows: number;
-  /** Rows with no PAGE_TITLE. Measured at ~0.3%; a spike means GDELT changed V2EXTRASXML. */
   noTitle: number;
 };
 
-/**
- * Slice the requested columns out of one tab-separated row.
- * Returns null when the row is short of the canary.
- */
 export function columns(row: string, wanted: readonly number[] = WANTED): string[] | null {
   const out: string[] = new Array(wanted.length).fill("");
   const slot = new Map(wanted.map((column, index) => [column, index]));
@@ -74,7 +49,6 @@ const NAMED_ENTITIES: Record<string, string> = {
   nbsp: " ",
 };
 
-/** GKG is ASCII-only and its titles are HTML-entity-escaped. */
 export function unescapeEntities(value: string): string {
   return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, body: string) => {
     if (body[0] === "#") {
@@ -88,13 +62,6 @@ export function unescapeEntities(value: string): string {
   });
 }
 
-/**
- * V2EnhancedLocations:
- *   Type#FullName#CountryCode#ADM1Code#ADM2Code#Lat#Long#FeatureID#CharOffset
- *
- * Records carry 6+ locations roughly half the time, so this runs on every
- * kept row and is worth keeping allocation-light.
- */
 export function parseLocations(field: string): GdeltLocation[] {
   const out: GdeltLocation[] = [];
   for (const chunk of field.split(";")) {
@@ -124,15 +91,7 @@ export function parseLocations(field: string): GdeltLocation[] {
   return out;
 }
 
-/**
- * The sharing image, or "" — the only place it is ever validated. Ends up
- * in an `<img src>` in the browser, so this is untrusted input reaching the
- * DOM; sanitising here (the archive boundary) means a bad value never
- * reaches a tile at all. `https:`/`http:` only — a scheme allowlist, since
- * `javascript:` must never render and `data:` could carry an arbitrarily
- * large payload into a tile. Multi-valued field in practice; first valid
- * one wins.
- */
+// Sanitizes untrusted input for <img src>: https:/http: only, never javascript:/data:.
 export function parseSharingImage(field: string): string {
   for (const chunk of field.split(";")) {
     const candidate = chunk.trim();
@@ -149,7 +108,6 @@ export function parseSharingImage(field: string): string {
   return "";
 }
 
-/** V2EnhancedThemes is `THEME,offset;THEME,offset;...` — the offsets are unused. */
 export function parseThemes(field: string): string[] {
   const out: string[] = [];
   for (const chunk of field.split(";")) {
@@ -160,7 +118,6 @@ export function parseThemes(field: string): string[] {
   return out;
 }
 
-/** One row -> one Article, or null if it fails the canary or has no title. */
 export function parseRow(row: string): { article: Article | null; short: boolean } {
   const cols = columns(row);
   if (!cols) return { article: null, short: true };

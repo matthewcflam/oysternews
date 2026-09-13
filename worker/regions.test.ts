@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { StoryGroup } from "../lib/types.ts";
-import { REGION_TOP_N, buildRegionIndex, indexStats } from "./regions.ts";
+import type { StoryGroup } from "../src/lib/types.ts";
+import { buildRegionIndex, indexStats, REGION_TOP_N } from "./regions.ts";
 
 function group(patch: Partial<StoryGroup> = {}): StoryGroup {
   return {
@@ -36,15 +36,11 @@ describe("buildRegionIndex", () => {
   });
 
   it("does not file a country container under itself twice", () => {
-    // regionIdFor gives a country container adm1 === country. Filing it under
-    // both would make "US" look like an admin-1 region of itself.
     const index = buildRegionIndex([group({ kind: "CONTAINER", adm1: "US", regionId: "US" })]);
     expect(Object.keys(index)).toEqual(["US"]);
   });
 
   it("includes a pin's admin-1, which is the whole reason adm1 exists", () => {
-    // Pins are 33.5% of the feed and carry regionId "". A panel keyed on
-    // regionId would show California's containers and omit a third of its news.
     const index = buildRegionIndex([group({ kind: "PIN", regionId: "", adm1: "USCA" })]);
     expect(index.USCA.stories).toHaveLength(1);
   });
@@ -54,9 +50,7 @@ describe("buildRegionIndex", () => {
     expect(index).toEqual({});
   });
 
-  it("orders by the §2.5 comparator, not by input order", () => {
-    // budget.ts returns groups in its tile walk's order. A panel that depended
-    // on an upstream sort would break the day someone reordered a stage.
+  it("orders by the ranking comparator, not by input order", () => {
     const index = buildRegionIndex([
       group({ id: "low", title: "low", salience: 0.5 }),
       group({ id: "top", title: "top", salience: 4 }),
@@ -66,7 +60,6 @@ describe("buildRegionIndex", () => {
   });
 
   it("puts a tier-1 story ahead of a more salient ordinary one", () => {
-    // §2.5's first key. The panel must not quietly re-rank on salience alone.
     const index = buildRegionIndex([
       group({ id: "big", title: "big", salience: 4 }),
       group({ id: "t1", title: "t1", salience: 0.7, tier1Fresh: true }),
@@ -76,37 +69,36 @@ describe("buildRegionIndex", () => {
 
   it("caps each region independently", () => {
     const many = Array.from({ length: REGION_TOP_N + 5 }, (_, i) =>
-      group({ id: `${i}`, salience: 100 - i }),
+      group({ id: `${i}`, salience: 100 - i })
     );
     const index = buildRegionIndex([...many, group({ id: "fr", countryCode: "FR", adm1: "" })]);
     expect(index.US.stories).toHaveLength(REGION_TOP_N);
     expect(index.FR.stories).toHaveLength(1);
   });
 
-  it("carries only title, source, url, date and place — §2.6 link-out only", () => {
-    // The type is the constraint; this is the test that keeps it one. Salience
-    // and tier1 must not reach the browser: §2.3 forbids a tier-1 badge, and the
-    // surest way to prevent one is for the data not to be there.
+  it("carries only title, source, url, date and place (link-out only)", () => {
     const [story] = buildRegionIndex([group()]).US.stories;
     expect(Object.keys(story).sort()).toEqual(["date", "place", "source", "title", "url"]);
   });
 
   it("includes a group the map cannot draw", () => {
-    // §2.4 overflow: minzoom above the z12 ceiling means it is in the pipeline
-    // and not on the map. The panel is the only surface that can reach it.
     const index = buildRegionIndex([group({ minzoom: 14 })]);
     expect(index.US.stories).toHaveLength(1);
   });
 });
 
-describe("buildRegionIndex — continents (§4)", () => {
+describe("buildRegionIndex — continents", () => {
   it("files under a continent key when a resolver is supplied", () => {
-    const index = buildRegionIndex([group({ countryCode: "US", adm1: "USCA" })], undefined, () => "CONT:NA");
+    const index = buildRegionIndex(
+      [group({ countryCode: "US", adm1: "USCA" })],
+      undefined,
+      () => "CONT:NA"
+    );
     expect(Object.keys(index).sort()).toEqual(["CONT:NA", "US", "USCA"]);
     expect(index["CONT:NA"].stories[0].title).toBe("A headline");
   });
 
-  it("files nothing when the resolver returns \"\"", () => {
+  it('files nothing when the resolver returns ""', () => {
     const index = buildRegionIndex([group()], undefined, () => "");
     expect(Object.keys(index).sort()).toEqual(["US", "USCA"]);
   });
@@ -120,10 +112,12 @@ describe("buildRegionIndex — continents (§4)", () => {
     const index = buildRegionIndex(
       [group({ countryCode: "US", adm1: "USCA" }), group({ countryCode: "FR", adm1: "" })],
       undefined,
-      (fips) => (fips === "US" ? "CONT:NA" : "CONT:EU"),
+      (fips) => (fips === "US" ? "CONT:NA" : "CONT:EU")
     );
     for (const key of Object.keys(index)) {
-      expect(key === "CONT:NA" || key === "CONT:EU" || /^[A-Z]{2}([A-Z0-9]{2})?$/.test(key)).toBe(true);
+      expect(key === "CONT:NA" || key === "CONT:EU" || /^[A-Z]{2}([A-Z0-9]{2})?$/.test(key)).toBe(
+        true
+      );
     }
   });
 });

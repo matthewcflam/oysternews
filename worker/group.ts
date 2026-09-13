@@ -1,39 +1,62 @@
-/**
- * Story grouping. PURE. Must be real grouping, not title dedup — title
- * dedup alone inverts the ranking signal (wire copy merges into one
- * high-domain story; independent journalism from NYT/BBC/Guardian on the
- * same event splits into three 1-domain stories). Key, all three parts
- * required together: >= 2 shared V2EnhancedThemes excluding themes above
- * THEME_CEILING document frequency, AND a title-token Jaccard floor, AND
- * the same 0.5° cell. Exact-title dedup runs on top to collapse
- * syndication. The theme ceiling is not optional — one measured hour found
- * a single theme (`CRISISLEX_CRISISLEXREC`) on 39.4% of all articles,
- * which without a ceiling would join over a third of the feed to itself.
- * See docs/DESIGN.md#ranking.
- */
-
 import { createHash } from "node:crypto";
-import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
+import type { PlacedArticle, StoryGroup } from "../src/lib/types.ts";
 import { summarise } from "./rank.ts";
 
-/** 9 measured themes exceed 20% document frequency; 15% excludes a few more at no real cost. */
 export const THEME_CEILING = 0.15;
 
-/** Title-token Jaccard floor — the one constant here without a measurement behind it, tuned by eye on real bundles. Worth revisiting once real placements can be judged. See docs/DESIGN.md#ranking. */
 export const JACCARD_FLOOR = 0.25;
 
-/** The location half of the key. Roughly 55 km at the equator. */
 export const CELL_DEGREES = 0.5;
 
-/**
- * Tokens carrying no distinguishing information. Deliberately short: a real stop
- * list would start deleting the words that separate two stories.
- */
+// Deliberately short: real stopword list would delete separating words.
 const STOPWORDS = new Set([
-  "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at", "for", "with",
-  "from", "by", "as", "is", "are", "was", "were", "be", "been", "it", "its", "this",
-  "that", "these", "those", "will", "has", "have", "had", "not", "new", "says", "said",
-  "after", "over", "into", "about", "up", "out", "more", "than", "his", "her", "their",
+  "the",
+  "a",
+  "an",
+  "and",
+  "or",
+  "but",
+  "of",
+  "to",
+  "in",
+  "on",
+  "at",
+  "for",
+  "with",
+  "from",
+  "by",
+  "as",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "it",
+  "its",
+  "this",
+  "that",
+  "these",
+  "those",
+  "will",
+  "has",
+  "have",
+  "had",
+  "not",
+  "new",
+  "says",
+  "said",
+  "after",
+  "over",
+  "into",
+  "about",
+  "up",
+  "out",
+  "more",
+  "than",
+  "his",
+  "her",
+  "their",
 ]);
 
 export function titleTokens(title: string): Set<string> {
@@ -54,20 +77,18 @@ export function jaccard(a: Set<string>, b: Set<string>): number {
   return shared / (a.size + b.size - shared);
 }
 
-/** Exact-syndication key: the same headline, punctuation and spacing aside. */
 export function normalizeTitle(title: string): string {
-  return title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 export function cellOf(lat: number, lon: number): string {
   return `${Math.floor(lat / CELL_DEGREES)}:${Math.floor(lon / CELL_DEGREES)}`;
 }
 
-// How many articles carry each theme, distinct per article (nine mentions
-// in one document count as one). Exported because worker/topics.ts's
-// classifier needs the same per-theme rarity measurement grouping already
-// makes, rather than a second, possibly-divergent pass.
-export function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
+function documentFrequency(articles: PlacedArticle[]): Map<string, number> {
   const counts = new Map<string, number>();
   for (const article of articles) {
     for (const theme of new Set(article.themes)) {
@@ -77,7 +98,6 @@ export function documentFrequency(articles: PlacedArticle[]): Map<string, number
   return counts;
 }
 
-/** Themes appearing on more than `ceiling` of articles carry no grouping signal. */
 export function overCommonThemes(articles: PlacedArticle[], ceiling = THEME_CEILING): Set<string> {
   const counts = documentFrequency(articles);
 
@@ -114,22 +134,10 @@ class DisjointSet {
 export type GroupOptions = {
   themeCeiling?: number;
   jaccardFloor?: number;
-  /** Injected so the 48-hour tier-1 test is not a test that has to wait. */
   now?: number;
 };
 
-/**
- * Group placed articles into stories.
- *
- * Comparison is scoped to a cell and driven by an inverted theme index, so the
- * pairwise cost is paid only between articles that already share a significant
- * theme and a location. A naive all-pairs pass over a 24-hour window (~40,700
- * articles) would be 830M comparisons.
- */
-export function groupArticles(
-  articles: PlacedArticle[],
-  options: GroupOptions = {},
-): StoryGroup[] {
+export function groupArticles(articles: PlacedArticle[], options: GroupOptions = {}): StoryGroup[] {
   const now = options.now ?? Date.now();
   const jaccardFloor = options.jaccardFloor ?? JACCARD_FLOOR;
   const common = overCommonThemes(articles, options.themeCeiling ?? THEME_CEILING);
@@ -137,21 +145,17 @@ export function groupArticles(
   const sets = new DisjointSet(articles.length);
   const tokens = articles.map((article) => titleTokens(article.title));
   const significant = articles.map(
-    (article) => new Set(article.themes.filter((theme) => !common.has(theme))),
+    (article) => new Set(article.themes.filter((theme) => !common.has(theme)))
   );
 
-  /** cell -> theme -> article indices. */
   const index = new Map<string, Map<string, number[]>>();
-  /** cell -> normalized title -> first article index with it. */
   const syndication = new Map<string, Map<string, number>>();
 
   articles.forEach((article, i) => {
     const cell = cellOf(article.lat, article.lon);
 
-    // Exact-title syndication, collapsed first and unconditionally: the same
-    // headline in the same cell is the same story whatever its themes say.
-    // Scoped to the cell on purpose — "Weather warning issued" is a real
-    // headline in a dozen unrelated places on any given day.
+    // Same headline in the same cell is one story whatever its themes say. Scoped to the
+    // cell: "Weather warning issued" is a real headline in many unrelated places at once.
     let titles = syndication.get(cell);
     if (!titles) {
       titles = new Map();
@@ -168,9 +172,6 @@ export function groupArticles(
       index.set(cell, themes);
     }
 
-    // Candidates: articles in this cell sharing at least one significant theme.
-    // Two shared themes are required, so a single shared theme only makes a pair
-    // worth testing.
     const candidates = new Set<number>();
     for (const theme of significant[i]) {
       for (const other of themes.get(theme) ?? []) candidates.add(other);
@@ -210,10 +211,6 @@ export function groupArticles(
   return [...members.values()].map((group) => buildGroup(group, now));
 }
 
-// The representative article shown in the popup and a container's label.
-// A tier-1 article wins when the group has one (newest first) — the group
-// is on the map because of that coverage, so a syndicated rewrite would be
-// an odd thing to show instead. Otherwise the newest article wins.
 function representative(members: PlacedArticle[]): PlacedArticle {
   let best = members[0];
   for (const member of members) {
@@ -230,9 +227,8 @@ function buildGroup(members: PlacedArticle[], now: number): StoryGroup {
   const face = representative(members);
   const stats = summarise(members, now);
 
-  // Identity seeded from the OLDEST member's url, so a group keeps its id across
-  // runs while that article stays in the window — a hash over all members would
-  // change every time one more outlet picked the story up.
+  // Seeded from the OLDEST member's url so the id is stable across runs; hashing all
+  // members would change it every time another outlet picks the story up.
   const oldest = members.reduce((a, b) => (a.date <= b.date ? a : b));
   const id = createHash("sha1").update(oldest.url).digest("hex").slice(0, 16);
 
