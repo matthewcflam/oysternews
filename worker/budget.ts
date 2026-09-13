@@ -1,40 +1,13 @@
-/**
- * Per-tile top-K density budget. For each tile at each zoom, keep the top K
- * groups by the ranking comparator; the rest get a deeper `minzoom` and
- * reappear on zoom-in — cap and floor at once. Selection is local, so a
- * crowded US tile never buries an unrelated story elsewhere.
- *
- * Two structural invariants: (1) iterate features, not tiles — there are
- * 16.7M tiles at z12 and ~40k features, so tiles exist only as Map keys
- * when occupied; (2) `minzoom` must be monotonic upward (a group assigned
- * at z keeps occupying its tile's budget at every deeper zoom, so nothing
- * at z+1 can evict it) — this is enforced structurally in `assignMinzoom`
- * below, not patched after the fact. Measured binding pattern and full
- * rationale: docs/DESIGN.md#tiles-budget.
- */
-
 import { SPIDERFY_ZOOM, coordKey } from "../src/lib/spiderfy.ts";
 import type { StoryGroup } from "../src/lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
-/** K ~ 12-20, tuned on real data. A phone shows 2-4 tiles, so roughly 30-60 pins. See docs/DESIGN.md#tiles-budget and #open-items (phone profile never measured on real hardware). */
 export const DEFAULT_K = 15;
 
-/** Deepest zoom the budget assigns, matching tippecanoe's `-z12`. Data zoom is capped at z10 for usefulness (GDELT gives city centroids), but the budget runs to 12 so a deferred story still gets its last chance to reappear on zoom-in. */
 export const MAX_BUDGET_ZOOM = 12;
 
-/**
- * Groups that never win a slot, even at MAX_BUDGET_ZOOM, are assigned
- * MAX_BUDGET_ZOOM + 1 — above tippecanoe's ceiling, not rendered. The
- * country-top floor layer guarantees no country vanishes; `assignMinzoom`
- * returns the overflow count so `run.ts` can report it rather than let it
- * decay quietly. Since spiderfy landed, an overflowed story is still
- * reachable by zooming into its city past SPIDERFY_ZOOM — see
- * docs/DESIGN.md#overflow-as-feature-at-57.
- */
 export const NOT_RENDERED = MAX_BUDGET_ZOOM + 1;
 
-/** Web Mercator tile x/y for a coordinate at a zoom. */
 export function tileOf(lat: number, lon: number, zoom: number): { x: number; y: number } {
   const scale = 2 ** zoom;
   const x = Math.floor(((lon + 180) / 360) * scale);
@@ -56,28 +29,19 @@ export type BudgetOptions = {
 
 export type BudgetResult = {
   groups: StoryGroup[];
-  /** Groups above the tile ceiling, i.e. not rendered anywhere. Reported by run.ts. */
   overflow: number;
 };
 
-/**
- * Assign every group a `minzoom`. Returns a new array; inputs are not mutated.
- */
 export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {}): BudgetResult {
   const k = options.k ?? DEFAULT_K;
   const maxZoom = options.maxZoom ?? MAX_BUDGET_ZOOM;
 
-  // One ranked pass. Selection order is identical in every tile at every zoom,
-  // so the comparator runs once rather than once per tile.
   const ranked = [...groups].sort(compareGroups);
   const minzoom = new Map<string, number>();
 
   for (let zoom = 0; zoom <= maxZoom; zoom++) {
-    /** Slots already consumed in a tile by groups assigned at a shallower zoom. */
     const used = new Map<string, number>();
-    // Coordinate cap: below SPIDERFY_ZOOM a coordinate holds one story (the
-    // best), since GDELT gives every story in a city the same centroid and
-    // a second story there would render exactly underneath the first,
+    // Coordinate cap: below SPIDERFY_ZOOM one story per coord (GDELT centroid collision).
     // invisible, wasting a budget slot. Lifts at SPIDERFY_ZOOM, where the
     // client can spread the stack into legs and leaves. See lib/spiderfy.ts.
     const occupied = new Set<string>();
