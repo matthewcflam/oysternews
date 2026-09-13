@@ -23,17 +23,17 @@
  * graded pin confidence on six records (p=0.053) and went flat on 110
  * (p=0.736). Frequency is not accuracy. See §5.2 decision 3.
  *
- * Run:  node scripts/place-audit.ts [bundles] [--examples N]
+ * Run:  node scripts/audit/place-audit.ts [bundles] [--examples N]
  *       bundles defaults to 4 (one hour of GDELT), --examples prints the
  *       highest-suspicion placements for eyeballing.
  */
 
-import type { Article } from "../src/lib/types.ts";
-import { fetchBundle, newestStamp, shiftStamp } from "../worker/fetch.ts";
-import { filterArticles } from "../worker/filter.ts";
-import { parseBundle } from "../worker/parse.ts";
-import { explainPlacement, type PlacementTrace } from "../worker/place.ts";
-import { loadRefData } from "../worker/refdata.ts";
+import type { Article } from "../../src/lib/types.ts";
+import { fetchBundle, newestStamp, shiftStamp } from "../../worker/fetch.ts";
+import { filterArticles } from "../../worker/filter.ts";
+import { parseBundle } from "../../worker/parse.ts";
+import { explainPlacement, type PlacementTrace } from "../../worker/place.ts";
+import { loadRefData } from "../../worker/refdata.ts";
 
 const DEFAULT_BUNDLES = 4;
 

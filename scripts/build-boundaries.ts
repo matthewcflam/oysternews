@@ -6,7 +6,7 @@
  * the story archive, this file does not change between runs, so it is built here,
  * committed, and served from the deploy rather than from Blob.
  *
- * Run:  npm run boundaries
+ * Run:  npm run data:boundaries
  *
  * ---------------------------------------------------------------------------
  * THE JOIN, WHICH IS THE WHOLE PROBLEM (§3.4, the FIPS trap, again)

@@ -25,7 +25,7 @@ The rest are for working on the pipeline rather than the map:
 
 ```bash
 npm run worker         # the full pipeline, once, locally — PUBLISHES, no dry run
-npm run boundaries     # rebuild public/boundaries.pmtiles from Natural Earth
+npm run data:boundaries     # rebuild public/boundaries.pmtiles from Natural Earth
 npm run typecheck      # tsc --noEmit
 npm test               # vitest run
 ```

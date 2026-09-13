@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -23,6 +23,21 @@ const MIN = "2.52.0";
 
 let binDir: string;
 
+// On Windows, `bash` on PATH may be WSL's, which can read neither a C:\ script
+// path nor a Windows PATH entry for the stub. Git Bash can read both.
+function findBash(): string | null {
+  if (process.platform !== "win32") return "bash";
+  try {
+    const execPath = execFileSync("git", ["--exec-path"], { encoding: "utf8" }).trim();
+    const bash = path.resolve(execPath, "..", "..", "..", "bin", "bash.exe");
+    return existsSync(bash) ? bash : null;
+  } catch {
+    return null;
+  }
+}
+
+const BASH = findBash();
+
 /** A fake `tippecanoe` whose only job is to answer `--version`. */
 function stubTippecanoe(output: string): void {
   const stub = path.join(binDir, "tippecanoe");
@@ -31,7 +46,7 @@ function stubTippecanoe(output: string): void {
 
 function runGuard(): { code: number; stderr: string } {
   try {
-    execFileSync("bash", [SCRIPT, MIN], {
+    execFileSync(BASH ?? "bash", [SCRIPT, MIN], {
       encoding: "utf8",
       // Captured, not inherited. The guard's whole output is a long refusal
       // message, and execFileSync forwards stderr to the parent by default —
@@ -47,7 +62,8 @@ function runGuard(): { code: number; stderr: string } {
   }
 }
 
-describe("the tippecanoe version guard", () => {
+// Skipped only on Windows without Git Bash; CI (Linux) always runs it.
+describe.skipIf(BASH === null)("the tippecanoe version guard", () => {
   beforeEach(() => {
     binDir = mkdtempSync(path.join(tmpdir(), "oyster-tippecanoe-"));
   });

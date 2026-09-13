@@ -5,9 +5,8 @@
 # case-insensitively. Not the whole FullName: GDELT writes country demonyms bare
 # ("Americans") but state demonyms with a suffix ("Texans, United States"), so
 # whole-string matching silently misses every US state (HANDOFF.md §2.1).
-# Measured justification: spikes/gdelt/FINDINGS.md section 5.
-# Moved here from spikes/gdelt/ in Phase 2.5, the first non-spike consumer.
-# Read by scripts/build-real-geojson.ts and by spikes/gdelt/phase1_probe.py.
+# Measured justification: docs/research/gdelt-findings.md section 5.
+# Read by worker/refdata.ts.
 
 # --- country / region demonyms, singular adjective + plural noun ------------
 afghan, afghans

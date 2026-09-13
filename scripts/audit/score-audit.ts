@@ -29,7 +29,7 @@
  * and frequency is not accuracy (§5.2 decision 3, where mention count looked
  * strong on six records and went flat on 110).
  *
- * Run:  node scripts/score-audit.ts judged-<draw>.jsonl [--sample path]
+ * Run:  node scripts/audit/score-audit.ts judged-<draw>.jsonl [--sample path]
  */
 
 import { readFile } from "node:fs/promises";
@@ -38,12 +38,18 @@ import { fileURLToPath } from "node:url";
 // Wilson lives in lib/ so `lib/accuracy.test.ts` can re-derive the published
 // figures with the SAME arithmetic this script prints. Two copies would let the
 // About page agree with a bug instead of with the judge.
-import { wilson } from "../src/lib/audit-score.ts";
-import type { PlacementTrace } from "../worker/place.ts";
+import { wilson } from "../../src/lib/audit-score.ts";
+import type { PlacementTrace } from "../../worker/place.ts";
 import { drawFingerprint, fingerprintOf } from "./judge-draw-id.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const DEFAULT_SAMPLE = path.join(REPO_ROOT, "spikes", "gdelt", "audit_sample_judge.jsonl");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const DEFAULT_SAMPLE = path.join(
+  REPO_ROOT,
+  "docs",
+  "research",
+  "placement-audit",
+  "audit_sample_judge.jsonl"
+);
 
 /** §5.1, fixed 2026-08-08. Do not edit to fit a result. */
 const THRESHOLDS = {
@@ -87,7 +93,7 @@ async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const judgedPath = args.find((a) => !a.startsWith("--"));
   if (!judgedPath) {
-    console.error("usage: node scripts/score-audit.ts judged-<draw>.jsonl [--sample path]");
+    console.error("usage: node scripts/audit/score-audit.ts judged-<draw>.jsonl [--sample path]");
     process.exitCode = 1;
     return;
   }

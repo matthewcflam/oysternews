@@ -423,7 +423,7 @@ export function firstPlaceLabelLayerId(
 
 /**
  * Static, committed, served from the deploy — not from Blob. Built once by
- * `npm run boundaries`; see that script's header for the FIPS join, which is the
+ * `npm run data:boundaries`; see that script's header for the FIPS join, which is the
  * only hard part of this feature.
  */
 export const BOUNDARIES_ARCHIVE = "/boundaries.pmtiles";

@@ -19,12 +19,12 @@
     "format": "biome format --write .",
     "check": "npm run typecheck && npm run lint && npm test",
     "test": "vitest run",
-    "crosswalk": "node scripts/build-crosswalk.ts",
+    "data:crosswalk": "node scripts/build-crosswalk.ts",
     "worker": "node worker/run.ts",
-    "place:audit": "node scripts/place-audit.ts",
-    "judge:draw": "node scripts/draw-judge-sample.ts",
-    "judge:score": "node scripts/score-audit.ts",
-    "boundaries": "node scripts/build-boundaries.ts"
+    "audit:place": "node scripts/audit/place-audit.ts",
+    "audit:draw": "node scripts/audit/draw-judge-sample.ts",
+    "audit:score": "node scripts/audit/score-audit.ts",
+    "data:boundaries": "node scripts/build-boundaries.ts"
   },
   "dependencies": {
     "@radix-ui/react-checkbox": "^1.3.11",

@@ -2,8 +2,8 @@
  * Draw a blind sample for the independent judge (HANDOFF.md §5.2 decision 4).
  *
  *   fetch bundles -> filter -> place -> random sample -> two files:
- *     spikes/gdelt/audit_sample_judge.jsonl   full records, traces included
- *     build/judge.html                        the blind sheet the judge opens
+ *     docs/research/placement-audit/audit_sample_judge.jsonl   full records, traces included
+ *     build/judge.html                                         the blind sheet the judge opens
  *
  * **The point of this is that the judge is not me.** The same party designed
  * rule H and scored it, which §5.2 calls the weakest link in the evidence. So
@@ -30,7 +30,7 @@
  * bias the accuracy number, because the reason is only asked for *after* the
  * verdict is already WRONG.
  *
- * Run:  node scripts/draw-judge-sample.ts [n] [--bundles N] [--seed N]
+ * Run:  node scripts/audit/draw-judge-sample.ts [n] [--bundles N] [--seed N]
  *       n defaults to 90, which yields ~46 pins at the measured 51% pin share —
  *       enough to bring the lower bound from ~52.7% to ~56% if the point
  *       estimate holds. See §5.2 for why that margin matters.
@@ -39,17 +39,17 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Article } from "../src/lib/types.ts";
-import { fetchBundle, newestStamp, shiftStamp } from "../worker/fetch.ts";
-import { filterArticles } from "../worker/filter.ts";
-import { parseBundle } from "../worker/parse.ts";
-import { explainPlacement, type PlacementTrace } from "../worker/place.ts";
-import { loadRefData } from "../worker/refdata.ts";
+import type { Article } from "../../src/lib/types.ts";
+import { fetchBundle, newestStamp, shiftStamp } from "../../worker/fetch.ts";
+import { filterArticles } from "../../worker/filter.ts";
+import { parseBundle } from "../../worker/parse.ts";
+import { explainPlacement, type PlacementTrace } from "../../worker/place.ts";
+import { loadRefData } from "../../worker/refdata.ts";
 import { drawFingerprint } from "./judge-draw-id.ts";
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SPIKE_DIR = path.join(REPO_ROOT, "spikes", "gdelt");
-const SAMPLE_OUT = path.join(SPIKE_DIR, "audit_sample_judge.jsonl");
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const AUDIT_DIR = path.join(REPO_ROOT, "docs", "research", "placement-audit");
+const SAMPLE_OUT = path.join(AUDIT_DIR, "audit_sample_judge.jsonl");
 const SHEET_OUT = path.join(REPO_ROOT, "build", "judge.html");
 
 const DEFAULT_N = 90;
@@ -89,9 +89,9 @@ function mulberry32(seed: number): () => number {
 /** Every URL that has appeared in any previous draw, so this one is disjoint. */
 async function alreadyDrawn(): Promise<Set<string>> {
   const seen = new Set<string>();
-  for (const file of await readdir(SPIKE_DIR)) {
+  for (const file of await readdir(AUDIT_DIR)) {
     if (!file.startsWith("audit_") || !file.endsWith(".jsonl")) continue;
-    const body = await readFile(path.join(SPIKE_DIR, file), "utf8");
+    const body = await readFile(path.join(AUDIT_DIR, file), "utf8");
     for (const line of body.split(/\r?\n/)) {
       if (!line.trim()) continue;
       try {
@@ -380,7 +380,7 @@ async function main(): Promise<void> {
   sheet   ${path.relative(REPO_ROOT, SHEET_OUT)}   (send this)
 
   Score the returned file with:
-    node scripts/score-audit.ts <judged-${drawId}.jsonl>
+    node scripts/audit/score-audit.ts <judged-${drawId}.jsonl>
 `);
 }
 

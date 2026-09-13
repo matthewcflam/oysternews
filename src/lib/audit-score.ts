@@ -1,7 +1,7 @@
 /**
  * The scoring arithmetic behind §5.1, in one place so it has one definition.
  *
- * It was inline in `scripts/score-audit.ts`, which runs `main()` on import and
+ * It was inline in `scripts/audit/score-audit.ts`, which runs `main()` on import and
  * therefore cannot be imported by anything. That was fine while the only reader
  * was the script — but `lib/accuracy.test.ts` needs to re-score the committed
  * judge files to prove the About page still matches them, and a second copy of

@@ -16,7 +16,7 @@ next-env.d.ts
 
 # The one exception, and the reason the rule above is about staleness rather
 # than about file type: boundaries.pmtiles is STATIC (§3.1). It is built once
-# from Natural Earth by `npm run boundaries`, changes only when Natural Earth
+# from Natural Earth by `npm run data:boundaries`, changes only when Natural Earth
 # does, and Vercel has no tippecanoe to rebuild it at deploy time. Committing it
 # is what makes the §2.2 red outline work in production.
 !public/boundaries.pmtiles
