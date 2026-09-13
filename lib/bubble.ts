@@ -10,14 +10,14 @@
  */
 
 /** Which side of the pin the BODY sits on. A `left` bubble's tail exits bottom-right. */
-export type BubbleSide = "left" | "right";
+type BubbleSide = "left" | "right";
 
 // Which side of the pin the body sits on vertically: `up` hangs above with
 // the tail dropping onto the pin, `down` mirrors it. A second orientation
 // matters — with only `up`, a measured live case dropped 3 of 5 bubbles
 // to clustering and chrome overlap; the mirror rescues both.
 
-export type BubbleLift = "up" | "down";
+type BubbleLift = "up" | "down";
 
 /** The body, from the mockup. Fixed: only the height varies, and only in CSS. */
 export const BUBBLE_WIDTH = 135;
@@ -37,7 +37,7 @@ export const TAIL_DROP = 52;
 export const TAIL_REACH = 8;
 
 /** Breathing room between two reserved boxes, so bubbles never touch. */
-export const BUBBLE_GAP = 4;
+const BUBBLE_GAP = 4;
 
 // How far apart two pins must be before a bubble may open on the far side
 // of its own pin — gates the side flip only, see `placeBubbles`. Two tails
@@ -53,7 +53,7 @@ export const TAIL_TIP_GAP = 32;
 export const CHROME_TOP = 70;
 
 /** Keep a bubble off the very edge of the canvas. */
-export const EDGE_MARGIN = 8;
+const EDGE_MARGIN = 8;
 
 export type Viewport = { width: number; height: number };
 
@@ -69,7 +69,7 @@ export type PlacedBubble = {
 };
 
 /** The reserved rectangle: the body, plus the strip the tail falls through. */
-export type Box = { left: number; right: number; top: number; bottom: number };
+type Box = { left: number; right: number; top: number; bottom: number };
 
 // The box a bubble would occupy if its tail landed on (x, y). The two axes
 // are independent (horizontal depends only on side, vertical only on
@@ -95,7 +95,7 @@ const liftSpan = (y: number, lift: BubbleLift): [number, number] => {
 };
 
 /** Does this box sit entirely inside the part of the canvas bubbles may use? */
-export function boxFits(box: Box, viewport: Viewport): boolean {
+function boxFits(box: Box, viewport: Viewport): boolean {
   return (
     box.left >= EDGE_MARGIN &&
     box.right <= viewport.width - EDGE_MARGIN &&

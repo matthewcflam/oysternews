@@ -29,7 +29,7 @@ type IndexEntry = {
   alt?: string[];
 };
 
-export const PLACE_INDEX_URL = "/place-index.json";
+const PLACE_INDEX_URL = "/place-index.json";
 
 let pending: Promise<IndexEntry[]> | null = null;
 

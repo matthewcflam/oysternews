@@ -56,7 +56,7 @@ export type Article = {
 };
 
 /** Where worker/place.ts's placeStory() puts a story. */
-export type PlacementKind = "PIN" | "CONTAINER" | "DROP";
+type PlacementKind = "PIN" | "CONTAINER" | "DROP";
 
 export type Placement =
   | { kind: "PIN"; location: GdeltLocation }

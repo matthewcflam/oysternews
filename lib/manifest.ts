@@ -31,7 +31,7 @@ import type { Manifest } from "./types";
  * the two halves cannot disagree. The env var still overrides, for pointing
  * a local dev server at a scratch store or an `r2.dev` probe.
  */
-export const MANIFEST_URL = process.env.NEXT_PUBLIC_MANIFEST_URL ?? `${CDN_BASE}/manifest.json`;
+const MANIFEST_URL = process.env.NEXT_PUBLIC_MANIFEST_URL ?? `${CDN_BASE}/manifest.json`;
 
 /** §3.5. The freshness notice fires past 2× this, per §8. */
 export const CADENCE_HOURS = 12;
@@ -52,11 +52,6 @@ export function loadManifest(): Promise<Manifest> {
     return (await response.json()) as Manifest;
   });
   return pending;
-}
-
-/** Test seam, and the reset a hot reload wants. */
-export function resetManifestCache(): void {
-  pending = null;
 }
 
 /**

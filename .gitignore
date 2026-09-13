@@ -2,24 +2,15 @@ node_modules/
 .next/
 out/
 
-# Phase 2.5: the downloaded GKG bundle (4-6 MB) and the GeoJSON generated from
-# it. `npm run gkg` re-creates both; bundles are immutable, so the cache is only
-# ever re-read, never invalidated. Phase 3 commits ONE real bundle under
-# fixtures/ as the §7 test fixture — that one is a fixture, not this cache.
+# Natural Earth data cache from build-boundaries and build-crosswalk scripts
 .cache/
-build/
 .vercel/
 .env
 .env.local
 *.tsbuildinfo
 next-env.d.ts
 
-# Phase 3G: no archive is committed any more. Phase 2's fake archive was, on the
-# reasoning that Vercel has no tippecanoe and an ignored archive would ship a map
-# with zero pins. That reasoning ended when the browser started reading
-# manifest.json — the archive is published to Blob by the worker, not built at
-# deploy time, so a committed one can only go stale and mislead.
-# `npm run tiles:fake` still writes here for local work; keep it out of the repo.
+# Story archive is published to R2 by the worker, not built at deploy time.
 *.pmtiles
 
 # The one exception, and the reason the rule above is about staleness rather

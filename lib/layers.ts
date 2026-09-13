@@ -35,7 +35,7 @@ export const LABELS_LAYER_ID = "stories-labels";
 export const COUNTRY_LAYER_MAXZOOM = 4;
 
 /** Headlines start here. Below it they would be unreadable mush at any density. */
-export const LABEL_MINZOOM = 4;
+const LABEL_MINZOOM = 4;
 
 /* -------------------------------------------------------------------------- */
 /* The pin identity (2026-08-14)                                               */
@@ -294,8 +294,8 @@ export function storyLayers(): [
 /* -------------------------------------------------------------------------- */
 
 export const SPIDER_SOURCE_ID = "spider";
-export const SPIDER_LEGS_ID = "spider-legs";
-export const SPIDER_LEAVES_ID = "spider-leaves";
+const SPIDER_LEGS_ID = "spider-legs";
+const SPIDER_LEAVES_ID = "spider-leaves";
 
 // The leg, drawn in white at low opacity: it's a pointer, not a datum, and
 // must never compete with the leaf on the end of it or read as a route.

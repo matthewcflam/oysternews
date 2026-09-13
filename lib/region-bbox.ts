@@ -13,7 +13,7 @@ export type Bbox = [number, number, number, number];
 
 export type BboxTable = Record<string, Bbox>;
 
-export const BBOX_URL = "/region-bbox.json";
+const BBOX_URL = "/region-bbox.json";
 
 let pending: Promise<BboxTable> | null = null;
 
@@ -33,11 +33,6 @@ export function loadRegionBboxes(): Promise<BboxTable> {
       });
   }
   return pending;
-}
-
-/** Test seam. */
-export function resetRegionBboxCache(): void {
-  pending = null;
 }
 
 // How far in a fit may go. A small region (Singapore, Delaware) would

@@ -1,8 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
-import { PUBLISHED_ACCURACY } from "@/lib/accuracy";
-
 export const metadata: Metadata = {
   title: "About Oyster News",
   description:
