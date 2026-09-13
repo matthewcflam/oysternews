@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import type { Article, GdeltLocation } from "../lib/types.ts";
-import { LOCATION_COUNTRY, LOCATION_WORLD_CITY } from "../lib/types.ts";
+import type { Article, GdeltLocation } from "../src/lib/types.ts";
+import { LOCATION_COUNTRY, LOCATION_WORLD_CITY } from "../src/lib/types.ts";
 import { type RefData, loadRefData } from "./refdata.ts";
 import { type RunSummary, formatSummary, stampOfDate, toPlaced } from "./run.ts";
 

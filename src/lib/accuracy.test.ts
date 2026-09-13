@@ -19,7 +19,7 @@ import { type Judgement, type ScoredRecord, scoreLevel, wilson } from "./audit-s
  * If one of these fails after a fresh draw is judged, the fix is to update
  * `lib/accuracy.ts` — not to relax the assertion.
  */
-const REPO_ROOT = path.resolve(import.meta.dirname, "..");
+const REPO_ROOT = path.resolve(import.meta.dirname, "../..");
 
 function readJsonl<T>(relative: string): T[] {
   return readFileSync(path.join(REPO_ROOT, relative), "utf8")

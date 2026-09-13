@@ -13,8 +13,8 @@
  * rationale: docs/DESIGN.md#tiles-budget.
  */
 
-import { SPIDERFY_ZOOM, coordKey } from "../lib/spiderfy.ts";
-import type { StoryGroup } from "../lib/types.ts";
+import { SPIDERFY_ZOOM, coordKey } from "../src/lib/spiderfy.ts";
+import type { StoryGroup } from "../src/lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
 /** K ~ 12-20, tuned on real data. A phone shows 2-4 tiles, so roughly 30-60 pins. See docs/DESIGN.md#tiles-budget and #open-items (phone profile never measured on real hardware). */

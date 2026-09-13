@@ -44,7 +44,7 @@ import { filterArticles } from "../worker/filter.ts";
 import { parseBundle } from "../worker/parse.ts";
 import { type PlacementTrace, explainPlacement } from "../worker/place.ts";
 import { loadRefData } from "../worker/refdata.ts";
-import type { Article } from "../lib/types.ts";
+import type { Article } from "../src/lib/types.ts";
 import { drawFingerprint } from "./judge-draw-id.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

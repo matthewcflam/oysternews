@@ -10,8 +10,8 @@
  * that could drift.
  */
 
-import crosswalk from "@/data/crosswalk.json";
-import overrides from "@/data/fips-overrides.json";
+import crosswalk from "../../data/crosswalk.json";
+import overrides from "../../data/fips-overrides.json";
 import { shortCountry } from "@/lib/story";
 
 // flagcdn: public-domain flag PNGs keyed by lowercase ISO alpha-2, no key,

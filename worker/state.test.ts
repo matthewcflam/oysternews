@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlacedArticle } from "../lib/types.ts";
+import type { PlacedArticle } from "../src/lib/types.ts";
 import {
   RUN_PREFIX,
   TIER1_PREFIX,

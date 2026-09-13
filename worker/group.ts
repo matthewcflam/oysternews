@@ -13,7 +13,7 @@
  */
 
 import { createHash } from "node:crypto";
-import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
+import type { PlacedArticle, StoryGroup } from "../src/lib/types.ts";
 import { summarise } from "./rank.ts";
 
 /** 9 measured themes exceed 20% document frequency; 15% excludes a few more at no real cost. */

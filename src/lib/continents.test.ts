@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import crosswalk from "@/data/crosswalk.json";
+import crosswalk from "../../data/crosswalk.json";
 import { CONTINENT_BBOX, continentIdFor } from "./continents";
 
 describe("continentIdFor", () => {

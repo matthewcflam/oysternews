@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CDN_BASE } from "../lib/cdn.ts";
+import { CDN_BASE } from "../src/lib/cdn.ts";
 import { parseListPage, r2Store } from "./store.ts";
 
 const CREDENTIALS = { accountId: "acct123", accessKeyId: "AKIAV", secretAccessKey: "secret" };

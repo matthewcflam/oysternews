@@ -14,8 +14,8 @@
 
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { CDN_BASE } from "../lib/cdn.ts";
-import type { CityShard, Manifest, StoryGroup } from "../lib/types.ts";
+import { CDN_BASE } from "../src/lib/cdn.ts";
+import type { CityShard, Manifest, StoryGroup } from "../src/lib/types.ts";
 import { stampToMs } from "./fetch.ts";
 import type { RegionIndex } from "./regions.ts";
 import type { ArchiveStore } from "./store.ts";

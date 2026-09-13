@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { StoryGroup } from "../lib/types.ts";
+import type { StoryGroup } from "../src/lib/types.ts";
 import { toGeoJson } from "./tiles.ts";
 
 /**

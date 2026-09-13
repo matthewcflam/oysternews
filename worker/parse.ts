@@ -11,7 +11,7 @@
  * takes the whole map down.
  */
 
-import type { Article, GdeltLocation } from "../lib/types.ts";
+import type { Article, GdeltLocation } from "../src/lib/types.ts";
 
 /** GKG 2.1 column indices, 0-based. */
 const C_DATE = 1;

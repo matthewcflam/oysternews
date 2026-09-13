@@ -11,7 +11,7 @@
  */
 
 import { AwsClient } from "aws4fetch";
-import { CDN_BASE } from "../lib/cdn.ts";
+import { CDN_BASE } from "../src/lib/cdn.ts";
 import type { ShardStore } from "./state.ts";
 
 /**

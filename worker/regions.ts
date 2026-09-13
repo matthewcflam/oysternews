@@ -4,7 +4,7 @@
  * stories). See docs/DESIGN.md#regions.
  */
 
-import type { RegionEntry, RegionIndex, RegionStory, StoryGroup } from "../lib/types.ts";
+import type { RegionEntry, RegionIndex, RegionStory, StoryGroup } from "../src/lib/types.ts";
 import { compareGroups } from "./rank.ts";
 
 // Re-exported so this module reads as the owner of the index's shape;

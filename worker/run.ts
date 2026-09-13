@@ -12,7 +12,7 @@
 
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import type { Article, Placement, PlacedArticle } from "../lib/types.ts";
+import type { Article, Placement, PlacedArticle } from "../src/lib/types.ts";
 import { assignMinzoom, countryTopGroups } from "./budget.ts";
 import { MAX_BUNDLES, fetchBundle, newestStamp, stampsToFetch } from "./fetch.ts";
 import { filterArticles } from "./filter.ts";
@@ -30,7 +30,7 @@ import {
 import { rankGroups } from "./rank.ts";
 import { buildRegionIndex, indexStats } from "./regions.ts";
 import { buildCityIndex, cityIndexStats } from "./cities.ts";
-import { continentIdFor } from "../lib/continents.ts";
+import { continentIdFor } from "../src/lib/continents.ts";
 import { type RefData, assertUsable, loadRefData, sourceCountry } from "./refdata.ts";
 import { r2Store } from "./store.ts";
 import { appendShards, pruneShards, readPool } from "./state.ts";

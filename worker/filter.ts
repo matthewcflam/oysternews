@@ -18,8 +18,8 @@
  * per-record language test would improve that.
  */
 
-import type { Article } from "../lib/types.ts";
-import { CITY_TYPES, ADM1_TYPES, LOCATION_COUNTRY } from "../lib/types.ts";
+import type { Article } from "../src/lib/types.ts";
+import { CITY_TYPES, ADM1_TYPES, LOCATION_COUNTRY } from "../src/lib/types.ts";
 import type { RefData } from "./refdata.ts";
 
 export type FilterResult = {

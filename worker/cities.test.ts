@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { StoryGroup } from "../lib/types.ts";
+import type { StoryGroup } from "../src/lib/types.ts";
 import { CITY_TOP_N, buildCityIndex, cityIndexStats } from "./cities.ts";
 
 function group(patch: Partial<StoryGroup> = {}): StoryGroup {

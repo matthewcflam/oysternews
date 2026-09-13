@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { StoryGroup } from "../lib/types.ts";
+import type { StoryGroup } from "../src/lib/types.ts";
 import {
   ARCHIVE_DIR,
   ARCHIVE_PREFIX,

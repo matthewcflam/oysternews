@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PlacedArticle, StoryGroup } from "../lib/types.ts";
+import type { PlacedArticle, StoryGroup } from "../src/lib/types.ts";
 import { compareGroups, parseGkgDate, rankGroups, salienceOf, summarise } from "./rank.ts";
 
 /**

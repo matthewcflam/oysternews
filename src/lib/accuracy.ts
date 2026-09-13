@@ -46,8 +46,8 @@ export const PUBLISHED_ACCURACY: {
 
   drawId: "c29ce-90",
   judgedOn: "2026-08-14",
-  judgedFile: "spikes/gdelt/judged-c29ce-90.jsonl",
-  sampleFile: "spikes/gdelt/audit_sample_judge_c29ce.jsonl",
+  judgedFile: "docs/research/placement-audit/judged-c29ce-90.jsonl",
+  sampleFile: "docs/research/placement-audit/audit_sample_judge_c29ce.jsonl",
 
   /**
    * Which pipeline these describe. This draw is what funded the weak-city DROP,

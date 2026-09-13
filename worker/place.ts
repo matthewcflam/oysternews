@@ -29,8 +29,8 @@
  * decision it explains.
  */
 
-import type { Article, GdeltLocation, Placement } from "../lib/types.ts";
-import { ADM1_TYPES, CITY_TYPES, LOCATION_COUNTRY } from "../lib/types.ts";
+import type { Article, GdeltLocation, Placement } from "../src/lib/types.ts";
+import { ADM1_TYPES, CITY_TYPES, LOCATION_COUNTRY } from "../src/lib/types.ts";
 import type { RefData } from "./refdata.ts";
 
 const CITY = new Set<number>(CITY_TYPES);

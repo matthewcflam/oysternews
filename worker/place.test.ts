@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Article, GdeltLocation } from "../lib/types.ts";
+import type { Article, GdeltLocation } from "../src/lib/types.ts";
 import { explainPlacement, isDemonym, placeStory, regionIdFor } from "./place.ts";
 import type { RefData } from "./refdata.ts";
 

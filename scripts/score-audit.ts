@@ -39,7 +39,7 @@ import type { PlacementTrace } from "../worker/place.ts";
 // Wilson lives in lib/ so `lib/accuracy.test.ts` can re-derive the published
 // figures with the SAME arithmetic this script prints. Two copies would let the
 // About page agree with a bug instead of with the judge.
-import { wilson } from "../lib/audit-score.ts";
+import { wilson } from "../src/lib/audit-score.ts";
 import { drawFingerprint, fingerprintOf } from "./judge-draw-id.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

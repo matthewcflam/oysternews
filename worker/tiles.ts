@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { StoryGroup } from "../lib/types.ts";
+import type { StoryGroup } from "../src/lib/types.ts";
 
 export const STORIES_LAYER = "stories";
 export const COUNTRY_LAYER = "country-top";

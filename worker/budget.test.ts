@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { SPIDERFY_ZOOM } from "../lib/spiderfy.ts";
-import type { StoryGroup } from "../lib/types.ts";
+import { SPIDERFY_ZOOM } from "../src/lib/spiderfy.ts";
+import type { StoryGroup } from "../src/lib/types.ts";
 import { assignMinzoom, countryTopGroups, tileOf } from "./budget.ts";
 import { salienceOf } from "./rank.ts";
 
