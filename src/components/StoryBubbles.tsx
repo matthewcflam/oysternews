@@ -23,6 +23,41 @@ const pointFor = (map: MapLibreMap, [lng, lat]: [number, number]) => {
   return map.project([lng + 360 * Math.round((centre - lng) / 360), lat]);
 };
 
+// CSS can't shrink a box to its widest wrapped line, so measure the lines and narrow the bubble
+// to match; the side gap then equals the padding.
+function fitWidth(anchor: HTMLDivElement) {
+  const bubble = anchor.firstElementChild;
+  const text = bubble?.firstElementChild;
+  if (!(bubble instanceof HTMLElement) || !text?.firstChild) return;
+
+  bubble.style.width = "";
+  const clamped = text.scrollHeight > text.clientHeight + 1;
+
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  const bottom = text.getBoundingClientRect().bottom;
+  const lines = new globalThis.Map<number, { left: number; right: number }>();
+  for (const rect of range.getClientRects()) {
+    if (rect.width === 0 || rect.top >= bottom) continue;
+    const key = Math.round(rect.top);
+    const line = lines.get(key);
+    lines.set(key, {
+      left: Math.min(line?.left ?? rect.left, rect.left),
+      right: Math.max(line?.right ?? rect.right, rect.right),
+    });
+  }
+  // The ellipsis line's rects end before the "…"; it re-truncates to whatever width the rest set.
+  const measured = [...lines.entries()].sort(([a], [b]) => a - b).map(([, line]) => line);
+  if (clamped) measured.pop();
+  if (!measured.length) return;
+
+  const widest = Math.max(...measured.map((line) => line.right - line.left));
+  const style = getComputedStyle(bubble);
+  const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  // Rounded up so subpixel error can't push the last word onto a new line.
+  bubble.style.width = `${Math.ceil(widest) + padding}px`;
+}
+
 export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Props) {
   const [placed, setPlaced] = useState<PlacedBubble[]>([]);
 
@@ -69,6 +104,20 @@ export default function StoryBubbles({ map, stories, selectedUrl, onSelect }: Pr
   // Before paint, so a bubble is never briefly drawn at the top-left corner.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `placed` is the trigger; the anchor nodes it renders must be positioned after each layout
   useLayoutEffect(position, [position, placed]);
+
+  // Refit once webfonts land: the fallback face wraps at different widths.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `placed` is the trigger; the rendered headlines must be measured after each layout
+  useLayoutEffect(() => {
+    const fitAll = () => {
+      for (const node of nodes.current.values()) fitWidth(node);
+    };
+    fitAll();
+    let live = true;
+    document.fonts.ready.then(() => live && fitAll());
+    return () => {
+      live = false;
+    };
+  }, [placed]);
 
   if (!placed.length) return null;
 

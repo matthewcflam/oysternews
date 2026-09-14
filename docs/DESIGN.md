@@ -930,9 +930,9 @@ ceiling safe to remove is `bubbleLabelFilter`: from `LABEL_MINZOOM` (4) the
 basemap captions every pin with its own 11px headline, and the filter
 suppresses exactly that caption for the stories currently carrying a bubble,
 so no story is ever captioned twice. Below zoom 4 the headline layer is off
-entirely and the bubbles remain the only headlines there are. A corner
-checkbox (`src/components/HeadlineToggle.tsx`, bottom-right, left of MapLibre's
-zoom control) is what silences bubbles now — `MapView` mirrors the choice into
+entirely and the bubbles remain the only headlines there are. A speech-bubble
+toggle (`src/components/CornerPanel.tsx`, a white strip tucked under MapLibre's
+zoom control, beside the basemap-labels toggle) is what silences bubbles now — `MapView` mirrors the choice into
 a ref the map effect's closures can read, persists it to `localStorage` under
 `oyster.headlines`, and re-runs the ranking immediately on a mid-session
 flip since the stationary camera would otherwise never fire the `idle` that

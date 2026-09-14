@@ -14,7 +14,7 @@ import {
 import { Protocol } from "pmtiles";
 import { useEffect, useRef, useState } from "react";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { basemap, DEFAULT_CENTER, DEFAULT_ZOOM } from "@/lib/basemap";
+import { basemap, WORLD_BOUNDS } from "@/lib/basemap";
 import { CITY_SNAP_KM, loadCityShard, nearestCity } from "@/lib/cities";
 import { CONTINENT_BBOX, continentIdFor } from "@/lib/continents";
 import { countryName, fipsForIso } from "@/lib/flag";
@@ -22,6 +22,7 @@ import { firstLabel, labelAnchor, labelName } from "@/lib/labels";
 import {
   BOUNDARIES_ARCHIVE,
   BOUNDARIES_SOURCE_ID,
+  basemapLabelLayerIds,
   boundaryLayers,
   bubbleLabelFilter,
   CLICKABLE_LAYER_IDS,
@@ -76,7 +77,7 @@ import {
 import { type PanelStory, panelStory } from "@/lib/story";
 import { sameKeys, topKeys } from "@/lib/top";
 import type { CityShard, RegionIndex } from "@/lib/types";
-import HeadlineToggle from "./HeadlineToggle";
+import CornerPanel, { ICON_SIZE, type PanelPos } from "./CornerPanel";
 import RegionPanel from "./RegionPanel";
 import SearchBar from "./SearchBar";
 import StoryBubbles, { type TopStory } from "./StoryBubbles";
@@ -101,6 +102,7 @@ const GLOBE_ICON_SIZE = 28;
 const GLOBE_INK_INSET = (7 / 128) * GLOBE_ICON_SIZE;
 
 const HEADLINES_STORAGE_KEY = "oyster.headlines";
+const LABELS_STORAGE_KEY = "oyster.labels";
 
 function cityRecordFor(
   selection: Selection | null,
@@ -136,9 +138,7 @@ export default function MapView() {
 
   // Measured, not a fixed offset: attribution can wrap and push the zoom control up. Observe
   // the whole corner, since attribution moves the group without resizing it.
-  const [cornerCtrlPos, setCornerCtrlPos] = useState<{ right: number; bottom: number } | null>(
-    null
-  );
+  const [panelPos, setPanelPos] = useState<PanelPos | null>(null);
   const [globePos, setGlobePos] = useState<{ right: number; bottom: number; width: number } | null>(
     null
   );
@@ -152,9 +152,14 @@ export default function MapView() {
     const measure = () => {
       const containerRect = ready.getContainer().getBoundingClientRect();
       const groupRect = group.getBoundingClientRect();
-      setCornerCtrlPos({
-        right: containerRect.right - groupRect.left + CORNER_CTRL_GAP,
+      // Flush with the zoom-out button, reaching under the group; the half-gap on each side
+      // of the tag's cell makes every gap between glyphs and edges equal.
+      const buttonHeight = group.lastElementChild?.getBoundingClientRect().height ?? 29;
+      setPanelPos({
+        right: containerRect.right - groupRect.right,
         bottom: containerRect.bottom - groupRect.bottom,
+        height: buttonHeight,
+        paddingRight: groupRect.width + (buttonHeight - ICON_SIZE) / 2,
       });
       setGlobePos({
         right: containerRect.right - groupRect.right,
@@ -209,6 +214,29 @@ export default function MapView() {
     setHeadlinesOn(on);
     try {
       window.localStorage.setItem(HEADLINES_STORAGE_KEY, String(on));
+    } catch {}
+  };
+
+  const [labelsOn, setLabelsOn] = useState(true);
+  const labelsOnRef = useRef(true);
+  const toggleLabels = useRef<((on: boolean) => void) | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(LABELS_STORAGE_KEY);
+      if (stored !== null) setLabelsOn(stored === "true");
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    labelsOnRef.current = labelsOn;
+    toggleLabels.current?.(labelsOn);
+  }, [labelsOn]);
+
+  const setLabels = (on: boolean) => {
+    setLabelsOn(on);
+    try {
+      window.localStorage.setItem(LABELS_STORAGE_KEY, String(on));
     } catch {}
   };
 
@@ -428,8 +456,8 @@ export default function MapView() {
     const map = new MapLibreMap({
       container: container.current,
       style: basemap().styleUrl,
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
+      bounds: WORLD_BOUNDS,
+      fitBoundsOptions: { padding: FIT_PADDING },
       renderWorldCopies: true,
       // No rotation or pitch: with showCompass off there is no control to restore north-up.
       dragRotate: false,
@@ -453,6 +481,16 @@ export default function MapView() {
     // Awaiting both promises is correct in either finish order.
     const loaded = new Promise<void>((resolve) => {
       map.on("load", () => resolve());
+    });
+
+    // Outside the manifest chain: basemap labels exist even when story data fails to load.
+    // Region clicks hit-test these labels, so they stop working while labels are hidden.
+    map.on("load", () => {
+      const labelIds = basemapLabelLayerIds(map.getStyle().layers);
+      toggleLabels.current = (on: boolean) => {
+        for (const id of labelIds) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+      };
+      toggleLabels.current(labelsOnRef.current);
     });
 
     // The effect can unmount while these are in flight, and touching a removed map throws.
@@ -626,7 +664,8 @@ export default function MapView() {
         const resetToHome = () => {
           setStory(null);
           clearRegion();
-          map.flyTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM });
+          const camera = map.cameraForBounds(WORLD_BOUNDS, { padding: FIT_PADDING });
+          if (camera) map.flyTo(camera);
         };
         resetHome.current = resetToHome;
 
@@ -765,6 +804,7 @@ export default function MapView() {
       redrawSpider.current = null;
       resetHome.current = null;
       toggleHeadlines.current = null;
+      toggleLabels.current = null;
       map.remove();
       removeProtocol("pmtiles");
     };
@@ -814,10 +854,12 @@ export default function MapView() {
 
       <SearchBar onSelect={(place) => void selectPlace(place)} />
 
-      <HeadlineToggle
-        checked={headlinesOn}
-        onCheckedChange={setHeadlines}
-        position={cornerCtrlPos}
+      <CornerPanel
+        position={panelPos}
+        headlinesOn={headlinesOn}
+        onHeadlinesChange={setHeadlines}
+        labelsOn={labelsOn}
+        onLabelsChange={setLabels}
       />
 
       <button

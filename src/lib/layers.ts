@@ -271,6 +271,22 @@ export function firstPlaceLabelLayerId(
     ?.id;
 }
 
+// Read before our own layers are added, so the story titles are never in the list. Layers the
+// style ships hidden (continent labels) are left out, or turning labels back on would reveal them.
+export function basemapLabelLayerIds(
+  layers: readonly { id: string; type: string; layout?: object }[]
+): string[] {
+  return layers
+    .filter(
+      (layer) =>
+        layer.type === "symbol" &&
+        layer.layout &&
+        "text-field" in layer.layout &&
+        !("visibility" in layer.layout && layer.layout.visibility === "none")
+    )
+    .map((layer) => layer.id);
+}
+
 export const BOUNDARIES_ARCHIVE = "/boundaries.pmtiles";
 export const BOUNDARIES_SOURCE_ID = "boundaries";
 

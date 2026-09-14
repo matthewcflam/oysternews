@@ -1,29 +1,26 @@
 "use client";
 
-import * as Checkbox from "@radix-ui/react-checkbox";
+import type { ReactNode } from "react";
 
 type Props = {
+  label: string;
+  icon: ReactNode;
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
-  position: { right: number; bottom: number } | null;
 };
 
-export default function HeadlineToggle({ checked, onCheckedChange, position }: Props) {
+export default function MapToggle({ label, icon, checked, onCheckedChange }: Props) {
   return (
-    // biome-ignore lint/a11y/noLabelWithoutControl: Checkbox.Root renders a <button>, a labelable element
-    <label className="headline-toggle" style={position ?? undefined}>
-      <Checkbox.Root
-        className="headline-toggle__box"
-        checked={checked}
-        onCheckedChange={(state) => onCheckedChange(state === true)}
-      >
-        <Checkbox.Indicator className="headline-toggle__indicator">
-          <svg width="10" height="8" viewBox="0 0 10 8" aria-hidden="true">
-            <path d="M1 4 L4 7 L9 1" fill="none" stroke="currentColor" strokeWidth="2" />
-          </svg>
-        </Checkbox.Indicator>
-      </Checkbox.Root>
-      <span className="headline-toggle__label">Headlines</span>
-    </label>
+    <button
+      type="button"
+      className="map-icon-btn"
+      data-state={checked ? "on" : "off"}
+      aria-pressed={checked}
+      aria-label={label}
+      title={label}
+      onClick={() => onCheckedChange(!checked)}
+    >
+      {icon}
+    </button>
   );
 }

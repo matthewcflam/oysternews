@@ -167,10 +167,10 @@ describe("placeBubbles", () => {
   });
 
   it("refuses to slide a bubble under the chrome", () => {
-    expect(CHROME_TOP + TAIL_DROP + BUBBLE_MAX_HEIGHT).toBe(201);
+    expect(CHROME_TOP + TAIL_DROP + BUBBLE_MAX_HEIGHT).toBe(187);
     const shallow = { width: 1482, height: 210 };
     expect(placeBubbles([at("high", 700, 100)], shallow)).toHaveLength(0);
-    expect(placeBubbles([at("high", 700, 201)], shallow)[0]?.lift).toBe("up");
+    expect(placeBubbles([at("high", 700, 187)], shallow)[0]?.lift).toBe("up");
   });
 
   it("thins itself on a phone with no phone-specific rule", () => {
