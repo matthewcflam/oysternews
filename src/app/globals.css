@@ -182,15 +182,33 @@ main .bubbles {
   letter-spacing: -0.04em;
 }
 
-.search__mark,
-.brand__dot,
-.brand__dot {
-  /* In em, so the bead tracks the wordmark's size. */
+.search__mark {
   position: absolute;
   left: 0.3em;
   top: 0.2em;
   width: 0.2em;
   height: 0.2em;
+}
+
+.brand__o {
+  position: relative;
+}
+
+/* The favicon's disc (--accent), set in the O's counter. In em so it tracks the wordmark's size;
+   Offsets are Newsreader 700's O counter centre, measured from the glyph's ink: 0.3975em from the
+   pen origin, 0.339em above the baseline (ascent 0.735em, so 0.396em below the span top). Not 50%:
+   the span is narrowed by the wordmark's -0.04em tracking and includes descender space. Re-measure if
+   the font changes. */
+.brand__dot {
+  position: absolute;
+  left: 0.3975em;
+  top: 0.396em;
+  width: 0.22em;
+  height: 0.22em;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+  text-shadow: none;
 }
 
 .freshness {

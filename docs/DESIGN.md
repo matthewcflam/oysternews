@@ -1,6 +1,6 @@
 # Oyster — Design
 
-This is the single authoritative design document for Oyster. It replaces the
+This is the single authoritative design document for . It replaces the
 earlier project handoff notes as the place rationale lives. Two documents
 remain primary evidence rather than being absorbed here —
 `docs/research/gdelt-findings.md` and `docs/research/basemap-case-study.md` —
@@ -1431,15 +1431,14 @@ point."
   `1fb5304`), while `src/components/MapTilerLogo.tsx` still exists. MapTiler's
   Free plan requires a visible logo, so attribution is currently unmet. Either
   restore the render or record where the mark went, before this ships.
-- **`globals.css` — the brand mark has no shape.** In `src/app/globals.css`
-  the selector list `.search__mark, .brand__dot, .brand__dot` shares only a
-  size-and-position block. Its original shared declaration block
-  (`border-radius: 50%`, the radial gradient and the transform) was swallowed
-  by a comment meant to disable only `.panel__sphere`, and that commented-out
-  block has since been deleted. `.search__mark` and `.brand__dot` therefore
-  get **no border-radius and no gradient** from any rule — a live rendering
-  bug in the search sphere and the wordmark's bead. `.panel__sphere` is a
-  separate, intact rule.
+- **`globals.css` — the search mark has no shape.** In `src/app/globals.css`
+  `.search__mark` has only a size-and-position block. Its original declaration
+  block (`border-radius: 50%`, the radial gradient and the transform) was
+  swallowed by a comment meant to disable only `.panel__sphere`, and that
+  commented-out block has since been deleted, so the search sphere gets **no
+  border-radius and no gradient** from any rule. (`.brand__dot` shared the bug
+  until it became its own rule: the accent disc inside the "Oyster News" O.)
+  `.panel__sphere` is a separate, intact rule.
 - **Phone profile never run on real hardware.** `worker/budget.ts`'s
   `DEFAULT_K = 15` is a desktop-tuned guess ("K ~ 12–20, tuned on real
   data. A phone shows 2-4 tiles, so roughly 30-60 pins") — it is the only

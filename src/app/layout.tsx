@@ -23,7 +23,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Oyster — a map of current world news",
+  title: "Oyster News",
   description: "A 2D web map of current world news. Stories are plotted where they happen.",
 };
 
