@@ -1,8 +1,11 @@
 const OPENFREEMAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
-// z2, not lower: MapTiler draws no country labels below it, and the label click needs one.
-export const DEFAULT_CENTER: [number, number] = [0, 20];
-export const DEFAULT_ZOOM = 2;
+// The home view is a box, not a zoom: a fixed zoom is a fixed pixel width (z2 = 2048px), so small
+// screens landed zoomed in. Cape Horn to the Arctic coasts; MapTiler labels countries from z1.
+export const WORLD_BOUNDS: [[number, number], [number, number]] = [
+  [-180, -56],
+  [180, 75],
+];
 
 export type Basemap = {
   styleUrl: string;

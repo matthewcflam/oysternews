@@ -64,12 +64,15 @@ main .bubbles {
 }
 
 /* 52px and 12px must match TAIL_DROP and TAIL_INSET in lib/bubble.ts (kept in step by hand). */
+/* Padding gives a 6.5px gap to cap height, baseline and sides for Newsreader at 14/14 (measured: */
+/* baseline 10.3px into the line box, caps 9.85px tall); re-measure if the font or line-height changes. */
+/* The vertical padding must match BUBBLE_MAX_HEIGHT; StoryBubbles narrows the width to the widest line. */
 .bubble {
   --bubble-bg: var(--accent);
   position: absolute;
   width: 135px;
   margin: 0;
-  padding: 6px 1.5px 9px;
+  padding: 6px 6.5px 3px;
   border: 0;
   border-radius: 6px;
   background: var(--bubble-bg);
@@ -113,8 +116,8 @@ main .bubbles {
   line-clamp: 4;
   overflow: hidden;
   color: #ffffff;
-  font-size: 16px;
-  line-height: 16px;
+  font-size: 14px;
+  line-height: 14px;
   font-weight: 400;
   letter-spacing: -0.02em;
   /* An unbroken long token would otherwise overflow the body instead of wrapping. */
@@ -763,59 +766,52 @@ main .bubbles {
   box-shadow: 0 0 2px 2px #0096ff;
 }
 
-.headline-toggle {
+/* Under MapLibre's control corner (z-index 2); MapView sets right/bottom/height/padding-right
+   from the zoom group. The fallback is the group's default spot. */
+.corner-panel {
   position: absolute;
-  right: 45px;
+  right: 10px;
   bottom: 10px;
-  z-index: 2;
+  z-index: 1;
   height: 29px;
-  padding: 0 10px;
+  padding-left: 4.5px;
+  padding-right: 33.5px;
   display: flex;
   align-items: center;
-  gap: 6px;
   border-radius: 4px;
   background: #fff;
-  color: #333;
-  font:
-    600 14px / 1 var(--font-inter),
-    Inter,
-    system-ui,
-    sans-serif;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  user-select: none;
 }
 
-.headline-toggle:hover {
-  background: #f2f2f2;
-}
-
-.headline-toggle__box {
-  width: 14px;
-  height: 14px;
+.map-icon-btn {
+  width: 29px;
+  height: 100%;
   padding: 0;
-  border: 1px solid #999;
-  border-radius: 3px;
-  background: #fff;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  color: #999;
+  cursor: pointer;
 }
 
-.headline-toggle__box[data-state="checked"] {
-  background: var(--accent, #e5484d);
-  border-color: transparent;
+.map-icon-btn[data-state="on"] {
+  color: var(--accent);
 }
 
-.headline-toggle__box:focus-visible {
+.map-icon-btn:hover {
+  background: #f2f2f2;
+}
+
+.map-icon-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 2px 2px #0096ff;
 }
 
-.headline-toggle__indicator {
-  display: flex;
-  color: #fff;
+.map-icon-btn svg {
+  display: block;
 }
 
 /* Unset the map's 100vh here, or the About article is clipped at one screen with no scrollbar. */

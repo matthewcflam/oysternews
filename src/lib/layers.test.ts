@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ACCENT,
+  basemapLabelLayerIds,
   boundaryLayers,
   CLICKABLE_LAYER_IDS,
   COUNTRIES_SOURCE_LAYER,
@@ -271,6 +272,31 @@ describe("firstPlaceLabelLayerId", () => {
   it("returns undefined for a style it does not recognise", () => {
     expect(firstPlaceLabelLayerId([{ id: "background" }])).toBeUndefined();
     expect(firstPlaceLabelLayerId([])).toBeUndefined();
+  });
+});
+
+describe("basemapLabelLayerIds", () => {
+  it("returns every symbol layer that draws text, and nothing else", () => {
+    const layers = [
+      { id: "Water", type: "fill" },
+      { id: "Road labels", type: "symbol", layout: { "text-field": "{name}" } },
+      { id: "Oneway arrows", type: "symbol", layout: { "icon-image": "arrow" } },
+      { id: "Country labels", type: "symbol", layout: { "text-field": ["get", "name"] } },
+      { id: "Bare symbol", type: "symbol" },
+    ];
+    expect(basemapLabelLayerIds(layers)).toEqual(["Road labels", "Country labels"]);
+  });
+
+  it("leaves out layers the style ships hidden, so re-enabling never reveals them", () => {
+    const layers = [
+      { id: "Country labels", type: "symbol", layout: { "text-field": "{name}" } },
+      {
+        id: "Continent labels",
+        type: "symbol",
+        layout: { "text-field": "{name}", visibility: "none" },
+      },
+    ];
+    expect(basemapLabelLayerIds(layers)).toEqual(["Country labels"]);
   });
 });
 

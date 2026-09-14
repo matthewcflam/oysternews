@@ -4,7 +4,7 @@ type BubbleLift = "up" | "down";
 
 export const BUBBLE_WIDTH = 135;
 
-export const BUBBLE_MAX_HEIGHT = 79;
+export const BUBBLE_MAX_HEIGHT = 65;
 
 export const TAIL_DROP = 52;
 
