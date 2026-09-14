@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MARK } from "./layers";
-import { PIN_HEIGHT, PIN_LEFT_PAD, PIN_PIXEL_RATIO, PIN_WIDTH, trianglePin } from "./pin";
+import {
+  PIN_COLOR,
+  PIN_HEIGHT,
+  PIN_LEFT_PAD,
+  PIN_PIXEL_RATIO,
+  PIN_WIDTH,
+  trianglePin,
+} from "./pin";
 
 const alphaAt = (image: { width: number; data: Uint8ClampedArray }, x: number, y: number): number =>
   image.data[(y * image.width + x) * 4 + 3];
@@ -61,9 +67,9 @@ describe("trianglePin", () => {
     expect(partial.length).toBeGreaterThan(0);
   });
 
-  it("paints every pixel in the brand mark colour", () => {
+  it("paints every pixel in the pin colour", () => {
     const image = trianglePin(8, 6, 1);
-    const value = Number.parseInt(MARK.slice(1), 16);
+    const value = Number.parseInt(PIN_COLOR.slice(1), 16);
     const expected = [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff];
 
     for (let i = 0; i < image.data.length; i += 4) {

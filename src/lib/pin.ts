@@ -1,4 +1,4 @@
-import { MARK } from "./layers";
+export const PIN_COLOR = "#ffffff";
 
 export const PIN_WIDTH = 30;
 export const PIN_HEIGHT = 34;
@@ -45,7 +45,7 @@ export function trianglePin(
 ): { width: number; height: number; data: Uint8ClampedArray } {
   const width = Math.round(cssWidth * pixelRatio);
   const height = Math.round(cssHeight * pixelRatio);
-  const [r, g, b] = rgb(MARK);
+  const [r, g, b] = rgb(PIN_COLOR);
   const data = new Uint8ClampedArray(width * height * 4);
 
   for (let y = 0; y < height; y++) {

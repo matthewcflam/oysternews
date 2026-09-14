@@ -180,6 +180,7 @@ export default function MapView() {
   }, [ready]);
 
   const [story, setStory] = useState<PanelStory | null>(null);
+  const [collapsedKey, setCollapsedKey] = useState<string | null>(null);
 
   // Refs, not state: both readers are written from map code outside React's render order,
   // so state would paint the disc a render late.
@@ -278,6 +279,8 @@ export default function MapView() {
 
   const clearRegion = () => {
     setSelection(null);
+    // Otherwise reselecting the same story after Escape would reopen it collapsed.
+    setCollapsedKey(null);
     markSelected(null);
     showPin(mapRef.current, null);
     for (const id of [COUNTRY_OUTLINE_ID, REGION_OUTLINE_ID]) {
@@ -818,6 +821,18 @@ export default function MapView() {
   const zoomBox = zoomTargetFor(selection);
   const onZoom = zoomBox ? zoomToRegion : null;
 
+  // Stores which panel was collapsed, not a boolean: a different story or region then opens
+  // expanded without every selection path having to reset it.
+  const panelKey =
+    story?.url ??
+    (!selection
+      ? null
+      : selection.kind === "city"
+        ? `city:${selection.country}:${selection.name}`
+        : `${selection.kind}:${selection.id}`);
+  const collapsed = collapsedKey !== null && collapsedKey === panelKey;
+  const togglePanel = () => setCollapsedKey(collapsed ? null : panelKey);
+
   const panel = !selection
     ? null
     : selection.kind === "city"
@@ -881,7 +896,7 @@ export default function MapView() {
         onSelect={(selected, at) => selectStory(selected, at)}
       />
 
-      {story && <StoryPanel story={story} onClose={clearStory} />}
+      {story && <StoryPanel story={story} collapsed={collapsed} onToggle={togglePanel} />}
 
       {!story && panel && (
         <RegionPanel
@@ -892,7 +907,8 @@ export default function MapView() {
           flagCode={panel.flagCode}
           trail={panel.trail}
           onZoom={panel.onZoom}
-          onClose={clearRegion}
+          collapsed={collapsed}
+          onToggle={togglePanel}
         />
       )}
       {provider === "openfreemap" && (

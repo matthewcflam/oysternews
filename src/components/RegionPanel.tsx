@@ -4,6 +4,7 @@ import { useState } from "react";
 import { countryName, flagUrl } from "@/lib/flag";
 import { placeLine, publishedAt } from "@/lib/story";
 import type { RegionEntry } from "@/lib/types";
+import PanelTab from "./PanelTab";
 
 export type RegionPanelProps = {
   name: string;
@@ -11,10 +12,13 @@ export type RegionPanelProps = {
   entry: RegionEntry;
   status: "loading" | "ready" | "unavailable";
   onZoom: (() => void) | null;
-  onClose: () => void;
+  collapsed: boolean;
+  onToggle: () => void;
   flagCode?: string;
   trail?: string[];
 };
+
+const SCROLL_ID = "region-panel-content";
 
 export default function RegionPanel({
   name,
@@ -22,7 +26,8 @@ export default function RegionPanel({
   entry,
   status,
   onZoom,
-  onClose,
+  collapsed,
+  onToggle,
   flagCode,
   trail: trailOverride,
 }: RegionPanelProps) {
@@ -54,9 +59,13 @@ export default function RegionPanel({
   const now = Date.now();
 
   return (
-    <aside className="panel panel--bounded" aria-label={`Top stories in ${heading}`}>
+    <aside
+      className="panel panel--bounded"
+      data-collapsed={collapsed}
+      aria-label={`Top stories in ${heading}`}
+    >
       {/* `.panel` carries the shadow; this element clips. One element cannot both overflow and clip. */}
-      <div className="panel__scroll">
+      <div className="panel__scroll" id={SCROLL_ID} inert={collapsed}>
         <header className="panel__head">
           <div className="panel__ident">
             <p className="panel__crumbs">
@@ -88,10 +97,6 @@ export default function RegionPanel({
               referrerPolicy="no-referrer"
             />
           )}
-
-          <button type="button" className="panel__close" onClick={onClose} aria-label="Close panel">
-            ×
-          </button>
         </header>
 
         <section className="panel__list" aria-label={`Top stories in ${heading}`}>
@@ -136,6 +141,8 @@ export default function RegionPanel({
           </footer>
         )}
       </div>
+
+      <PanelTab collapsed={collapsed} onToggle={onToggle} controls={SCROLL_ID} />
     </aside>
   );
 }

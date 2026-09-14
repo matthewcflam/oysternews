@@ -903,9 +903,8 @@ naming it first 404s the glyph ranges on the keyless fallback.
 
 The selection wedge (`src/lib/pin.ts`) is rasterized in TypeScript rather than
 shipped as an image asset — this repo has no binary image assets by
-policy, so a colour used in two places (the map's paint palette and a
-sprite file) cannot drift, because there is only one file. `MARK` is
-imported from `src/lib/layers.ts` into `src/lib/pin.ts` for exactly this reason.
+policy. It is drawn in solid white (`PIN_COLOR`), not `MARK`: white reads
+against both the dark basemap and the selected disc beneath it.
 
 The bubbles (`src/components/StoryBubbles.tsx`, `src/lib/bubble.ts`) caption **the top
 five stories in the current viewport** — the same ranking, from the same
@@ -937,6 +936,15 @@ a ref the map effect's closures can read, persists it to `localStorage` under
 `oyster.headlines`, and re-runs the ranking immediately on a mid-session
 flip since the stationary camera would otherwise never fire the `idle` that
 normally does that work.
+
+Story and region panels have no close button. A Google-Maps-style tab on the
+panel's right edge (`src/components/PanelTab.tsx`) collapses the panel, sliding
+it left until only the tab is showing, and keeps the selection, pin and outline.
+Escape and an empty-map click still clear the selection. The slide is a plain CSS
+`transform` transition with no animation library: transform composites, so it stays
+smooth while MapLibre holds the main thread, and a transition reverses cleanly
+mid-flight. `MapView` stores *which* panel was collapsed rather than a boolean,
+so selecting something else opens expanded.
 
 A story displaced onto a spider leaf (`src/lib/spiderfy.ts`, zoom 9 and up) is
 drawn at its leaf, not its stack's anchor — the anchor copy is covered by the
