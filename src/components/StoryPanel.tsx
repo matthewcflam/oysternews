@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { useState } from "react";
 import { type PanelStory, placeLine, publishedAt } from "@/lib/story";
+import PanelTab from "./PanelTab";
 
 export type StoryPanelProps = {
   story: PanelStory;
-  onClose: () => void;
+  collapsed: boolean;
+  onToggle: () => void;
 };
 
-export default function StoryPanel({ story, onClose }: StoryPanelProps) {
+const SCROLL_ID = "story-panel-content";
+
+export default function StoryPanel({ story, collapsed, onToggle }: StoryPanelProps) {
   // Stores the rejected url, not a boolean: a boolean needs an effect to clear, which flashes
   // the flat header for a frame.
   const [rejectedUrl, setRejectedUrl] = useState("");
@@ -28,9 +32,9 @@ export default function StoryPanel({ story, onClose }: StoryPanelProps) {
   const place = placeLine(story);
 
   return (
-    <aside className="panel" aria-label={story.title || "Story"}>
+    <aside className="panel" data-collapsed={collapsed} aria-label={story.title || "Story"}>
       {/* `.panel` carries the shadow; this element clips. One element cannot both overflow and clip. */}
-      <div className="panel__scroll">
+      <div className="panel__scroll" id={SCROLL_ID} inert={collapsed}>
         <header className={`panel__hero${image ? " panel__hero--image" : ""}`}>
           {image && (
             // onError falls back to the flat header: a hotlinked image can 403 or vanish.
@@ -47,9 +51,6 @@ export default function StoryPanel({ story, onClose }: StoryPanelProps) {
               referrerPolicy="no-referrer"
             />
           )}
-          <button type="button" className="panel__close" onClick={onClose} aria-label="Close panel">
-            ×
-          </button>
         </header>
 
         <div className="panel__body">
@@ -75,6 +76,8 @@ export default function StoryPanel({ story, onClose }: StoryPanelProps) {
           </Link>
         </footer>
       </div>
+
+      <PanelTab collapsed={collapsed} onToggle={onToggle} controls={SCROLL_ID} />
     </aside>
   );
 }
