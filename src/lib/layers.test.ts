@@ -17,7 +17,6 @@ import {
   LABEL_GAP,
   LABEL_TEXT_SIZE,
   LABELS_LAYER_ID,
-  MARK,
   MATCH_NOTHING,
   matchId,
   NOT_CONTAINER,
@@ -86,12 +85,12 @@ describe("storyLayers", () => {
     expect(layout["symbol-sort-key"]).toEqual(["-", 0, ["get", "salience"]]);
   });
 
-  it("draws every unselected story in one orange, and the open one in MARK", () => {
+  it("draws every unselected story in one orange, and the open one in white", () => {
     for (const layer of [stories, country]) {
       const fill = layer.paint?.["circle-color"] as unknown[];
       expect(fill[0]).toBe("case");
       expect(fill).toHaveLength(4);
-      expect(fill[2]).toBe(MARK);
+      expect(fill[2]).toBe("#ffffff");
       expect(fill[3]).toBe(ACCENT);
       expect(propertiesRead(fill)).toEqual([SELECTED_STATE_KEY]);
       expect(layer.paint?.["circle-stroke-color"]).toBe("#ffffff");

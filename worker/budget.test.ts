@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COUNTRY_LAYER_MAXZOOM } from "../src/lib/country-floor.ts";
 import { SPIDERFY_ZOOM } from "../src/lib/spiderfy.ts";
 import type { StoryGroup } from "../src/lib/types.ts";
 import { assignMinzoom, countryTopGroups, tileOf } from "./budget.ts";
@@ -184,5 +185,66 @@ describe("the country-top floor layer", () => {
 
   it("skips groups with no country, rather than inventing one", () => {
     expect(countryTopGroups([group({ id: "ocean", countryCode: "" })])).toEqual([]);
+  });
+});
+
+describe("the country-floor handover", () => {
+  // A small country sharing a tile with a crowd: ranking alone defers its only story past z4,
+  // where the floor layer stops drawing it.
+  const crowded = (): StoryGroup[] => [
+    ...spread(40, 50, 10),
+    group({ id: "lu", countryCode: "LU", lat: 50.05, lon: 10.1, salience: 0.01 }),
+  ];
+
+  it("defers the small country's story past the handover without a floor", () => {
+    const { groups } = assignMinzoom(crowded(), { k: 5 });
+    expect(groups.find((g) => g.id === "lu")?.minzoom).toBeGreaterThan(COUNTRY_LAYER_MAXZOOM);
+  });
+
+  it("puts a floor story in the stories layer by the zoom the floor layer stops", () => {
+    const { groups } = assignMinzoom(crowded(), { k: 5, floor: new Set(["lu"]) });
+    expect(groups.find((g) => g.id === "lu")?.minzoom).toBe(COUNTRY_LAYER_MAXZOOM);
+  });
+
+  it("never raises a floor story that already made the cut", () => {
+    const { groups } = assignMinzoom(spread(3), { k: 15, floor: new Set(["g002"]) });
+    expect(groups.find((g) => g.id === "g002")?.minzoom).toBe(0);
+  });
+
+  it("guarantees every drawn country-floor story, as run.ts wires it", () => {
+    const input = [
+      ...spread(40, 50, 10),
+      group({ id: "lu", countryCode: "LU", lat: 50.05, lon: 10.1, salience: 0.01 }),
+      group({ id: "hr", countryCode: "HR", lat: 50.06, lon: 10.2, salience: 0.02 }),
+      group({ id: "box", countryCode: "HU", kind: "CONTAINER", lat: 50.07, lon: 10.3 }),
+    ];
+    const top = countryTopGroups(input).filter((g) => g.kind !== "CONTAINER");
+    const { groups } = assignMinzoom(input, { k: 5, floor: new Set(top.map((g) => g.id)) });
+    const byId = new Map(groups.map((g) => [g.id, g.minzoom]));
+    for (const g of top) expect(byId.get(g.id)).toBeLessThanOrEqual(COUNTRY_LAYER_MAXZOOM);
+  });
+
+  it("keeps minzoom monotonic with a floor", () => {
+    const { groups } = assignMinzoom(crowded(), { k: 3, maxZoom: 11, floor: new Set(["lu"]) });
+    for (let zoom = 0; zoom <= 11; zoom++) {
+      const visible = groups.filter((g) => g.minzoom <= zoom).map((g) => g.id);
+      const deeper = new Set(groups.filter((g) => g.minzoom <= zoom + 1).map((g) => g.id));
+      for (const id of visible) expect(deeper.has(id)).toBe(true);
+    }
+  });
+
+  it("exceeds K only by the floor stories a tile was forced to take", () => {
+    const k = 4;
+    const floor = new Set(["lu"]);
+    const { groups } = assignMinzoom(crowded(), { k, maxZoom: 8, floor });
+    for (let zoom = 0; zoom <= 8; zoom++) {
+      const perTile = new Map<string, number>();
+      for (const g of groups.filter((g) => g.minzoom <= zoom)) {
+        const { x, y } = tileOf(g.lat, g.lon, zoom);
+        const key = `${x}/${y}`;
+        perTile.set(key, (perTile.get(key) ?? 0) + 1);
+      }
+      for (const count of perTile.values()) expect(count).toBeLessThanOrEqual(k + floor.size);
+    }
   });
 });

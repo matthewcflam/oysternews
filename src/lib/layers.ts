@@ -6,8 +6,11 @@ import type {
   LineLayerSpecification,
   SymbolLayerSpecification,
 } from "maplibre-gl";
+import { COUNTRY_LAYER_MAXZOOM } from "./country-floor";
 import type { LabelLevel } from "./labels";
 import { SPIDERFY_ZOOM } from "./spiderfy";
+
+export { COUNTRY_LAYER_MAXZOOM };
 
 // Must match worker/tiles.ts exactly.
 export const STORIES_SOURCE_LAYER = "stories";
@@ -19,16 +22,10 @@ export const TOP_LAYER_ID = "stories-top-pins";
 export const COUNTRY_LAYER_ID = "country-top-pins";
 export const LABELS_LAYER_ID = "stories-labels";
 
-// Capped: the country floor overlaps the stories layer, so past this zoom a story would
-// draw twice on top of itself.
-export const COUNTRY_LAYER_MAXZOOM = 4;
-
 const LABEL_MINZOOM = 4;
 
 export const ACCENT = "#D24F39";
 const WHITE = "#ffffff";
-
-export const MARK = "#C05AC4";
 
 const RING_RATIO = 0.32;
 
@@ -136,7 +133,7 @@ const labelOffset = (
 
 const circlePaint = {
   "circle-radius": byZoom(discRadius),
-  "circle-color": ["case", isSelected, MARK, ACCENT] as ExpressionSpecification,
+  "circle-color": ["case", isSelected, WHITE, ACCENT] as ExpressionSpecification,
   "circle-stroke-width": byZoom(ringWidth),
   "circle-stroke-color": WHITE,
 };

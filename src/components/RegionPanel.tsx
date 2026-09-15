@@ -43,7 +43,8 @@ export default function RegionPanel({
   // Filtered: countryName returns "" for an uncarried code, and a missing crumb must not leave a gap.
   const parent = regionId.trim().length === 2 ? "" : countryName(regionId);
   const middle = trailOverride ?? [parent];
-  const trail = ["World", ...middle, heading].filter(Boolean);
+  // Ancestors only: the heading directly below already names the region.
+  const trail = ["World", ...middle].filter(Boolean);
 
   // total 0 means the index predates the counts, not a region with no news.
   const counts =
@@ -70,10 +71,7 @@ export default function RegionPanel({
           <div className="panel__ident">
             <p className="panel__crumbs">
               {trail.map((crumb, at) => (
-                <span
-                  key={crumb}
-                  className={at === trail.length - 1 ? "panel__crumb--here" : undefined}
-                >
+                <span key={crumb}>
                   {at > 0 && (
                     <span className="panel__crumb-sep" aria-hidden="true">
                       ›
