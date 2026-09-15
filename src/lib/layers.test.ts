@@ -13,10 +13,10 @@ import {
   firstPlaceLabelLayerId,
   HIT_LAYER_FOR,
   hitLayers,
-  LABEL_FONT,
   LABEL_GAP,
   LABEL_TEXT_SIZE,
   LABELS_LAYER_ID,
+  labelFont,
   MATCH_NOTHING,
   matchId,
   NOT_CONTAINER,
@@ -40,7 +40,7 @@ import {
   topPinLayer,
 } from "./layers";
 
-const layers = storyLayers();
+const layers = storyLayers("maptiler");
 const [country, stories, labels] = layers;
 
 const propertiesRead = (value: unknown, found: string[] = []): string[] => {
@@ -74,9 +74,14 @@ describe("storyLayers", () => {
     expect(propertiesRead(labels.layout?.["text-field"])).toEqual(["title"]);
   });
 
-  it("names a font both basemaps can serve", () => {
-    expect(labels.layout?.["text-font"]).toEqual(LABEL_FONT);
-    expect(LABEL_FONT).toEqual(["Noto Sans Regular"]);
+  it("names a font the basemap's glyph server can serve", () => {
+    expect(labels.layout?.["text-font"]).toEqual(["Inter Regular"]);
+    expect(storyLayers("openfreemap")[2].layout?.["text-font"]).toEqual(["Noto Sans Regular"]);
+    expect(labelFont("openfreemap")).toEqual(["Noto Sans Regular"]);
+  });
+
+  it("outlines headlines with a 0.5px halo", () => {
+    expect(labels.paint?.["text-halo-width"]).toBe(0.5);
   });
 
   it("resolves label collisions by salience, with overlap off", () => {

@@ -6,6 +6,7 @@ import type {
   LineLayerSpecification,
   SymbolLayerSpecification,
 } from "maplibre-gl";
+import type { Basemap } from "./basemap";
 import { COUNTRY_LAYER_MAXZOOM } from "./country-floor";
 import type { LabelLevel } from "./labels";
 import { SPIDERFY_ZOOM } from "./spiderfy";
@@ -138,16 +139,17 @@ const circlePaint = {
   "circle-stroke-color": WHITE,
 };
 
-// Noto Sans is the only font both basemaps ship; naming Roboto first 404s glyphs on OpenFreeMap.
-export const LABEL_FONT = ["Noto Sans Regular"];
+// Glyphs come from the basemap's font server. OpenFreeMap has no Inter and 404s any stack naming
+// it, fallbacks included, so the keyless basemap keeps Noto Sans.
+export function labelFont(provider: Basemap["provider"]): string[] {
+  return provider === "maptiler" ? ["Inter Regular"] : ["Noto Sans Regular"];
+}
 
 // Order matters: country-top paints under stories, and headlines are inserted below the
 // basemap's place labels (see firstPlaceLabelLayerId), not appended.
-export function storyLayers(): [
-  CircleLayerSpecification,
-  CircleLayerSpecification,
-  SymbolLayerSpecification,
-] {
+export function storyLayers(
+  provider: Basemap["provider"]
+): [CircleLayerSpecification, CircleLayerSpecification, SymbolLayerSpecification] {
   return [
     {
       id: COUNTRY_LAYER_ID,
@@ -175,7 +177,7 @@ export function storyLayers(): [
       filter: NOT_CONTAINER,
       layout: {
         "text-field": ["get", "title"],
-        "text-font": LABEL_FONT,
+        "text-font": labelFont(provider),
         "text-size": LABEL_TEXT_SIZE,
         "text-max-width": 9,
         "text-offset": byZoom(labelOffset),
@@ -186,7 +188,7 @@ export function storyLayers(): [
       paint: {
         "text-color": "#f2f4f7",
         "text-halo-color": "rgba(13, 15, 18, 0.9)",
-        "text-halo-width": 1.2,
+        "text-halo-width": 0.5,
       },
     },
   ];
