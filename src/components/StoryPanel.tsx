@@ -58,12 +58,7 @@ export default function StoryPanel({ story, collapsed, onToggle }: StoryPanelPro
 
           <h2 className="panel__title">{story.title}</h2>
 
-          {place && (
-            <p className="panel__where">
-              <span className="panel__sphere" aria-hidden="true" />
-              {place}
-            </p>
-          )}
+          {place && <p className="panel__where">{place}</p>}
 
           <a className="panel__cta" href={story.url} target="_blank" rel="noopener noreferrer">
             Read The Story

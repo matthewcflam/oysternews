@@ -399,6 +399,18 @@ one pin at world zoom. Without it, z0's single world tile would cap the
 than ten stories a day (`FINDINGS.md §12`), the floor layer is the only
 thing that puts them on the map at all.
 
+**The handover at z4 is guaranteed by the budget.** The floor layer stops
+drawing at `COUNTRY_LAYER_MAXZOOM` (4, in `src/lib/country-floor.ts`, shared
+with the worker) so a story is never drawn twice. The budget used to know
+nothing about the floor, so a small country's top story in a crowded z4 tile
+could get minzoom 5–6 and **vanish on zoom-in**. Measured on the 2026-09-14
+archive: 10 of 57 drawn floor pins (LU, HR, HU, MZ, TZ, …) disappeared at z4
+and came back at z5–6. `assignMinzoom` now takes the non-container floor ids
+and forces any still unassigned into the stories layer at the handover zoom,
+past K and the coordinate cap. Pass 1 counts them from then on, so minzoom
+stays monotonic and deeper zooms keep K. The cost is a z4 tile over K by the
+floor stories it was forced to take — about ten worldwide.
+
 ### The tippecanoe 2.49.0 post-mortem
 
 This is the project's worst silent-failure story, and the reason
@@ -872,10 +884,8 @@ sparser than before this change, because the country-floor layer below z4
 is one story per country and many of those floor stories are containers.
 
 **One `case` came back deliberately**, for the reader's own gesture rather
-than a story property: the open (selected) story's disc fills `MARK`
-(`#C05AC4`, hand-tuned against the live map, twin of a CSS custom property
-that MapLibre paint expressions cannot read — the TypeScript constant is
-the source of truth and the CSS token carries a comment saying so). This is
+than a story property: the open (selected) story's disc fills white, matching the selection
+wedge above it so the pin reads as one selected object. This is
 the one property of a pin the *reader* set by clicking, which is why it is
 allowed to be a color when nothing else about a story is.
 
@@ -903,8 +913,8 @@ naming it first 404s the glyph ranges on the keyless fallback.
 
 The selection wedge (`src/lib/pin.ts`) is rasterized in TypeScript rather than
 shipped as an image asset — this repo has no binary image assets by
-policy. It is drawn in solid white (`PIN_COLOR`), not `MARK`: white reads
-against both the dark basemap and the selected disc beneath it.
+policy. It is drawn in solid white (`PIN_COLOR`), the same white as the selected
+disc beneath it.
 
 The bubbles (`src/components/StoryBubbles.tsx`, `src/lib/bubble.ts`) caption **the top
 five stories in the current viewport** — the same ranking, from the same
@@ -1438,7 +1448,6 @@ point."
   commented-out block has since been deleted, so the search sphere gets **no
   border-radius and no gradient** from any rule. (`.brand__dot` shared the bug
   until it became its own rule: the accent disc inside the "Oyster News" O.)
-  `.panel__sphere` is a separate, intact rule.
 - **Phone profile never run on real hardware.** `worker/budget.ts`'s
   `DEFAULT_K = 15` is a desktop-tuned guess ("K ~ 12–20, tuned on real
   data. A phone shows 2-4 tiles, so roughly 30-60 pins") — it is the only

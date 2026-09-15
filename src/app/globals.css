@@ -4,12 +4,10 @@
   box-sizing: border-box;
 }
 
-/* --mark has a TypeScript twin (MARK in lib/layers.ts) that MapLibre reads; change both together. */
 :root {
   --panel-veil: rgba(55, 54, 102, 1);
   --panel-wash: rgba(55, 54, 102, 0.35);
   --accent: #d24f39;
-  --mark: #c05ac4;
   --muted: #afafaf;
   --pill: #4e4d8f;
   --shadow: rgba(0, 0, 0, 0.15);
@@ -526,10 +524,6 @@ main .bubbles {
   line-height: 1.2;
 }
 
-.panel__crumb--here {
-  color: #ffffff;
-}
-
 .panel__crumb-sep {
   padding: 0 6px;
   color: var(--muted);
@@ -583,19 +577,10 @@ main .bubbles {
 }
 
 .panel__where {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   margin: 14px 0 0;
   font-size: 14px;
   font-weight: 500;
   line-height: 1.2;
-}
-
-.panel__sphere {
-  flex: none;
-  width: 11px;
-  height: 11px;
 }
 
 .panel__cta {
@@ -765,6 +750,23 @@ main .bubbles {
   outline: 2px solid #ffffff;
   outline-offset: 3px;
   border-radius: 3px;
+}
+
+/* Everything in the panels except story headlines (.panel__title, .panel__list a) is Inter; the
+   region name is a place label, not a headline. Last on purpose: .panel__zoom's `font: inherit`
+   would otherwise win on source order. */
+.panel__region,
+.panel__byline,
+.panel__where,
+.panel__cta,
+.panel__about,
+.panel__crumbs,
+.panel__counts,
+.panel__row-place,
+.panel__meta,
+.panel__note,
+.panel__zoom {
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
 }
 
 .notice {

@@ -18,6 +18,7 @@ const instrumentSerif = Instrument_Serif({
 
 const inter = Inter({
   subsets: ["latin"],
+  style: ["normal", "italic"],
   display: "swap",
   variable: "--font-inter",
 });

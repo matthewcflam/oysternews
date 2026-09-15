@@ -1,3 +1,4 @@
+import { COUNTRY_LAYER_MAXZOOM } from "../src/lib/country-floor.ts";
 import { coordKey, SPIDERFY_ZOOM } from "../src/lib/spiderfy.ts";
 import type { StoryGroup } from "../src/lib/types.ts";
 import { compareGroups } from "./rank.ts";
@@ -25,6 +26,9 @@ const tileKey = (x: number, y: number): string => `${x}/${y}`;
 export type BudgetOptions = {
   k?: number;
   maxZoom?: number;
+  // Country-floor group ids. The floor layer stops drawing at COUNTRY_LAYER_MAXZOOM, so these
+  // must be in the stories layer by then or the dot vanishes on zoom-in.
+  floor?: ReadonlySet<string>;
 };
 
 export type BudgetResult = {
@@ -53,6 +57,19 @@ export function assignMinzoom(groups: StoryGroup[], options: BudgetOptions = {})
       const key = tileKey(x, y);
       used.set(key, (used.get(key) ?? 0) + 1);
       if (capped) occupied.add(coordKey(group.lon, group.lat));
+    }
+
+    // Forced past K and the coordinate cap: at the handover a floor story either is here or
+    // disappears. Pass 1 counts it at every deeper zoom, so K still holds for the rest.
+    if (zoom === COUNTRY_LAYER_MAXZOOM && options.floor?.size) {
+      for (const group of ranked) {
+        if (!options.floor.has(group.id) || minzoom.has(group.id)) continue;
+        const { x, y } = tileOf(group.lat, group.lon, zoom);
+        const key = tileKey(x, y);
+        used.set(key, (used.get(key) ?? 0) + 1);
+        if (capped) occupied.add(coordKey(group.lon, group.lat));
+        minzoom.set(group.id, zoom);
+      }
     }
 
     for (const group of ranked) {

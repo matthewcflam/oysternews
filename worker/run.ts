@@ -169,8 +169,11 @@ export async function run(options: RunOptions): Promise<RunSummary> {
 
   const grouped = groupArticles(pool.articles, { now: now.getTime() });
   const ranked = rankGroups(grouped);
-  const { groups: budgeted, overflow } = assignMinzoom(ranked);
-  const countryTop = countryTopGroups(budgeted);
+  // Picked before the budget, which it doesn't depend on: the budget has to know the floor.
+  // Containers are never drawn, so they don't need a guaranteed slot.
+  const countryTop = countryTopGroups(ranked);
+  const floor = new Set(countryTop.filter((g) => g.kind !== "CONTAINER").map((g) => g.id));
+  const { groups: budgeted, overflow } = assignMinzoom(ranked, { floor });
 
   const continentOf = (fips: string): string =>
     continentIdFor(data.countries.get(fips)?.continent) ?? "";
