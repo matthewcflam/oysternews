@@ -905,9 +905,11 @@ leg. Past a single ring the leaves follow a spiral stepped by the golden
 angle: an even division of the circle puts every nth leaf on the same
 bearing, so legs overlap into a few thick spokes.
 
-Headlines use `Noto Sans Regular` because it is the only font both basemaps
-ship: MapTiler's style lists Roboto first and OpenFreeMap has no Roboto, so
-naming it first 404s the glyph ranges on the keyless fallback.
+Headlines use `Inter Regular` with a 0.5px halo on MapTiler, matching the
+panels' UI font. Symbol glyphs come from the basemap's font server, not the
+page's webfonts, and OpenFreeMap has no Inter: it 404s any font stack naming
+it, fallbacks included, so the keyless basemap keeps `Noto Sans Regular`
+(`labelFont` in `src/lib/layers.ts`).
 
 ### The selection triangle and the opening-card bubbles
 

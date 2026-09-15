@@ -531,7 +531,7 @@ export default function MapView() {
         for (const layer of hitLayers()) map.addLayer(layer);
         for (const layer of boundaryLayers()) map.addLayer(layer);
 
-        const [countryPins, storyPins, headlines] = storyLayers();
+        const [countryPins, storyPins, headlines] = storyLayers(provider);
         const [spiderLegs, spiderLeaves] = spiderLayers();
         map.addLayer(spiderLegs);
         map.addLayer(countryPins);
